@@ -11,6 +11,10 @@
       "registerOptionsError": "Could not load registration options",
       "sessionExpired": "Session expired"
     },
+    "error": {
+      "title": "Error",
+      "loadFailed": "Failed to load error translations"
+    },
     "share": {
       "copied": "Link copied",
       "copiedDescription": "The link has been copied to clipboard."

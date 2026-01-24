@@ -14,7 +14,7 @@ import type { NuxtApp } from "#app";
 
 import { useLtAuth } from "../composables/auth/use-lt-auth";
 
-export default (nuxtApp: NuxtApp) => {
+export default (nuxtApp: NuxtApp): void => {
   // Only run on client side
   if (import.meta.server) return;
 
@@ -43,9 +43,10 @@ export default (nuxtApp: NuxtApp) => {
    * Check if current route is a public auth route
    */
   function isPublicAuthRoute(): boolean {
-    const route = nuxtApp.$router?.currentRoute?.value;
-    if (!route) return false;
-    return publicAuthPaths.some((path) => route.path.startsWith(path));
+    const router = nuxtApp.$router as { currentRoute?: { value?: { path?: string } } } | undefined;
+    const route = router?.currentRoute?.value;
+    if (!route?.path) return false;
+    return publicAuthPaths.some((path) => route.path!.startsWith(path));
   }
 
   /**
@@ -107,7 +108,10 @@ export default (nuxtApp: NuxtApp) => {
         clearUser();
 
         // Redirect to login page with return URL
-        const currentPath = nuxtApp.$router?.currentRoute?.value?.fullPath;
+        const router = nuxtApp.$router as
+          | { currentRoute?: { value?: { fullPath?: string } } }
+          | undefined;
+        const currentPath = router?.currentRoute?.value?.fullPath;
         const redirectQuery =
           currentPath && currentPath !== loginPath
             ? `?redirect=${encodeURIComponent(currentPath)}`

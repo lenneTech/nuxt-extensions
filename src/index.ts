@@ -26,10 +26,15 @@ export type {
   UseLtTusUploadReturn,
   // Module Types
   LtAuthModuleOptions,
+  LtErrorTranslationModuleOptions,
   LtExtensionsModuleOptions,
   LtExtensionsPublicRuntimeConfig,
   LtI18nModuleOptions,
   LtTusModuleOptions,
+  // Error Translation Types
+  LtErrorTranslationResponse,
+  LtParsedError,
+  UseLtErrorTranslationReturn,
 } from "./runtime/types";
 
 // Composables
@@ -44,6 +49,8 @@ export {
   // Share
   useLtShare,
   type UseLtShareReturn,
+  // Error Translation
+  useLtErrorTranslation,
 } from "./runtime/composables";
 
 // Utilities

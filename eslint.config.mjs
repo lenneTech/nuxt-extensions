@@ -1,4 +1,4 @@
-// @ts-check
+// @ts-nocheck - Using oxlint instead of eslint, this config is for IDE support only
 import { createConfigForNuxt } from '@nuxt/eslint-config/flat'
 
 // Run `npx @eslint/config-inspector` to inspect the resolved config interactively

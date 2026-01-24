@@ -11,6 +11,10 @@
       "registerOptionsError": "Konnte Registrierungsoptionen nicht laden",
       "sessionExpired": "Sitzung abgelaufen"
     },
+    "error": {
+      "title": "Fehler",
+      "loadFailed": "Fehlerübersetzungen konnten nicht geladen werden"
+    },
     "share": {
       "copied": "Link kopiert",
       "copiedDescription": "Der Link wurde in die Zwischenablage kopiert."

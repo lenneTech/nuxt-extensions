@@ -25,10 +25,52 @@ import { createLtAuthClient, type LtAuthClient } from "../lib/auth-client";
 let authClientInstance: LtAuthClient | null = null;
 
 /**
+ * Reset the auth client singleton (useful for testing or config changes)
+ */
+export function resetLtAuthClient(): void {
+  authClientInstance = null;
+}
+
+/**
+ * Detects if we're running in development mode at runtime.
+ *
+ * Note: `import.meta.dev` is evaluated at build time and doesn't work
+ * correctly for pre-built modules. This function uses runtime checks instead.
+ */
+function isDevMode(): boolean {
+  // Check if we're on the server
+  if (import.meta.server) {
+    // On server, use process.env.NODE_ENV
+    return process.env.NODE_ENV !== "production";
+  }
+
+  // On client, check the Nuxt build ID (it's 'dev' in development)
+  if (typeof window !== "undefined") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const buildId = (window as any).__NUXT__?.config?.app?.buildId;
+    if (buildId === "dev") {
+      return true;
+    }
+
+    // Fallback: check if we're on localhost
+    const hostname = window.location?.hostname;
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Returns the Better-Auth client singleton
  *
  * The client is created once and reused across all calls.
  * Configuration is read from RuntimeConfig on first call.
+ *
+ * IMPORTANT: In dev mode, the basePath is automatically prefixed with '/api'
+ * to leverage Nuxt's server proxy. This is required for WebAuthn/Passkey
+ * to work correctly (same-origin policy).
  */
 export function useLtAuthClient(): LtAuthClient {
   if (!authClientInstance) {
@@ -37,9 +79,19 @@ export function useLtAuthClient(): LtAuthClient {
       const nuxtApp = useNuxtApp();
       const config = nuxtApp.$config?.public?.ltExtensions?.auth || {};
 
+      // In dev mode, ensure basePath starts with /api for Nuxt server proxy
+      // This is required for WebAuthn/Passkey to work (same-origin policy)
+      const isDev = isDevMode();
+      let basePath = config.basePath || "/iam";
+
+      // In dev mode, prefix with /api if not already prefixed
+      if (isDev && basePath && !basePath.startsWith("/api")) {
+        basePath = `/api${basePath}`;
+      }
+
       authClientInstance = createLtAuthClient({
-        baseURL: config.baseURL,
-        basePath: config.basePath,
+        baseURL: isDev ? "" : config.baseURL,
+        basePath,
         twoFactorRedirectPath: config.twoFactorRedirectPath,
         enableAdmin: config.enableAdmin,
         enableTwoFactor: config.enableTwoFactor,

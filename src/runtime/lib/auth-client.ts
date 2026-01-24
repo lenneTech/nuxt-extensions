@@ -16,7 +16,7 @@ import { navigateTo } from "#imports";
 import type { LtAuthClientConfig } from "../types";
 
 import { ltSha256 } from "../utils/crypto";
-import { createLtAuthFetch } from "./auth-state";
+import { createLtAuthFetch, isLtDevMode } from "./auth-state";
 
 // =============================================================================
 // Auth Client Factory
@@ -50,9 +50,9 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
   // - Frontend runs on localhost:3002, API on localhost:3000
   // - WebAuthn validates the origin, which must be consistent
   // - The Nuxt server proxy ensures requests come from the frontend origin
-  // Note: In Nuxt, use import.meta.dev (not import.meta.env?.DEV which is Vite-specific)
-  // At lenne.tech, 'development' is a stage on a web server, 'local' is the local dev environment
-  const isDev = import.meta.dev || process.env.NODE_ENV === "local";
+  // Note: We use isLtDevMode() for runtime detection instead of import.meta.dev
+  // which is evaluated at build time and doesn't work for pre-built modules.
+  const isDev = isLtDevMode();
   const defaultBaseURL = isDev
     ? ""
     : import.meta.env?.VITE_API_URL || process.env.API_URL || "http://localhost:3000";

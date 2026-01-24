@@ -30,6 +30,10 @@ const defaultOptions: LtExtensionsModuleOptions = {
     loginPath: "/auth/login",
     twoFactorRedirectPath: "/auth/2fa",
   },
+  errorTranslation: {
+    enabled: true,
+    defaultLocale: "de",
+  },
   i18n: {
     autoMerge: true,
   },
@@ -52,6 +56,7 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
     // Merge options with defaults
     const resolvedOptions = {
       auth: { ...defaultOptions.auth, ...options.auth },
+      errorTranslation: { ...defaultOptions.errorTranslation, ...options.errorTranslation },
       i18n: { ...defaultOptions.i18n, ...options.i18n },
       tus: { ...defaultOptions.tus, ...options.tus },
     };
@@ -72,6 +77,10 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
         loginPath: resolvedOptions.auth?.loginPath || "/auth/login",
         twoFactorRedirectPath: resolvedOptions.auth?.twoFactorRedirectPath || "/auth/2fa",
       },
+      errorTranslation: {
+        enabled: resolvedOptions.errorTranslation?.enabled ?? true,
+        defaultLocale: resolvedOptions.errorTranslation?.defaultLocale || "de",
+      },
       tus: {
         defaultChunkSize: resolvedOptions.tus?.defaultChunkSize || 5 * 1024 * 1024,
         defaultEndpoint: resolvedOptions.tus?.defaultEndpoint || "/files/upload",
@@ -84,6 +93,10 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
       { name: "useLtAuth", from: resolve("./runtime/composables/auth/use-lt-auth") },
       { name: "useLtAuthClient", from: resolve("./runtime/composables/use-lt-auth-client") },
       { name: "ltAuthClient", from: resolve("./runtime/composables/use-lt-auth-client") },
+      {
+        name: "useLtErrorTranslation",
+        from: resolve("./runtime/composables/use-lt-error-translation"),
+      },
       { name: "useLtFile", from: resolve("./runtime/composables/use-lt-file") },
       { name: "useLtTusUpload", from: resolve("./runtime/composables/use-lt-tus-upload") },
       { name: "useLtShare", from: resolve("./runtime/composables/use-lt-share") },
@@ -126,10 +139,15 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
       addPlugin(resolve("./runtime/plugins/auth-interceptor.client"));
     }
 
+    // Add error translation plugin if enabled
+    if (resolvedOptions.errorTranslation?.enabled) {
+      addPlugin(resolve("./runtime/plugins/error-translation.client"));
+    }
+
     // i18n integration - merge locale files if @nuxtjs/i18n is installed
     if (resolvedOptions.i18n?.autoMerge) {
-      // @ts-expect-error - i18n:registerModule is only available when @nuxtjs/i18n is installed
-      nuxt.hook(
+      // Cast to any to support @nuxtjs/i18n hook which is not in base NuxtHooks
+      (nuxt.hook as any)(
         "i18n:registerModule",
         (
           register: (config: {
@@ -192,8 +210,16 @@ export type {
 // Module Types
 export type {
   LtAuthModuleOptions,
+  LtErrorTranslationModuleOptions,
   LtExtensionsModuleOptions,
   LtExtensionsPublicRuntimeConfig,
   LtI18nModuleOptions,
   LtTusModuleOptions,
 } from "./runtime/types/module";
+
+// Error Translation Types
+export type {
+  LtErrorTranslationResponse,
+  LtParsedError,
+  UseLtErrorTranslationReturn,
+} from "./runtime/types/error";

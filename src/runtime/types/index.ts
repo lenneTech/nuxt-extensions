@@ -28,8 +28,16 @@ export type {
 // Module Types
 export type {
   LtAuthModuleOptions,
+  LtErrorTranslationModuleOptions,
   LtExtensionsModuleOptions,
   LtExtensionsPublicRuntimeConfig,
   LtI18nModuleOptions,
   LtTusModuleOptions,
 } from "./module";
+
+// Error Translation Types
+export type {
+  LtErrorTranslationResponse,
+  LtParsedError,
+  UseLtErrorTranslationReturn,
+} from "./error";

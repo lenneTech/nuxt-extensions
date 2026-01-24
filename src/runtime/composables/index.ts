@@ -14,3 +14,6 @@ export { useLtFile } from "./use-lt-file";
 
 // Utility Composables
 export { useLtShare, type UseLtShareReturn } from "./use-lt-share";
+
+// Error Translation Composables
+export { useLtErrorTranslation } from "./use-lt-error-translation";

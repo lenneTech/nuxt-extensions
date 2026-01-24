@@ -1,6 +1,6 @@
 {
   "name": "@lenne.tech/nuxt-extensions",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Reusable Nuxt 4 composables, components, and Better-Auth integration for lenne.tech projects",
   "repository": {
     "type": "git",
@@ -17,6 +17,10 @@
     ".": {
       "types": "./dist/types.d.mts",
       "import": "./dist/module.mjs"
+    },
+    "./testing": {
+      "types": "./dist/runtime/testing/index.d.ts",
+      "import": "./dist/runtime/testing/index.js"
     }
   },
   "main": "./dist/module.mjs",
@@ -24,6 +28,9 @@
     "*": {
       ".": [
         "./dist/types.d.mts"
+      ],
+      "testing": [
+        "./dist/runtime/testing/index.d.ts"
       ]
     }
   },
@@ -33,6 +40,7 @@
   "scripts": {
     "prepare": "git config core.hooksPath .githooks",
     "prepack": "nuxt-module-build build",
+    "check": "npm run format && npm run lint:fix && npm run test:types && npm run test",
     "dev": "npm run dev:prepare && nuxt dev playground",
     "dev:build": "nuxt build playground",
     "dev:prepare": "nuxt-module-build build --stub && nuxt-module-build prepare && nuxt prepare playground",
@@ -45,13 +53,14 @@
     "test:watch": "vitest watch",
     "test:coverage": "vitest run --coverage",
     "test:types": "vue-tsc --noEmit && cd playground && vue-tsc --noEmit",
-    "release": "npm run format:check && npm run lint && npm run test && npm run prepack"
+    "release": "npm run format:check && npm run lint && npm run test:types && npm run test && npm run prepack"
   },
   "dependencies": {
     "@nuxt/kit": "4.2.2"
   },
   "peerDependencies": {
     "@better-auth/passkey": ">=1.0.0",
+    "@playwright/test": ">=1.0.0",
     "better-auth": ">=1.0.0",
     "nuxt": ">=3.0.0",
     "tus-js-client": ">=4.0.0"
@@ -63,6 +72,9 @@
     "@better-auth/passkey": {
       "optional": true
     },
+    "@playwright/test": {
+      "optional": true
+    },
     "tus-js-client": {
       "optional": true
     }
@@ -70,6 +82,7 @@
   "devDependencies": {
     "@better-auth/passkey": "1.4.10",
     "@nuxt/devtools": "3.1.1",
+    "@playwright/test": "1.57.0",
     "@nuxt/module-builder": "1.0.2",
     "@nuxt/schema": "4.2.2",
     "@nuxt/test-utils": "3.23.0",

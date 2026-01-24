@@ -50,11 +50,23 @@ export interface LtI18nModuleOptions {
 }
 
 /**
+ * Error translation module configuration options
+ */
+export interface LtErrorTranslationModuleOptions {
+  /** Enable error translation feature (default: true) */
+  enabled?: boolean;
+  /** Default locale if not detected (default: 'de') */
+  defaultLocale?: string;
+}
+
+/**
  * Main module options for @lenne.tech/nuxt-extensions
  */
 export interface LtExtensionsModuleOptions {
   /** Auth module configuration */
   auth?: LtAuthModuleOptions;
+  /** Error translation configuration */
+  errorTranslation?: LtErrorTranslationModuleOptions;
   /** i18n configuration */
   i18n?: LtI18nModuleOptions;
   /** TUS upload module configuration */
@@ -83,6 +95,10 @@ export interface LtExtensionsPublicRuntimeConfig {
       };
       loginPath: string;
       twoFactorRedirectPath: string;
+    };
+    errorTranslation: {
+      enabled: boolean;
+      defaultLocale: string;
     };
     tus: {
       defaultChunkSize: number;

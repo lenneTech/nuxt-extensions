@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-01-24
+
+### Added
+
+- **Playwright Testing Helpers**
+  - New `/testing` export path for E2E test utilities
+  - `createPlaywrightHelpers()` factory for auth-aware testing
+  - Login/logout helpers with session management
+  - Form filling and navigation utilities
+  - API request helpers with authentication
+  - Wait utilities for network and element states
+
+- **Error Translation System**
+  - `useLtErrorTranslation()` composable for translating API errors
+  - Automatic i18n integration with fallback support
+  - Configurable error mapping for backend error codes
+  - Support for nested error structures
+
+- **Enhanced Auth State Management**
+  - Improved `useLtAuthClient()` with better reactivity
+  - Extended auth state tracking with loading states
+  - Better session refresh handling
+  - Improved 2FA redirect flow
+
+### Changed
+
+- Added `@playwright/test` as optional peer dependency
+- Enhanced `auth-interceptor.client.ts` with better error handling
+- Added `check` npm script for full validation pipeline
+- Added TypeScript type checking to release script
+
+### Fixed
+
+- Auth state synchronization issues
+- Cookie/JWT mode switching edge cases
+
 ## [1.0.0] - 2026-01-24
 
 ### Added
@@ -86,4 +122,5 @@ ltExtensions: {
 - tus-js-client ^4.0.0 (optional)
 - @better-auth/passkey ^1.0.0 (optional)
 
+[1.1.0]: https://github.com/lenneTech/nuxt-extensions/releases/tag/1.1.0
 [1.0.0]: https://github.com/lenneTech/nuxt-extensions/releases/tag/1.0.0
