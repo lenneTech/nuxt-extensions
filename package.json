@@ -1,0 +1,99 @@
+{
+  "name": "@lenne.tech/nuxt-extensions",
+  "version": "1.0.0",
+  "description": "Reusable Nuxt 4 composables, components, and Better-Auth integration for lenne.tech projects",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lenneTech/nuxt-extensions.git"
+  },
+  "homepage": "https://github.com/lenneTech/nuxt-extensions#readme",
+  "bugs": {
+    "url": "https://github.com/lenneTech/nuxt-extensions/issues"
+  },
+  "author": "lenne.Tech <info@lenne.tech> (https://lenne.tech)",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/types.d.mts",
+      "import": "./dist/module.mjs"
+    }
+  },
+  "main": "./dist/module.mjs",
+  "typesVersions": {
+    "*": {
+      ".": [
+        "./dist/types.d.mts"
+      ]
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "prepare": "git config core.hooksPath .githooks",
+    "prepack": "nuxt-module-build build",
+    "dev": "npm run dev:prepare && nuxt dev playground",
+    "dev:build": "nuxt build playground",
+    "dev:prepare": "nuxt-module-build build --stub && nuxt-module-build prepare && nuxt prepare playground",
+    "build": "nuxt-module-build build",
+    "lint": "oxlint src/",
+    "lint:fix": "oxlint --fix src/",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest run --coverage",
+    "test:types": "vue-tsc --noEmit && cd playground && vue-tsc --noEmit",
+    "release": "npm run lint && npm run test && npm run prepack"
+  },
+  "dependencies": {
+    "@nuxt/kit": "4.2.2"
+  },
+  "peerDependencies": {
+    "@better-auth/passkey": ">=1.0.0",
+    "better-auth": ">=1.0.0",
+    "nuxt": ">=3.0.0",
+    "tus-js-client": ">=4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "better-auth": {
+      "optional": false
+    },
+    "@better-auth/passkey": {
+      "optional": true
+    },
+    "tus-js-client": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@better-auth/passkey": "1.4.10",
+    "@nuxt/devtools": "3.1.1",
+    "@nuxt/module-builder": "1.0.2",
+    "@nuxt/schema": "4.2.2",
+    "@nuxt/test-utils": "3.23.0",
+    "@types/node": "25.0.10",
+    "@vitest/coverage-v8": "3.0.0",
+    "@vue/test-utils": "2.4.6",
+    "better-auth": "1.4.10",
+    "happy-dom": "20.3.7",
+    "nuxt": "4.2.2",
+    "oxlint": "0.17.0",
+    "tus-js-client": "4.3.1",
+    "typescript": "5.9.3",
+    "vitest": "4.0.17",
+    "vue-tsc": "3.2.2"
+  },
+  "keywords": [
+    "nuxt",
+    "nuxt-module",
+    "nuxt4",
+    "vue3",
+    "better-auth",
+    "authentication",
+    "passkey",
+    "webauthn",
+    "tus-upload",
+    "file-upload",
+    "lenne-tech"
+  ]
+}

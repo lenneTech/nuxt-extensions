@@ -1,0 +1,19 @@
+{
+  "lt": {
+    "auth": {
+      "loggingOut": "Abmelden...",
+      "noPasskeySelected": "Kein Passkey ausgewählt",
+      "passkeyAborted": "Passkey-Authentifizierung wurde abgebrochen",
+      "passkeyCreationAborted": "Passkey-Erstellung wurde abgebrochen",
+      "passkeyError": "Konnte Passkey-Optionen nicht laden",
+      "passkeyFailed": "Passkey-Anmeldung fehlgeschlagen",
+      "passkeyRegisterFailed": "Passkey-Registrierung fehlgeschlagen",
+      "registerOptionsError": "Konnte Registrierungsoptionen nicht laden",
+      "sessionExpired": "Sitzung abgelaufen"
+    },
+    "share": {
+      "copied": "Link kopiert",
+      "copiedDescription": "Der Link wurde in die Zwischenablage kopiert."
+    }
+  }
+}

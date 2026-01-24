@@ -1,0 +1,4 @@
+#!/bin/sh
+# Pre-commit hook: Run linting before commit
+
+npm run lint || exit 1
