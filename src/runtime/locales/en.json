@@ -1,0 +1,19 @@
+{
+  "lt": {
+    "auth": {
+      "loggingOut": "Logging out...",
+      "noPasskeySelected": "No passkey selected",
+      "passkeyAborted": "Passkey authentication was cancelled",
+      "passkeyCreationAborted": "Passkey creation was cancelled",
+      "passkeyError": "Could not load passkey options",
+      "passkeyFailed": "Passkey login failed",
+      "passkeyRegisterFailed": "Passkey registration failed",
+      "registerOptionsError": "Could not load registration options",
+      "sessionExpired": "Session expired"
+    },
+    "share": {
+      "copied": "Link copied",
+      "copiedDescription": "The link has been copied to clipboard."
+    }
+  }
+}

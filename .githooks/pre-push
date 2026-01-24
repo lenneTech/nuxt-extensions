@@ -1,0 +1,6 @@
+#!/bin/sh
+# Pre-push hook: Run prepare, tests and build before push
+
+npm run dev:prepare || exit 1
+npm run test || exit 1
+npm run build || exit 1

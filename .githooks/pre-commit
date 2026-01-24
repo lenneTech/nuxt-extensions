@@ -1,0 +1,8 @@
+#!/bin/sh
+# Pre-commit hook: Format and lint before commit
+
+npm run format || exit 1
+npm run lint || exit 1
+
+# Stage any formatting changes
+git add -u
