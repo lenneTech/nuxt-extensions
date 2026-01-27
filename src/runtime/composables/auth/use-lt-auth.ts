@@ -636,18 +636,39 @@ export function useLtAuth(): UseLtAuthReturn {
 
       return { success: true, passkey: result };
     } catch (err: unknown) {
-      if (err instanceof Error && err.name === "NotAllowedError") {
+      if (err instanceof Error) {
+        // User cancelled the operation
+        if (err.name === "NotAllowedError") {
+          return {
+            success: false,
+            error: t("lt.auth.passkeyCreationAborted", "Passkey-Erstellung wurde abgebrochen"),
+          };
+        }
+
+        // Authenticator already has a credential for this user
+        // Some authenticators only allow one passkey per website per user
+        if (
+          err.name === "InvalidStateError" ||
+          err.message.includes("already registered") ||
+          err.message.includes("credentials already registered")
+        ) {
+          return {
+            success: false,
+            error: t(
+              "lt.auth.passkeyAlreadyRegistered",
+              "Du hast bereits einen Passkey für diese Website registriert. Lösche ihn zuerst oder verwende einen anderen Authenticator.",
+            ),
+          };
+        }
+
         return {
           success: false,
-          error: t("lt.auth.passkeyCreationAborted", "Passkey-Erstellung wurde abgebrochen"),
+          error: err.message,
         };
       }
       return {
         success: false,
-        error:
-          err instanceof Error
-            ? err.message
-            : t("lt.auth.passkeyRegisterFailed", "Passkey-Registrierung fehlgeschlagen"),
+        error: t("lt.auth.passkeyRegisterFailed", "Passkey-Registrierung fehlgeschlagen"),
       };
     } finally {
       isLoading.value = false;
