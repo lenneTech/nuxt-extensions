@@ -447,11 +447,18 @@ export function useLtAuth(): UseLtAuthReturn {
       const challengeBuffer = ltBase64UrlToUint8Array(options.challenge).buffer as ArrayBuffer;
 
       // Step 3: Get credential from browser's WebAuthn API
+      // Convert allowCredentials IDs from base64url strings to ArrayBuffer
+      // (the server returns base64url, but WebAuthn API requires ArrayBuffer)
+      const allowCredentials = (options.allowCredentials || []).map((cred: any) => ({
+        ...cred,
+        id: ltBase64UrlToUint8Array(cred.id).buffer as ArrayBuffer,
+      }));
+
       const credential = (await navigator.credentials.get({
         publicKey: {
           challenge: challengeBuffer,
           rpId: options.rpId,
-          allowCredentials: options.allowCredentials || [],
+          allowCredentials,
           userVerification: options.userVerification,
           timeout: options.timeout,
         },
@@ -497,15 +504,39 @@ export function useLtAuth(): UseLtAuthReturn {
       // Store user data after successful passkey login
       if (result.user) {
         setUser(result.user as LtUser, "cookie");
-        switchToJwtMode().catch(() => {});
+        // Await JWT switch to ensure the token is available for subsequent API calls
+        // (e.g., list-user-passkeys on the security settings page)
+        await switchToJwtMode().catch(() => {});
       } else if (result.session?.token) {
-        // Passkey auth returns session without user in JWT mode
-        // Store the session token as JWT and fetch user via validateSession
-        jwtToken.value = result.session.token;
-        if (authState.value) {
-          authState.value = { ...authState.value, authMode: "jwt" };
+        // Passkey auth returns session without user object
+        // The verify-authentication response set session cookies, so use them
+        // to fetch user data BEFORE switching to JWT mode (which disables cookies)
+        console.debug("[LtAuth] Passkey: Session received without user, fetching user data");
+
+        // Fetch user data via get-session using session cookies (must be before JWT switch)
+        try {
+          const sessionResponse = await fetch(`${apiBase}/get-session`, {
+            method: "GET",
+            credentials: "include",
+          });
+          if (sessionResponse.ok) {
+            const sessionData = await sessionResponse.json();
+            if (sessionData?.user) {
+              setUser(sessionData.user as LtUser, "cookie");
+            }
+          }
+        } catch {
+          console.debug("[LtAuth] Passkey: Could not fetch user from session");
         }
-        console.debug("[LtAuth] Passkey: Stored session token as JWT");
+
+        // Now switch to JWT mode for subsequent API calls
+        await switchToJwtMode().catch(() => {
+          // Fallback: store session token directly
+          jwtToken.value = result.session.token;
+          if (authState.value) {
+            authState.value = { ...authState.value, authMode: "jwt" };
+          }
+        });
       }
 
       return { success: true, user: result.user as LtUser, session: result.session };
