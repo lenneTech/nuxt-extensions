@@ -1,6 +1,6 @@
 {
   "name": "@lenne.tech/nuxt-extensions",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Reusable Nuxt 4 composables, components, and Better-Auth integration for lenne.tech projects",
   "repository": {
     "type": "git",
@@ -18,6 +18,10 @@
       "types": "./dist/types.d.mts",
       "import": "./dist/module.mjs"
     },
+    "./lib": {
+      "types": "./dist/runtime/lib/index.d.ts",
+      "import": "./dist/runtime/lib/index.js"
+    },
     "./testing": {
       "types": "./dist/runtime/testing/index.d.ts",
       "import": "./dist/runtime/testing/index.js"
@@ -28,6 +32,9 @@
     "*": {
       ".": [
         "./dist/types.d.mts"
+      ],
+      "lib": [
+        "./dist/runtime/lib/index.d.ts"
       ],
       "testing": [
         "./dist/runtime/testing/index.d.ts"

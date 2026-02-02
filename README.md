@@ -137,7 +137,7 @@ Create a Nuxt plugin to register plugins before the auth client is initialized:
 
 ```typescript
 // plugins/auth-plugins.client.ts
-import { registerLtAuthPlugins } from '@lenne.tech/nuxt-extensions';
+import { registerLtAuthPlugins } from '@lenne.tech/nuxt-extensions/lib';
 import { organizationClient, magicLinkClient } from 'better-auth/client/plugins';
 
 export default defineNuxtPlugin(() => {
@@ -148,12 +148,14 @@ export default defineNuxtPlugin(() => {
 });
 ```
 
+> **Note:** In Vue components, `registerLtAuthPlugins` is auto-imported. In `.ts` files (like Nuxt plugins), import from `@lenne.tech/nuxt-extensions/lib`.
+
 **Option 2: Direct Factory Usage**
 
 For full control, create the auth client directly with your plugins:
 
 ```typescript
-import { createLtAuthClient } from '@lenne.tech/nuxt-extensions';
+import { createLtAuthClient } from '@lenne.tech/nuxt-extensions/lib';
 import { organizationClient } from 'better-auth/client/plugins';
 
 const authClient = createLtAuthClient({
