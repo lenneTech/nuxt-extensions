@@ -105,8 +105,12 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
       { name: "ltArrayBufferToBase64Url", from: resolve("./runtime/utils/crypto") },
       { name: "ltBase64UrlToUint8Array", from: resolve("./runtime/utils/crypto") },
       { name: "tw", from: resolve("./runtime/utils/tw") },
-      // Lib - Auth State
+      // Lib - Auth Client & Plugin Registry
       { name: "createLtAuthClient", from: resolve("./runtime/lib/auth-client") },
+      { name: "registerLtAuthPlugins", from: resolve("./runtime/lib/auth-client") },
+      { name: "getLtAuthPluginRegistry", from: resolve("./runtime/lib/auth-client") },
+      { name: "clearLtAuthPluginRegistry", from: resolve("./runtime/lib/auth-client") },
+      // Lib - Auth State
       { name: "getLtAuthMode", from: resolve("./runtime/lib/auth-state") },
       { name: "setLtAuthMode", from: resolve("./runtime/lib/auth-state") },
       { name: "getLtJwtToken", from: resolve("./runtime/lib/auth-state") },
