@@ -210,7 +210,6 @@ export function useLtAuth(): UseLtAuthReturn {
           if (authState.value) {
             authState.value = { ...authState.value, authMode: "jwt" };
           }
-          console.debug("[LtAuth] Switched to JWT mode");
           return true;
         }
       }
@@ -229,8 +228,25 @@ export function useLtAuth(): UseLtAuthReturn {
   }
 
   /**
+   * Paths that require cookies even in JWT mode.
+   * Better-Auth's Passkey and 2FA operations need the session cookie
+   * for challenge/verification token handling.
+   */
+  const PATHS_REQUIRING_COOKIES = ["/passkey/", "/two-factor/", "/2fa/"];
+
+  /**
+   * Check if a URL requires cookies (for Passkey/2FA operations)
+   */
+  function urlRequiresCookies(url: string): boolean {
+    return PATHS_REQUIRING_COOKIES.some((path) => url.includes(path));
+  }
+
+  /**
    * Authenticated fetch wrapper
    * Uses cookies by default, falls back to JWT if cookies fail
+   *
+   * In JWT mode, cookies are only sent for Passkey/2FA operations
+   * that require the session cookie for challenge handling.
    */
   async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
     const headers = new Headers(options.headers);
@@ -240,25 +256,29 @@ export function useLtAuth(): UseLtAuthReturn {
       headers.set("Authorization", `Bearer ${jwtToken.value}`);
     }
 
+    // Determine credentials mode:
+    // - Cookie mode: always include credentials
+    // - JWT mode: only include for paths that require cookies (passkey, 2FA)
+    const needsCookies = !isJwtMode.value || urlRequiresCookies(url);
+
     const response = await fetch(url, {
       ...options,
       headers,
-      // Only include credentials in cookie mode
-      credentials: isJwtMode.value ? "omit" : "include",
+      credentials: needsCookies ? "include" : "omit",
     });
 
     // If we get 401 in cookie mode, try switching to JWT
     if (response.status === 401 && !isJwtMode.value && isAuthenticated.value) {
-      console.debug("[LtAuth] Cookie auth failed, attempting JWT fallback...");
       const switched = await switchToJwtMode();
 
       if (switched) {
         // Retry the request with JWT
         headers.set("Authorization", `Bearer ${jwtToken.value}`);
+        const retryNeedsCookies = urlRequiresCookies(url);
         return fetch(url, {
           ...options,
           headers,
-          credentials: "omit",
+          credentials: retryNeedsCookies ? "include" : "omit",
         });
       }
     }
@@ -309,8 +329,7 @@ export function useLtAuth(): UseLtAuthReturn {
       }
 
       return false;
-    } catch (error) {
-      console.debug("Session validation failed:", error);
+    } catch {
       return !!authState.value?.user;
     }
   }
@@ -341,7 +360,6 @@ export function useLtAuth(): UseLtAuthReturn {
           if (userData) {
             setUser(userData as LtUser, "jwt");
           }
-          console.debug("[LtAuth] JWT token received from login response");
         } else if (userData) {
           // Cookie mode: No token in response, use cookies
           setUser(userData as LtUser, "cookie");
@@ -379,7 +397,6 @@ export function useLtAuth(): UseLtAuthReturn {
           if (userData) {
             setUser(userData as LtUser, "jwt");
           }
-          console.debug("[LtAuth] JWT token received from signup response");
         } else if (userData) {
           // Cookie mode: No token in response, use cookies
           setUser(userData as LtUser, "cookie");
@@ -505,7 +522,6 @@ export function useLtAuth(): UseLtAuthReturn {
         if (authState.value) {
           authState.value = { ...authState.value, authMode: "jwt" };
         }
-        console.debug("[LtAuth] Passkey: Stored session token as JWT");
       }
 
       return { success: true, user: result.user as LtUser, session: result.session };
