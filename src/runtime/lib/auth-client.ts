@@ -19,6 +19,58 @@ import { ltSha256 } from "../utils/crypto";
 import { createLtAuthFetch, isLtDevMode } from "./auth-state";
 
 // =============================================================================
+// Plugin Registry
+// =============================================================================
+
+/**
+ * Internal plugin registry for external Better Auth plugins.
+ *
+ * Plugins cannot be passed through RuntimeConfig (not JSON-serializable),
+ * so users register them before the auth client is created.
+ */
+let _ltAuthPluginRegistry: unknown[] = [];
+
+/**
+ * Register additional Better Auth plugins before auth client initialization.
+ *
+ * Call this in a Nuxt plugin (client-side) or in app.vue setup before
+ * the auth client is used.
+ *
+ * @example
+ * ```typescript
+ * // plugins/auth-plugins.client.ts
+ * import { registerLtAuthPlugins } from '@lenne.tech/nuxt-extensions';
+ * import { organizationClient, magicLinkClient } from 'better-auth/client/plugins';
+ *
+ * export default defineNuxtPlugin(() => {
+ *   registerLtAuthPlugins([
+ *     organizationClient(),
+ *     magicLinkClient(),
+ *   ]);
+ * });
+ * ```
+ */
+export function registerLtAuthPlugins(plugins: unknown[]): void {
+  _ltAuthPluginRegistry = [..._ltAuthPluginRegistry, ...plugins];
+}
+
+/**
+ * Get the current plugin registry.
+ * Used internally by createLtAuthClient.
+ */
+export function getLtAuthPluginRegistry(): unknown[] {
+  return _ltAuthPluginRegistry;
+}
+
+/**
+ * Clear the plugin registry.
+ * Useful for testing or resetting state.
+ */
+export function clearLtAuthPluginRegistry(): void {
+  _ltAuthPluginRegistry = [];
+}
+
+// =============================================================================
 // Auth Client Factory
 // =============================================================================
 
@@ -65,6 +117,7 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
     enableAdmin = true,
     enableTwoFactor = true,
     enablePasskey = true,
+    plugins: externalPlugins = [],
   } = config;
 
   // Build plugins array based on configuration
@@ -88,6 +141,12 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
   if (enablePasskey) {
     plugins.push(passkeyClient());
   }
+
+  // Add external plugins from config parameter
+  plugins.push(...externalPlugins);
+
+  // Add plugins from global registry (registered via registerLtAuthPlugins)
+  plugins.push(..._ltAuthPluginRegistry);
 
   // Create custom auth fetch that handles JWT fallback
   const authFetch = createLtAuthFetch(basePath.replace("/api", ""));

@@ -56,10 +56,15 @@ export {
 // Utilities
 export { ltArrayBufferToBase64Url, ltBase64UrlToUint8Array, ltSha256, tw } from "./runtime/utils";
 
-// Library (Auth State utilities)
+// Library (Auth State utilities & Plugin Registry)
 export {
+  // Auth Client Factory
+  clearLtAuthPluginRegistry,
   createLtAuthClient,
+  getLtAuthPluginRegistry,
+  registerLtAuthPlugins,
   type LtAuthClient,
+  // Auth State
   attemptLtJwtSwitch,
   createLtAuthFetch,
   getLtApiBase,

@@ -15,5 +15,11 @@ export {
   setLtJwtToken,
 } from "./auth-state";
 
-// Auth Client Factory
-export { createLtAuthClient, type LtAuthClient } from "./auth-client";
+// Auth Client Factory & Plugin Registry
+export {
+  clearLtAuthPluginRegistry,
+  createLtAuthClient,
+  getLtAuthPluginRegistry,
+  registerLtAuthPlugins,
+  type LtAuthClient,
+} from "./auth-client";

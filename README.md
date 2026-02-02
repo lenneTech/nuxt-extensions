@@ -127,6 +127,49 @@ async function handlePasskeyLogin() {
 </template>
 ```
 
+### Custom Better Auth Plugins
+
+You can extend the auth client with additional [Better Auth plugins](https://www.better-auth.com/docs/plugins):
+
+**Option 1: Plugin Registration (recommended)**
+
+Create a Nuxt plugin to register plugins before the auth client is initialized:
+
+```typescript
+// plugins/auth-plugins.client.ts
+import { registerLtAuthPlugins } from '@lenne.tech/nuxt-extensions';
+import { organizationClient, magicLinkClient } from 'better-auth/client/plugins';
+
+export default defineNuxtPlugin(() => {
+  registerLtAuthPlugins([
+    organizationClient(),
+    magicLinkClient(),
+  ]);
+});
+```
+
+**Option 2: Direct Factory Usage**
+
+For full control, create the auth client directly with your plugins:
+
+```typescript
+import { createLtAuthClient } from '@lenne.tech/nuxt-extensions';
+import { organizationClient } from 'better-auth/client/plugins';
+
+const authClient = createLtAuthClient({
+  plugins: [organizationClient()],
+});
+
+// Use authClient.organization.* methods
+```
+
+**Available Better Auth Plugins:**
+- `organizationClient` - Organization/team management
+- `magicLinkClient` - Passwordless email login
+- `oneTapClient` - Google One Tap login
+- `anonymousClient` - Anonymous/guest sessions
+- See [Better Auth Plugins](https://www.better-auth.com/docs/plugins) for full list
+
 ### TUS File Upload
 
 ```vue
@@ -276,6 +319,7 @@ The package works **with or without** `@nuxtjs/i18n`:
 | `ltArrayBufferToBase64Url()` | ArrayBuffer to base64url conversion |
 | `ltBase64UrlToUint8Array()` | Base64url to Uint8Array conversion |
 | `createLtAuthClient()` | Auth client factory for custom configuration |
+| `registerLtAuthPlugins()` | Register custom Better Auth plugins |
 
 ## Related Projects
 

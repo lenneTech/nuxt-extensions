@@ -57,6 +57,8 @@ export interface LtAuthClientConfig {
   enableTwoFactor?: boolean;
   /** 2FA redirect path (default: '/auth/2fa') */
   twoFactorRedirectPath?: string;
+  /** Additional Better Auth client plugins (e.g., organizationClient, magicLinkClient) */
+  plugins?: unknown[];
 }
 
 /**
