@@ -21,5 +21,6 @@ export {
   createLtAuthClient,
   getLtAuthPluginRegistry,
   registerLtAuthPlugins,
+  setResetAuthClientCallback,
   type LtAuthClient,
 } from "./auth-client";

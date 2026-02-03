@@ -31,15 +31,32 @@ import { createLtAuthFetch, isLtDevMode } from "./auth-state";
 let _ltAuthPluginRegistry: unknown[] = [];
 
 /**
+ * Callback to reset the auth client singleton when plugins are registered late.
+ * Set by use-lt-auth-client.ts to avoid circular imports.
+ */
+let _resetAuthClientCallback: (() => void) | null = null;
+
+/**
+ * Set the callback to reset the auth client.
+ * Called internally by use-lt-auth-client.ts
+ */
+export function setResetAuthClientCallback(callback: () => void): void {
+  _resetAuthClientCallback = callback;
+}
+
+/**
  * Register additional Better Auth plugins before auth client initialization.
  *
  * Call this in a Nuxt plugin (client-side) or in app.vue setup before
  * the auth client is used.
  *
+ * If the auth client was already created, it will be automatically reset
+ * so the next call recreates it with the new plugins.
+ *
  * @example
  * ```typescript
  * // plugins/auth-plugins.client.ts
- * import { registerLtAuthPlugins } from '@lenne.tech/nuxt-extensions';
+ * import { registerLtAuthPlugins } from '@lenne.tech/nuxt-extensions/lib';
  * import { organizationClient, magicLinkClient } from 'better-auth/client/plugins';
  *
  * export default defineNuxtPlugin(() => {
@@ -52,6 +69,11 @@ let _ltAuthPluginRegistry: unknown[] = [];
  */
 export function registerLtAuthPlugins(plugins: unknown[]): void {
   _ltAuthPluginRegistry = [..._ltAuthPluginRegistry, ...plugins];
+
+  // If auth client was already created, reset it so it gets recreated with new plugins
+  if (_resetAuthClientCallback) {
+    _resetAuthClientCallback();
+  }
 }
 
 /**

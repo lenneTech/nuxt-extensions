@@ -19,7 +19,11 @@
 
 import { useNuxtApp } from "#imports";
 
-import { createLtAuthClient, type LtAuthClient } from "../lib/auth-client";
+import {
+  createLtAuthClient,
+  setResetAuthClientCallback,
+  type LtAuthClient,
+} from "../lib/auth-client";
 
 // Singleton instance
 let authClientInstance: LtAuthClient | null = null;
@@ -30,6 +34,9 @@ let authClientInstance: LtAuthClient | null = null;
 export function resetLtAuthClient(): void {
   authClientInstance = null;
 }
+
+// Register the reset callback so registerLtAuthPlugins can reset the client
+setResetAuthClientCallback(resetLtAuthClient);
 
 /**
  * Detects if we're running in development mode at runtime.
