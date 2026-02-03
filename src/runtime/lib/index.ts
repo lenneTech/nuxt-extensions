@@ -19,8 +19,9 @@ export {
 export {
   clearLtAuthPluginRegistry,
   createLtAuthClient,
+  getOrCreateLtAuthClient,
   getLtAuthPluginRegistry,
   registerLtAuthPlugins,
-  setResetAuthClientCallback,
+  resetLtAuthClientSingleton,
   type LtAuthClient,
 } from "./auth-client";

@@ -20,23 +20,17 @@
 import { useNuxtApp } from "#imports";
 
 import {
-  createLtAuthClient,
-  setResetAuthClientCallback,
+  getOrCreateLtAuthClient,
+  resetLtAuthClientSingleton,
   type LtAuthClient,
 } from "../lib/auth-client";
-
-// Singleton instance
-let authClientInstance: LtAuthClient | null = null;
 
 /**
  * Reset the auth client singleton (useful for testing or config changes)
  */
 export function resetLtAuthClient(): void {
-  authClientInstance = null;
+  resetLtAuthClientSingleton();
 }
-
-// Register the reset callback so registerLtAuthPlugins can reset the client
-setResetAuthClientCallback(resetLtAuthClient);
 
 /**
  * Detects if we're running in development mode at runtime.
@@ -80,37 +74,33 @@ function isDevMode(): boolean {
  * to work correctly (same-origin policy).
  */
 export function useLtAuthClient(): LtAuthClient {
-  if (!authClientInstance) {
-    // Get config from RuntimeConfig if available
-    try {
-      const nuxtApp = useNuxtApp();
-      const config = nuxtApp.$config?.public?.ltExtensions?.auth || {};
+  // Get config from RuntimeConfig if available
+  try {
+    const nuxtApp = useNuxtApp();
+    const config = nuxtApp.$config?.public?.ltExtensions?.auth || {};
 
-      // In dev mode, ensure basePath starts with /api for Nuxt server proxy
-      // This is required for WebAuthn/Passkey to work (same-origin policy)
-      const isDev = isDevMode();
-      let basePath = config.basePath || "/iam";
+    // In dev mode, ensure basePath starts with /api for Nuxt server proxy
+    // This is required for WebAuthn/Passkey to work (same-origin policy)
+    const isDev = isDevMode();
+    let basePath = config.basePath || "/iam";
 
-      // In dev mode, prefix with /api if not already prefixed
-      if (isDev && basePath && !basePath.startsWith("/api")) {
-        basePath = `/api${basePath}`;
-      }
-
-      authClientInstance = createLtAuthClient({
-        baseURL: isDev ? "" : config.baseURL,
-        basePath,
-        twoFactorRedirectPath: config.twoFactorRedirectPath,
-        enableAdmin: config.enableAdmin,
-        enableTwoFactor: config.enableTwoFactor,
-        enablePasskey: config.enablePasskey,
-      });
-    } catch {
-      // Fallback: create with defaults if RuntimeConfig not available
-      authClientInstance = createLtAuthClient();
+    // In dev mode, prefix with /api if not already prefixed
+    if (isDev && basePath && !basePath.startsWith("/api")) {
+      basePath = `/api${basePath}`;
     }
-  }
 
-  return authClientInstance;
+    return getOrCreateLtAuthClient({
+      baseURL: isDev ? "" : config.baseURL,
+      basePath,
+      twoFactorRedirectPath: config.twoFactorRedirectPath,
+      enableAdmin: config.enableAdmin,
+      enableTwoFactor: config.enableTwoFactor,
+      enablePasskey: config.enablePasskey,
+    });
+  } catch {
+    // Fallback: create with defaults if RuntimeConfig not available
+    return getOrCreateLtAuthClient();
+  }
 }
 
 // Also export as ltAuthClient for direct import convenience

@@ -19,7 +19,7 @@ import { ltSha256 } from "../utils/crypto";
 import { createLtAuthFetch, isLtDevMode } from "./auth-state";
 
 // =============================================================================
-// Plugin Registry
+// Plugin Registry & Singleton Management
 // =============================================================================
 
 /**
@@ -31,18 +31,23 @@ import { createLtAuthFetch, isLtDevMode } from "./auth-state";
 let _ltAuthPluginRegistry: unknown[] = [];
 
 /**
- * Callback to reset the auth client singleton when plugins are registered late.
- * Set by use-lt-auth-client.ts to avoid circular imports.
+ * Flag to track if plugins were registered after client creation.
+ * When true, the client needs to be recreated on next access.
  */
-let _resetAuthClientCallback: (() => void) | null = null;
+let _pluginsChangedAfterCreation = false;
 
 /**
- * Set the callback to reset the auth client.
- * Called internally by use-lt-auth-client.ts
+ * Singleton instance of the auth client.
+ * Managed here to allow registerLtAuthPlugins to reset it directly.
+ * Type is inferred at runtime to avoid circular reference issues.
  */
-export function setResetAuthClientCallback(callback: () => void): void {
-  _resetAuthClientCallback = callback;
-}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _authClientSingleton: any = null;
+
+/**
+ * Stored config for recreating the client when plugins change.
+ */
+let _lastClientConfig: LtAuthClientConfig | null = null;
 
 /**
  * Register additional Better Auth plugins before auth client initialization.
@@ -50,8 +55,8 @@ export function setResetAuthClientCallback(callback: () => void): void {
  * Call this in a Nuxt plugin (client-side) or in app.vue setup before
  * the auth client is used.
  *
- * If the auth client was already created, it will be automatically reset
- * so the next call recreates it with the new plugins.
+ * If the auth client was already created, it will be automatically recreated
+ * with the new plugins on next access.
  *
  * @example
  * ```typescript
@@ -70,9 +75,9 @@ export function setResetAuthClientCallback(callback: () => void): void {
 export function registerLtAuthPlugins(plugins: unknown[]): void {
   _ltAuthPluginRegistry = [..._ltAuthPluginRegistry, ...plugins];
 
-  // If auth client was already created, reset it so it gets recreated with new plugins
-  if (_resetAuthClientCallback) {
-    _resetAuthClientCallback();
+  // If auth client was already created, mark for recreation
+  if (_authClientSingleton) {
+    _pluginsChangedAfterCreation = true;
   }
 }
 
@@ -90,6 +95,40 @@ export function getLtAuthPluginRegistry(): unknown[] {
  */
 export function clearLtAuthPluginRegistry(): void {
   _ltAuthPluginRegistry = [];
+}
+
+/**
+ * Reset the auth client singleton.
+ * The client will be recreated on next access.
+ */
+export function resetLtAuthClientSingleton(): void {
+  _authClientSingleton = null;
+  _pluginsChangedAfterCreation = false;
+}
+
+/**
+ * Get or create the auth client singleton.
+ * This is the main entry point for accessing the auth client.
+ * If plugins were registered after initial creation, the client is recreated.
+ */
+export function getOrCreateLtAuthClient(config?: LtAuthClientConfig): LtAuthClient {
+  // Store config for potential recreation
+  if (config) {
+    _lastClientConfig = config;
+  }
+
+  // Recreate if plugins changed after creation
+  if (_pluginsChangedAfterCreation && _authClientSingleton) {
+    _authClientSingleton = null;
+    _pluginsChangedAfterCreation = false;
+  }
+
+  // Create if not exists
+  if (!_authClientSingleton) {
+    _authClientSingleton = createLtAuthClient(_lastClientConfig || {});
+  }
+
+  return _authClientSingleton;
 }
 
 // =============================================================================
