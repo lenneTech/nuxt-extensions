@@ -18,7 +18,17 @@ export default (nuxtApp: NuxtApp): void => {
   // Only run on client side
   if (import.meta.server) return;
 
-  const { clearUser, isAuthenticated } = useLtAuth();
+  // IMPORTANT: Do NOT call useLtAuth() here at the top level!
+  // User plugins that register custom auth plugins run AFTER module plugins.
+  // We must defer useLtAuth() calls to when they're actually needed.
+  let _authInstance: ReturnType<typeof useLtAuth> | null = null;
+
+  function getAuth() {
+    if (!_authInstance) {
+      _authInstance = useLtAuth();
+    }
+    return _authInstance;
+  }
 
   // Get configuration from runtime config
   const runtimeConfig = nuxtApp.$config?.public?.ltExtensions?.auth || {};
@@ -101,6 +111,7 @@ export default (nuxtApp: NuxtApp): void => {
 
     try {
       // Only handle if user was authenticated (prevents redirect loops)
+      const { clearUser, isAuthenticated } = getAuth();
       if (isAuthenticated.value) {
         console.debug("[LtAuth Interceptor] Session expired, logging out...");
 
