@@ -19,7 +19,7 @@ import type {
   UseLtAuthReturn,
 } from "../../types";
 
-import { useNuxtApp, useRuntimeConfig, useCookie, ref, computed, watch } from "#imports";
+import { useNuxtApp, useRuntimeConfig, useCookie, useState, ref, computed, watch } from "#imports";
 import { ltArrayBufferToBase64Url, ltBase64UrlToUint8Array } from "../../utils/crypto";
 import { createLtAuthClient } from "../../lib/auth-client";
 
@@ -129,6 +129,13 @@ export function useLtAuth(): UseLtAuthReturn {
   const isAuthenticated = computed<boolean>(() => !!user.value);
   const isAdmin = computed<boolean>(() => user.value?.role === "admin");
   const is2FAEnabled = computed<boolean>(() => user.value?.twoFactorEnabled ?? false);
+
+  // SSR-safe shared features state (useState is isolated per request on server, shared on client)
+  const features = useState<Record<string, boolean | number | string[]>>(
+    "lt-auth-features",
+    () => ({}),
+  );
+  const featuresFetched = useState<boolean>("lt-auth-features-fetched", () => false);
 
   /**
    * Get the API base URL
@@ -335,6 +342,29 @@ export function useLtAuth(): UseLtAuthReturn {
   }
 
   /**
+   * Fetch enabled features from the backend
+   *
+   * Returns feature flags like signUpChecks, emailVerification, passkey, etc.
+   * Results are cached globally and shared across all useLtAuth() instances.
+   * Automatically called once on first useLtAuth() usage (client-side only).
+   */
+  async function fetchFeatures(): Promise<Record<string, boolean | number | string[]>> {
+    try {
+      const apiBase = getApiBase();
+      const result = await $fetch<Record<string, boolean | number | string[]>>(
+        `${apiBase}/features`,
+      );
+      if (result) {
+        features.value = result;
+        featuresFetched.value = true;
+      }
+      return features.value;
+    } catch {
+      return features.value;
+    }
+  }
+
+  /**
    * Sign in with email and password
    */
   const signIn = {
@@ -380,7 +410,10 @@ export function useLtAuth(): UseLtAuthReturn {
   const signUp = {
     ...authClient.signUp,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    email: async (params: { email: string; name: string; password: string }, options?: any) => {
+    email: async (
+      params: { email: string; name: string; password: string } & Record<string, unknown>,
+      options?: any,
+    ) => {
       isLoading.value = true;
       try {
         const result = await authClient.signUp.email(params, options);
@@ -516,11 +549,26 @@ export function useLtAuth(): UseLtAuthReturn {
         setUser(result.user as LtUser, "cookie");
         switchToJwtMode().catch(() => {});
       } else if (result.session?.token) {
-        // Passkey auth returns session without user in JWT mode
-        // Store the session token as JWT and fetch user via validateSession
+        // Passkey auth returned session without user data.
+        // Store the session token and fetch user via get-session.
         jwtToken.value = result.session.token;
         if (authState.value) {
           authState.value = { ...authState.value, authMode: "jwt" };
+        }
+
+        // Fetch user data via get-session to populate auth state
+        try {
+          const sessionResponse = await fetchWithAuth(`${apiBase}/get-session`, { method: "GET" });
+          if (sessionResponse.ok) {
+            const sessionData = await sessionResponse.json();
+            if (sessionData?.user) {
+              result.user = sessionData.user;
+              setUser(sessionData.user as LtUser, "cookie");
+              switchToJwtMode().catch(() => {});
+            }
+          }
+        } catch {
+          // Fallback: user can still be fetched via validateSession in the login page
         }
       }
 
@@ -691,6 +739,12 @@ export function useLtAuth(): UseLtAuthReturn {
     }
   }
 
+  // Auto-fetch features once on first client-side useLtAuth() call
+  if (import.meta.client && !featuresFetched.value) {
+    featuresFetched.value = true; // Set immediately to prevent duplicate fetches
+    fetchFeatures();
+  }
+
   return {
     // Auth state
     authMode,
@@ -702,6 +756,10 @@ export function useLtAuth(): UseLtAuthReturn {
     // User properties
     is2FAEnabled,
     isAdmin,
+
+    // Feature detection
+    features: computed(() => features.value),
+    fetchFeatures,
 
     // Auth actions
     authenticateWithPasskey,

@@ -300,7 +300,10 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
        * Sign up with email and password (password is hashed before sending)
        */
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      email: async (params: { email: string; name: string; password: string }, options?: any) => {
+      email: async (
+        params: { email: string; name: string; password: string } & Record<string, unknown>,
+        options?: any,
+      ) => {
         const hashedPassword = await ltSha256(params.password);
         return baseClient.signUp.email({ ...params, password: hashedPassword }, options);
       },

@@ -118,6 +118,10 @@ export interface UseLtAuthReturn {
   is2FAEnabled: ComputedRef<boolean>;
   isAdmin: ComputedRef<boolean>;
 
+  // Feature detection
+  features: ComputedRef<Record<string, boolean | number | string[]>>;
+  fetchFeatures: () => Promise<Record<string, boolean | number | string[]>>;
+
   // Auth actions
   authenticateWithPasskey: () => Promise<LtPasskeyAuthResult>;
   changePassword: (
@@ -139,7 +143,7 @@ export interface UseLtAuthReturn {
   signOut: (options?: unknown) => Promise<unknown>;
   signUp: {
     email: (
-      params: { email: string; name: string; password: string },
+      params: { email: string; name: string; password: string } & Record<string, unknown>,
       options?: unknown,
     ) => Promise<unknown>;
   };
