@@ -53,7 +53,7 @@
     "dev:prepare": "nuxt-module-build build --stub && nuxt-module-build prepare && nuxt prepare playground",
     "build": "nuxt-module-build build",
     "lint": "oxlint src/",
-    "lint:fix": "oxlint --fix src/",
+    "lint:fix": "oxlint --fix --fix-suggestions src/",
     "format": "oxfmt --write src/",
     "format:check": "oxfmt --check src/",
     "test": "vitest run",
