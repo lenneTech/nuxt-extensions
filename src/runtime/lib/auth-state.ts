@@ -138,9 +138,16 @@ export function setLtAuthMode(mode: LtAuthMode): void {
 /**
  * Get the API base URL from runtime config
  *
- * @param basePath - The auth API base path (default: '/iam')
+ * @param basePath - The auth API base path. If not provided, reads from runtime config (default: '/iam')
  */
-export function getLtApiBase(basePath: string = "/iam"): string {
+export function getLtApiBase(basePath?: string): string {
+  // Read basePath from runtime config if not explicitly provided
+  if (!basePath && typeof window !== "undefined") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    basePath = (window as any).__NUXT__?.config?.public?.ltExtensions?.auth?.basePath;
+  }
+  basePath = basePath || "/iam";
+
   const isDev = isLtDevMode();
   if (isDev) {
     return `/api${basePath}`;

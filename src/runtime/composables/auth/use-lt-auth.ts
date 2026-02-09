@@ -19,19 +19,10 @@ import type {
   UseLtAuthReturn,
 } from "../../types";
 
-import { useNuxtApp, useRuntimeConfig, useCookie, useState, ref, computed, watch } from "#imports";
+import { useNuxtApp, useCookie, useState, ref, computed, watch } from "#imports";
 import { ltArrayBufferToBase64Url, ltBase64UrlToUint8Array } from "../../utils/crypto";
-import { createLtAuthClient } from "../../lib/auth-client";
-
-// Singleton auth client - created on first use
-let _authClient: ReturnType<typeof createLtAuthClient> | null = null;
-
-function getAuthClient() {
-  if (!_authClient) {
-    _authClient = createLtAuthClient();
-  }
-  return _authClient;
-}
+import { getLtApiBase } from "../../lib/auth-state";
+import { useLtAuthClient } from "../use-lt-auth-client";
 
 /**
  * Helper function for i18n with German fallback
@@ -75,7 +66,7 @@ function useTranslation() {
  * ```
  */
 export function useLtAuth(): UseLtAuthReturn {
-  const authClient = getAuthClient();
+  const authClient = useLtAuthClient();
   const t = useTranslation();
 
   // Use useCookie for SSR-compatible persistent state
@@ -138,18 +129,6 @@ export function useLtAuth(): UseLtAuthReturn {
   const featuresFetched = useState<boolean>("lt-auth-features-fetched", () => false);
 
   /**
-   * Get the API base URL
-   */
-  function getApiBase(): string {
-    const isDev = import.meta.dev;
-    const runtimeConfig = useRuntimeConfig();
-    const config = runtimeConfig.public.ltExtensions?.auth;
-    const baseURL = config?.baseURL || "http://localhost:3000";
-    const basePath = config?.basePath || "/iam";
-    return isDev ? `/api${basePath}` : `${baseURL}${basePath}`;
-  }
-
-  /**
    * Set user data after successful login/signup
    * Also manually writes to browser cookie for SSR compatibility
    */
@@ -204,7 +183,7 @@ export function useLtAuth(): UseLtAuthReturn {
    */
   async function switchToJwtMode(): Promise<boolean> {
     try {
-      const apiBase = getApiBase();
+      const apiBase = getLtApiBase();
       const response = await fetch(`${apiBase}/token`, {
         method: "GET",
         credentials: "include",
@@ -350,7 +329,7 @@ export function useLtAuth(): UseLtAuthReturn {
    */
   async function fetchFeatures(): Promise<Record<string, boolean | number | string[]>> {
     try {
-      const apiBase = getApiBase();
+      const apiBase = getLtApiBase();
       const result = await $fetch<Record<string, boolean | number | string[]>>(
         `${apiBase}/features`,
       );
@@ -474,7 +453,7 @@ export function useLtAuth(): UseLtAuthReturn {
     isLoading.value = true;
 
     try {
-      const apiBase = getApiBase();
+      const apiBase = getLtApiBase();
 
       // Step 1: Get authentication options from server
       const optionsResponse = await fetchWithAuth(
@@ -608,7 +587,7 @@ export function useLtAuth(): UseLtAuthReturn {
     isLoading.value = true;
 
     try {
-      const apiBase = getApiBase();
+      const apiBase = getLtApiBase();
 
       // Step 1: Get registration options from server
       const optionsResponse = await fetchWithAuth(`${apiBase}/passkey/generate-register-options`, {
