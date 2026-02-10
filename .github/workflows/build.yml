@@ -17,25 +17,29 @@ jobs:
       - name: Git checkout
         uses: actions/checkout@v4
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: npm install
+        run: pnpm install
 
       - name: Lint
-        run: npm run lint
+        run: pnpm lint
 
       - name: Prepare
-        run: npm run dev:prepare
+        run: pnpm dev:prepare
 
       - name: Test
-        run: npm run test
+        run: pnpm test
 
       - name: Build
-        run: npm run build
+        run: pnpm build
 
       - name: Save build
         uses: actions/upload-artifact@v4

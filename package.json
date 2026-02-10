@@ -1,6 +1,6 @@
 {
   "name": "@lenne.tech/nuxt-extensions",
-  "version": "1.2.8",
+  "version": "1.2.9",
   "description": "Reusable Nuxt 4 composables, components, and Better-Auth integration for lenne.tech projects",
   "repository": {
     "type": "git",
@@ -12,6 +12,7 @@
   },
   "author": "lenne.Tech <info@lenne.tech> (https://lenne.tech)",
   "license": "MIT",
+  "packageManager": "pnpm@10.29.2",
   "type": "module",
   "exports": {
     ".": {
@@ -47,8 +48,13 @@
   "scripts": {
     "prepare": "git config core.hooksPath .githooks",
     "prepack": "nuxt-module-build build",
-    "check": "npm run format && npm run lint:fix && npm run test:types && npm run test",
-    "dev": "npm run dev:prepare && nuxt dev playground",
+    "c": "pnpm run check",
+    "check": "pnpm audit && pnpm run format:check && pnpm run lint && pnpm test:types && pnpm test && pnpm run build",
+    "check:fix": "pnpm install && pnpm audit --fix && pnpm run format && pnpm run lint:fix && pnpm test:types && pnpm test && pnpm run build",
+    "check:naf": "pnpm install && pnpm run format && pnpm run lint:fix && pnpm test:types && pnpm test && pnpm run build",
+    "cf": "pnpm run check:fix",
+    "cnaf": "pnpm run check:naf",
+    "dev": "pnpm dev:prepare && nuxt dev playground",
     "dev:build": "nuxt build playground",
     "dev:prepare": "nuxt-module-build build --stub && nuxt-module-build prepare && nuxt prepare playground",
     "build": "nuxt-module-build build",
@@ -60,7 +66,7 @@
     "test:watch": "vitest watch",
     "test:coverage": "vitest run --coverage",
     "test:types": "vue-tsc --noEmit && cd playground && vue-tsc --noEmit",
-    "release": "npm run format:check && npm run lint && npm run test:types && npm run test && npm run prepack"
+    "release": "pnpm format:check && pnpm lint && pnpm test:types && pnpm test && pnpm prepack"
   },
   "dependencies": {
     "@nuxt/kit": "4.3.0"
@@ -105,6 +111,12 @@
     "typescript": "5.9.3",
     "vitest": "4.0.18",
     "vue-tsc": "3.2.4"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@parcel/watcher",
+      "esbuild"
+    ]
   },
   "keywords": [
     "nuxt",
