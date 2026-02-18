@@ -32,6 +32,7 @@ export type {
   LtExtensionsModuleOptions,
   LtExtensionsPublicRuntimeConfig,
   LtI18nModuleOptions,
+  LtSystemSetupModuleOptions,
   LtTusModuleOptions,
 } from "./module";
 

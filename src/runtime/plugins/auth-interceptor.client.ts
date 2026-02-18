@@ -46,6 +46,7 @@ export default (nuxtApp: NuxtApp): void => {
     "/auth/forgot-password",
     "/auth/reset-password",
     "/auth/2fa",
+    "/auth/setup",
   ];
   const publicAuthPaths = [...new Set([...defaultPublicPaths, ...configuredPublicPaths])];
 

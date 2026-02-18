@@ -5,7 +5,14 @@
  * for lenne.tech projects.
  */
 
-import { addComponent, addImports, addPlugin, createResolver, defineNuxtModule } from "@nuxt/kit";
+import {
+  addComponent,
+  addImports,
+  addPlugin,
+  addRouteMiddleware,
+  createResolver,
+  defineNuxtModule,
+} from "@nuxt/kit";
 
 import type { LtExtensionsModuleOptions } from "./runtime/types";
 
@@ -28,6 +35,10 @@ const defaultOptions: LtExtensionsModuleOptions = {
       publicPaths: [],
     },
     loginPath: "/auth/login",
+    systemSetup: {
+      enabled: false,
+      setupPath: "/auth/setup",
+    },
     twoFactorRedirectPath: "/auth/2fa",
   },
   errorTranslation: {
@@ -55,7 +66,11 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
 
     // Merge options with defaults
     const resolvedOptions = {
-      auth: { ...defaultOptions.auth, ...options.auth },
+      auth: {
+        ...defaultOptions.auth,
+        ...options.auth,
+        systemSetup: { ...defaultOptions.auth!.systemSetup, ...options.auth?.systemSetup },
+      },
       errorTranslation: { ...defaultOptions.errorTranslation, ...options.errorTranslation },
       i18n: { ...defaultOptions.i18n, ...options.i18n },
       tus: { ...defaultOptions.tus, ...options.tus },
@@ -75,6 +90,10 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
           publicPaths: resolvedOptions.auth?.interceptor?.publicPaths || [],
         },
         loginPath: resolvedOptions.auth?.loginPath || "/auth/login",
+        systemSetup: {
+          enabled: resolvedOptions.auth?.systemSetup?.enabled ?? false,
+          setupPath: resolvedOptions.auth?.systemSetup?.setupPath || "/auth/setup",
+        },
         twoFactorRedirectPath: resolvedOptions.auth?.twoFactorRedirectPath || "/auth/2fa",
       },
       errorTranslation: {
@@ -100,6 +119,7 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
       { name: "useLtFile", from: resolve("./runtime/composables/use-lt-file") },
       { name: "useLtTusUpload", from: resolve("./runtime/composables/use-lt-tus-upload") },
       { name: "useLtShare", from: resolve("./runtime/composables/use-lt-share") },
+      { name: "useSystemSetup", from: resolve("./runtime/composables/auth/use-system-setup") },
       // Utils
       { name: "ltSha256", from: resolve("./runtime/utils/crypto") },
       { name: "ltArrayBufferToBase64Url", from: resolve("./runtime/utils/crypto") },
@@ -141,6 +161,15 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
     // Add auth interceptor plugin if enabled
     if (resolvedOptions.auth?.enabled && resolvedOptions.auth?.interceptor?.enabled) {
       addPlugin(resolve("./runtime/plugins/auth-interceptor.client"));
+    }
+
+    // Add system setup middleware if enabled
+    if (resolvedOptions.auth?.systemSetup?.enabled) {
+      addRouteMiddleware({
+        name: "lt-system-setup",
+        path: resolve("./runtime/middleware/setup"),
+        global: true,
+      });
     }
 
     // Add error translation plugin if enabled
@@ -218,6 +247,7 @@ export type {
   LtExtensionsModuleOptions,
   LtExtensionsPublicRuntimeConfig,
   LtI18nModuleOptions,
+  LtSystemSetupModuleOptions,
   LtTusModuleOptions,
 } from "./runtime/types/module";
 

@@ -5,6 +5,13 @@
 /**
  * Auth module configuration options
  */
+export interface LtSystemSetupModuleOptions {
+  /** Enable system setup flow (default: false) */
+  enabled?: boolean;
+  /** Path to the setup page (default: '/auth/setup') */
+  setupPath?: string;
+}
+
 export interface LtAuthModuleOptions {
   /** Auth API base path (default: '/iam' - must match nest-server betterAuth.basePath) */
   basePath?: string;
@@ -27,6 +34,8 @@ export interface LtAuthModuleOptions {
   };
   /** Login page path for redirects (default: '/auth/login') */
   loginPath?: string;
+  /** System setup configuration */
+  systemSetup?: LtSystemSetupModuleOptions;
   /** 2FA redirect path (default: '/auth/2fa') */
   twoFactorRedirectPath?: string;
 }
@@ -94,6 +103,10 @@ export interface LtExtensionsPublicRuntimeConfig {
         publicPaths: string[];
       };
       loginPath: string;
+      systemSetup: {
+        enabled: boolean;
+        setupPath: string;
+      };
       twoFactorRedirectPath: string;
     };
     errorTranslation: {

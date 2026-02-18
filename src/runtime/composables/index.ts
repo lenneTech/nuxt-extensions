@@ -6,6 +6,7 @@
 
 // Auth Composables
 export { useLtAuth } from "./auth/use-lt-auth";
+export { useSystemSetup } from "./auth/use-system-setup";
 export { useLtAuthClient, ltAuthClient } from "./use-lt-auth-client";
 
 // Upload Composables

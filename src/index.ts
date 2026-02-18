@@ -30,6 +30,7 @@ export type {
   LtExtensionsModuleOptions,
   LtExtensionsPublicRuntimeConfig,
   LtI18nModuleOptions,
+  LtSystemSetupModuleOptions,
   LtTusModuleOptions,
   // Error Translation Types
   LtErrorTranslationResponse,
@@ -43,6 +44,8 @@ export {
   useLtAuth,
   useLtAuthClient,
   ltAuthClient,
+  // System Setup
+  useSystemSetup,
   // Upload
   useLtTusUpload,
   useLtFile,
