@@ -237,6 +237,7 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
     $Infer: baseClient.$Infer,
     $fetch: baseClient.$fetch,
     $store: baseClient.$store,
+    requestPasswordReset: baseClient.requestPasswordReset,
 
     /**
      * Change password for an authenticated user (both passwords are hashed)
