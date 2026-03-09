@@ -24,7 +24,7 @@ import {
   resetLtAuthClientSingleton,
   type LtAuthClient,
 } from "../lib/auth-client";
-import { isLtDevMode } from "../lib/auth-state";
+import { isLocalDevApiProxy } from "../lib/auth-state";
 
 /**
  * Reset the auth client singleton (useful for testing or config changes)
@@ -39,9 +39,10 @@ export function resetLtAuthClient(): void {
  * The client is created once and reused across all calls.
  * Configuration is read from RuntimeConfig on first call.
  *
- * IMPORTANT: In dev mode, the basePath is automatically prefixed with '/api'
- * to leverage Nuxt's server proxy. This is required for WebAuthn/Passkey
- * to work correctly (same-origin policy).
+ * IMPORTANT: When the API proxy is enabled (NUXT_PUBLIC_API_PROXY=true),
+ * the basePath is automatically prefixed with '/api' so the Vite dev proxy
+ * can forward requests to the backend. This is required for same-origin
+ * cookies and WebAuthn/Passkey to work correctly.
  */
 export function useLtAuthClient(): LtAuthClient {
   // Get config from RuntimeConfig if available
@@ -49,18 +50,17 @@ export function useLtAuthClient(): LtAuthClient {
     const nuxtApp = useNuxtApp();
     const config = nuxtApp.$config?.public?.ltExtensions?.auth || {};
 
-    // In dev mode, ensure basePath starts with /api for Nuxt server proxy
-    // This is required for WebAuthn/Passkey to work (same-origin policy)
-    const isDev = isLtDevMode();
+    // When proxy is enabled, prefix basePath with /api for Vite dev proxy
+    const useProxy = isLocalDevApiProxy();
     let basePath = config.basePath || "/iam";
 
-    // In dev mode, prefix with /api if not already prefixed
-    if (isDev && basePath && !basePath.startsWith("/api")) {
+    // Prefix with /api if proxy is active and not already prefixed
+    if (useProxy && basePath && !basePath.startsWith("/api")) {
       basePath = `/api${basePath}`;
     }
 
     return getOrCreateLtAuthClient({
-      baseURL: isDev ? "" : config.baseURL,
+      baseURL: useProxy ? "" : config.baseURL,
       basePath,
       twoFactorRedirectPath: config.twoFactorRedirectPath,
       enableAdmin: config.enableAdmin,

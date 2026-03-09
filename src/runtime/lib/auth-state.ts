@@ -12,43 +12,119 @@
  * The state is persisted in cookies for SSR compatibility.
  */
 
+import { useRuntimeConfig } from "#imports";
 import type { LtAuthMode } from "../types";
 
 // =============================================================================
-// Development Mode Detection
+// API Proxy Detection
+// =============================================================================
+
+let _proxyFallbackWarned = false;
+
+/**
+ * Determines if HTTP requests should use the Nuxt Vite dev proxy.
+ *
+ * When `true`, client-side requests are prefixed with `/api/` so the
+ * Vite dev server can forward them to the backend. The proxy strips
+ * the `/api/` prefix before forwarding, so the backend receives the
+ * original path (e.g., `/iam/sign-in`, `/i18n/errors/de`).
+ *
+ * **Why a proxy?**
+ * In local development the frontend (localhost:3001) and backend
+ * (localhost:3000) run on different ports. Browsers enforce same-origin
+ * policy for cookies, which breaks session-based authentication.
+ * The Vite proxy makes all requests appear same-origin.
+ *
+ * **How is this controlled?**
+ * Set `NUXT_PUBLIC_API_PROXY=true` in your `.env` file to enable the proxy.
+ * Nuxt auto-maps this to `runtimeConfig.public.apiProxy`.
+ * This should ONLY be enabled for local development (`nuxt dev`).
+ * On deployed stages (develop, test, preview, production) the proxy
+ * must NOT be enabled — requests go directly to the backend.
+ *
+ * **Fallback:** If `apiProxy` is not configured, the function checks
+ * whether the app runs under `nuxt dev` (buildId === 'dev'). If so,
+ * the proxy is activated with a prominent console warning so the
+ * implicit activation is immediately visible.
+ *
+ * **SSR never uses the proxy** — server-side requests call the backend
+ * directly via `runtimeConfig.apiUrl`.
+ *
+ * @returns true if the `/api/` proxy prefix should be used for client requests
+ *
+ * @see https://github.com/lenneTech/nuxt-base-starter — Vite proxy configuration
+ */
+export function isLocalDevApiProxy(): boolean {
+  // SSR: always call backend directly — no proxy needed
+  if (import.meta.server) {
+    return false;
+  }
+
+  try {
+    const runtimeConfig = useRuntimeConfig();
+    const apiProxy = (runtimeConfig.public as Record<string, unknown>)?.apiProxy;
+
+    // Explicit configuration: NUXT_PUBLIC_API_PROXY=true
+    if (apiProxy !== undefined && apiProxy !== null && apiProxy !== "") {
+      return apiProxy === true || apiProxy === "true";
+    }
+
+    // Fallback: activate proxy under `nuxt dev` with a warning
+    const buildId =
+      (runtimeConfig as Record<string, unknown>)?.app &&
+      ((runtimeConfig as Record<string, unknown>).app as Record<string, unknown>)?.buildId;
+    if (buildId === "dev") {
+      if (!_proxyFallbackWarned) {
+        _proxyFallbackWarned = true;
+        console.warn(
+          "\n⚠️  [LtExtensions] API proxy activated implicitly because nuxt dev was detected.\n" +
+            "    To make this explicit, add NUXT_PUBLIC_API_PROXY=true to your .env file.\n" +
+            "    If you do NOT want the proxy, set NUXT_PUBLIC_API_PROXY=false.\n",
+        );
+      }
+      return true;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+// =============================================================================
+// API URL Builder
 // =============================================================================
 
 /**
- * Detects if we're running in development mode at runtime.
+ * Build a full API URL for a given path, handling SSR, proxy, and direct modes.
  *
- * Note: `import.meta.dev` is evaluated at build time and doesn't work
- * correctly for pre-built modules. This function uses runtime checks instead.
+ * - **SSR**: `runtimeConfig.apiUrl` + path (direct backend call)
+ * - **Client + Proxy** (`NUXT_PUBLIC_API_PROXY=true`): `/api` + path (Vite proxy)
+ * - **Client direct**: `runtimeConfig.public.apiUrl` + path
  *
- * @returns true if running in development mode
+ * @param path - The API path (e.g., `/system-setup/status`, `/i18n/errors/de`)
  */
-export function isLtDevMode(): boolean {
-  // Check if we're on the server
-  if (import.meta.server) {
-    // On server, use process.env.NODE_ENV
-    return process.env.NODE_ENV !== "production";
-  }
+export function buildLtApiUrl(path: string): string {
+  try {
+    const runtimeConfig = useRuntimeConfig();
 
-  // On client, check the Nuxt build ID (it's 'dev' in development)
-  if (typeof window !== "undefined") {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const buildId = (window as any).__NUXT__?.config?.app?.buildId;
-    if (buildId === "dev") {
-      return true;
+    if (import.meta.server) {
+      const apiUrl = (runtimeConfig as Record<string, string>).apiUrl || "http://localhost:3000";
+      return `${apiUrl}${path}`;
     }
 
-    // Fallback: check if we're on localhost
-    const hostname = window.location?.hostname;
-    if (hostname === "localhost" || hostname === "127.0.0.1") {
-      return true;
+    if (isLocalDevApiProxy()) {
+      return `/api${path}`;
     }
-  }
 
-  return false;
+    const apiUrl =
+      (runtimeConfig.public as Record<string, string>).apiUrl ||
+      (runtimeConfig.public as Record<string, any>)?.ltExtensions?.auth?.baseURL ||
+      "http://localhost:3000";
+    return `${apiUrl}${path}`;
+  } catch {
+    return `http://localhost:3000${path}`;
+  }
 }
 
 // =============================================================================
@@ -136,30 +212,26 @@ export function setLtAuthMode(mode: LtAuthMode): void {
 }
 
 /**
- * Get the API base URL from runtime config
+ * Get the API base URL for auth (IAM) requests.
+ *
+ * Uses {@link isLocalDevApiProxy} to determine the URL strategy:
+ * - **Proxy mode** (`NUXT_PUBLIC_API_PROXY=true`): Returns `/api{basePath}`
+ *   (e.g., `/api/iam`) so the Vite dev proxy forwards the request to the backend.
+ * - **Direct mode** (proxy disabled or not set): Returns `{baseURL}{basePath}`
+ *   (e.g., `https://api.example.com/iam`) for direct backend calls.
  *
  * @param basePath - The auth API base path. If not provided, reads from runtime config (default: '/iam')
  */
 export function getLtApiBase(basePath?: string): string {
-  // Read basePath from runtime config if not explicitly provided
-  if (!basePath && typeof window !== "undefined") {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    basePath = (window as any).__NUXT__?.config?.public?.ltExtensions?.auth?.basePath;
+  if (!basePath) {
+    try {
+      const runtimeConfig = useRuntimeConfig();
+      basePath = (runtimeConfig.public as Record<string, any>)?.ltExtensions?.auth?.basePath;
+    } catch {
+      // Ignore — use default
+    }
   }
-  basePath = basePath || "/iam";
-
-  const isDev = isLtDevMode();
-  if (isDev) {
-    return `/api${basePath}`;
-  }
-  // In production, try to get from runtime config or fall back to default
-  if (
-    typeof window !== "undefined" &&
-    (window as any).__NUXT__?.config?.public?.ltExtensions?.auth?.baseURL
-  ) {
-    return `${(window as any).__NUXT__.config.public.ltExtensions.auth.baseURL}${basePath}`;
-  }
-  return `http://localhost:3000${basePath}`;
+  return buildLtApiUrl(basePath || "/iam");
 }
 
 /**

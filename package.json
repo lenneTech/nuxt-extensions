@@ -1,6 +1,6 @@
 {
   "name": "@lenne.tech/nuxt-extensions",
-  "version": "1.2.12",
+  "version": "1.3.0",
   "description": "Reusable Nuxt 4 composables, components, and Better-Auth integration for lenne.tech projects",
   "repository": {
     "type": "git",
@@ -47,7 +47,7 @@
   ],
   "scripts": {
     "prepare": "git config core.hooksPath .githooks",
-    "prepack": "nuxt-module-build build",
+    "prepack": "node scripts/sync-module-version.mjs && nuxt-module-build build",
     "c": "pnpm run check",
     "check": "pnpm audit && pnpm run format:check && pnpm run lint && pnpm test:types && pnpm test && pnpm run build",
     "check:fix": "pnpm install && pnpm audit --fix && pnpm run format && pnpm run lint:fix && pnpm test:types && pnpm test && pnpm run build",

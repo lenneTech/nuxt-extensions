@@ -16,7 +16,7 @@ import { navigateTo } from "#imports";
 import type { LtAuthClientConfig } from "../types";
 
 import { ltSha256 } from "../utils/crypto";
-import { createLtAuthFetch, isLtDevMode } from "./auth-state";
+import { createLtAuthFetch, isLocalDevApiProxy } from "./auth-state";
 
 // =============================================================================
 // Plugin Registry & Singleton Management
@@ -158,18 +158,17 @@ export function getOrCreateLtAuthClient(config?: LtAuthClientConfig): LtAuthClie
  * plain text password transmission over the network.
  */
 export function createLtAuthClient(config: LtAuthClientConfig = {}) {
-  // In development, use empty baseURL and /api/iam path to leverage Nuxt server proxy
-  // This is REQUIRED for WebAuthn/Passkey to work correctly because:
-  // - Frontend runs on localhost:3002, API on localhost:3000
-  // - WebAuthn validates the origin, which must be consistent
-  // - The Nuxt server proxy ensures requests come from the frontend origin
-  // Note: We use isLtDevMode() for runtime detection instead of import.meta.dev
-  // which is evaluated at build time and doesn't work for pre-built modules.
-  const isDev = isLtDevMode();
-  const defaultBaseURL = isDev
+  // When the API proxy is enabled (NUXT_PUBLIC_API_PROXY=true), use empty
+  // baseURL and /api/iam path so the Vite dev proxy forwards requests to
+  // the backend. This is REQUIRED for:
+  // - Same-origin cookies (frontend localhost:3001 ↔ backend localhost:3000)
+  // - WebAuthn/Passkey (origin must be consistent)
+  // The proxy strips the /api/ prefix before forwarding to the backend.
+  const useProxy = isLocalDevApiProxy();
+  const defaultBaseURL = useProxy
     ? ""
     : import.meta.env?.VITE_API_URL || process.env.API_URL || "http://localhost:3000";
-  const defaultBasePath = isDev ? "/api/iam" : "/iam";
+  const defaultBasePath = useProxy ? "/api/iam" : "/iam";
 
   const {
     baseURL = defaultBaseURL,

@@ -5,7 +5,9 @@
  * Works with or without @nuxtjs/i18n.
  *
  * Backend error format: "#LTNS_0100: Unauthorized - User is not logged in"
- * Translations loaded from: GET /api/i18n/errors/:locale
+ * Translations loaded from: GET /i18n/errors/:locale
+ *
+ * URL handling is delegated to {@link buildLtApiUrl} (SSR / proxy / direct).
  */
 
 import type {
@@ -15,6 +17,7 @@ import type {
 } from "../types/error";
 
 import { computed, ref, useState, useNuxtApp, useRuntimeConfig } from "#imports";
+import { buildLtApiUrl } from "../lib/auth-state";
 
 // Regex to parse #CODE: Message format
 const ERROR_CODE_REGEX = /^#([A-Z_]+_\d+):\s*(.+)$/;
@@ -94,12 +97,8 @@ export function useLtErrorTranslation(): UseLtErrorTranslationReturn {
     return config?.defaultLocale || "de";
   }
 
-  /**
-   * Get API base URL
-   */
-  function getApiBase(): string {
-    // Use auth baseURL if available, otherwise empty (relative)
-    return runtimeConfig.public?.ltExtensions?.auth?.baseURL || "";
+  function buildErrorUrl(locale: string): string {
+    return buildLtApiUrl(`/i18n/errors/${locale}`);
   }
 
   /**
@@ -121,10 +120,8 @@ export function useLtErrorTranslation(): UseLtErrorTranslationReturn {
     isLoading.value = true;
 
     try {
-      const apiBase = getApiBase();
-      const response = await $fetch<LtErrorTranslationResponse>(
-        `${apiBase}/api/i18n/errors/${targetLocale}`,
-      );
+      const url = buildErrorUrl(targetLocale);
+      const response = await $fetch<LtErrorTranslationResponse>(url);
 
       if (response?.errors) {
         translations.value = {

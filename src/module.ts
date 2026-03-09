@@ -18,7 +18,7 @@ import type { LtExtensionsModuleOptions } from "./runtime/types";
 
 // Module meta
 export const name = "@lenne.tech/nuxt-extensions";
-export const version = "1.0.0";
+export const version = "1.3.0";
 export const configKey = "ltExtensions";
 
 // Default options
@@ -136,6 +136,8 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
       { name: "getLtJwtToken", from: resolve("./runtime/lib/auth-state") },
       { name: "setLtJwtToken", from: resolve("./runtime/lib/auth-state") },
       { name: "getLtApiBase", from: resolve("./runtime/lib/auth-state") },
+      { name: "buildLtApiUrl", from: resolve("./runtime/lib/auth-state") },
+      { name: "isLocalDevApiProxy", from: resolve("./runtime/lib/auth-state") },
       { name: "attemptLtJwtSwitch", from: resolve("./runtime/lib/auth-state") },
       { name: "isLtAuthenticated", from: resolve("./runtime/lib/auth-state") },
       { name: "createLtAuthFetch", from: resolve("./runtime/lib/auth-state") },
