@@ -76,6 +76,17 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
       tus: { ...defaultOptions.tus, ...options.tus },
     };
 
+    // Sync apiUrl: if only one of NUXT_API_URL / NUXT_PUBLIC_API_URL is set, use it for both
+    const rc = nuxt.options.runtimeConfig;
+    const serverApiUrl = process.env.NUXT_API_URL || (rc as any).apiUrl;
+    const publicApiUrl = process.env.NUXT_PUBLIC_API_URL || (rc.public as any).apiUrl;
+    const resolvedApiUrl = publicApiUrl || serverApiUrl;
+
+    if (resolvedApiUrl) {
+      (rc as any).apiUrl = (rc as any).apiUrl || resolvedApiUrl;
+      (rc.public as any).apiUrl = (rc.public as any).apiUrl || resolvedApiUrl;
+    }
+
     // Add runtime config
     nuxt.options.runtimeConfig.public.ltExtensions = {
       auth: {
