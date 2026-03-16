@@ -105,7 +105,7 @@ export function isLocalDevApiProxy(): boolean {
  * keys at build time so Nuxt knows which keys to override.
  *
  * ### SSR (Server-Side Rendering)
- * Fallback chain: `NUXT_API_URL` → `NUXT_PUBLIC_API_URL` → `auth.baseURL` → `localhost:3000`
+ * Fallback chain: `NUXT_API_URL` → `NUXT_PUBLIC_API_URL` → `auth.baseURL` → `""` (warns)
  *
  * `NUXT_API_URL` allows using an internal network address (e.g., `http://api.svc.cluster.local`)
  * that is never exposed to the client bundle. If not set, the public URL is used.
@@ -115,7 +115,7 @@ export function isLocalDevApiProxy(): boolean {
  * This ensures same-origin requests for cookies/WebAuthn. **Only for local development.**
  *
  * ### Client direct (deployed instances)
- * Fallback chain: `NUXT_PUBLIC_API_URL` → `auth.baseURL` → `localhost:3000`
+ * Fallback chain: `NUXT_PUBLIC_API_URL` → `auth.baseURL` → `""` (warns)
  *
  * ## Deployment Scenarios
  *
@@ -138,22 +138,26 @@ export function buildLtApiUrl(path: string): string {
       (runtimeConfig.public as Record<string, any>)?.ltExtensions?.auth?.baseURL || "";
 
     if (import.meta.server) {
-      const apiUrl =
-        (runtimeConfig as Record<string, string>).apiUrl ||
-        publicUrl ||
-        authBaseURL ||
-        "http://localhost:3000";
-      return `${apiUrl.replace(/\/+$/, "")}${path}`;
+      const apiUrl = (runtimeConfig as Record<string, string>).apiUrl || publicUrl || authBaseURL;
+      if (!apiUrl) {
+        console.warn(
+          "[LtExtensions] No API URL configured. Set NUXT_API_URL or NUXT_PUBLIC_API_URL.",
+        );
+      }
+      return `${(apiUrl || "").replace(/\/+$/, "")}${path}`;
     }
 
     if (isLocalDevApiProxy()) {
       return `/api${path}`;
     }
 
-    const apiUrl = publicUrl || authBaseURL || "http://localhost:3000";
-    return `${apiUrl.replace(/\/+$/, "")}${path}`;
+    const apiUrl = publicUrl || authBaseURL;
+    if (!apiUrl) {
+      console.warn("[LtExtensions] No API URL configured. Set NUXT_PUBLIC_API_URL.");
+    }
+    return `${(apiUrl || "").replace(/\/+$/, "")}${path}`;
   } catch {
-    return `http://localhost:3000${path}`;
+    return path;
   }
 }
 

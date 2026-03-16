@@ -165,9 +165,12 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
   // - WebAuthn/Passkey (origin must be consistent)
   // The proxy strips the /api/ prefix before forwarding to the backend.
   const useProxy = isLocalDevApiProxy();
-  const defaultBaseURL = useProxy
-    ? ""
-    : import.meta.env?.VITE_API_URL || process.env.API_URL || "http://localhost:3000";
+  // Default baseURL: empty string means requests go to the current origin.
+  // In production, useLtAuthClient() always passes an explicit baseURL from
+  // runtimeConfig.public.apiUrl (set via NUXT_PUBLIC_API_URL env var).
+  // This fallback only applies when createLtAuthClient() is called directly
+  // without config — e.g., from the catch block of useLtAuthClient().
+  const defaultBaseURL = useProxy ? "" : import.meta.env?.VITE_API_URL || process.env.API_URL || "";
   const defaultBasePath = useProxy ? "/api/iam" : "/iam";
 
   const {
