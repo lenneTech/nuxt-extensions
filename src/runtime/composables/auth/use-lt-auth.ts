@@ -139,7 +139,8 @@ export function useLtAuth(): UseLtAuthReturn {
     // Manually write to browser cookie for immediate SSR compatibility
     if (import.meta.client) {
       const maxAge = 60 * 60 * 24 * 7; // 7 days
-      document.cookie = `lt-auth-state=${encodeURIComponent(JSON.stringify(newState))}; path=/; max-age=${maxAge}; samesite=lax`;
+      const secure = globalThis.location?.protocol === "https:" ? "; secure" : "";
+      document.cookie = `lt-auth-state=${encodeURIComponent(JSON.stringify(newState))}; path=/; max-age=${maxAge}; samesite=lax${secure}`;
     }
   }
 
@@ -155,7 +156,8 @@ export function useLtAuth(): UseLtAuthReturn {
     // Manually clear browser cookies for immediate SSR compatibility
     if (import.meta.client) {
       const maxAge = 60 * 60 * 24 * 7; // 7 days
-      document.cookie = `lt-auth-state=${encodeURIComponent(JSON.stringify(clearedState))}; path=/; max-age=${maxAge}; samesite=lax`;
+      const secure = globalThis.location?.protocol === "https:" ? "; secure" : "";
+      document.cookie = `lt-auth-state=${encodeURIComponent(JSON.stringify(clearedState))}; path=/; max-age=${maxAge}; samesite=lax${secure}`;
       document.cookie = `lt-jwt-token=; path=/; max-age=0`;
 
       // Clear Better Auth session cookies (set by the API)

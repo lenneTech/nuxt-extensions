@@ -17,7 +17,7 @@
  * ```
  */
 
-import { useNuxtApp } from "#imports";
+import { useRuntimeConfig } from "#imports";
 
 import {
   getOrCreateLtAuthClient,
@@ -39,16 +39,24 @@ export function resetLtAuthClient(): void {
  * The client is created once and reused across all calls.
  * Configuration is read from RuntimeConfig on first call.
  *
- * IMPORTANT: When the API proxy is enabled (NUXT_PUBLIC_API_PROXY=true),
- * the basePath is automatically prefixed with '/api' so the Vite dev proxy
- * can forward requests to the backend. This is required for same-origin
- * cookies and WebAuthn/Passkey to work correctly.
+ * ## baseURL resolution
+ * Prefers `runtimeConfig.public.apiUrl` (set at runtime via `NUXT_PUBLIC_API_URL`)
+ * over `ltExtensions.auth.baseURL` (baked at build time from nuxt.config.ts).
+ * This ensures Docker containers can be reconfigured without rebuilding.
+ * Trailing slashes are automatically stripped.
+ *
+ * ## Proxy mode (`NUXT_PUBLIC_API_PROXY=true`)
+ * When enabled, `baseURL` is set to `""` (same-origin) and `basePath` is
+ * prefixed with `/api` (e.g., `/api/iam`). The Vite dev proxy forwards
+ * these requests to the backend. This is required for same-origin cookies
+ * and WebAuthn/Passkey to work in local development.
  */
 export function useLtAuthClient(): LtAuthClient {
   // Get config from RuntimeConfig if available
   try {
-    const nuxtApp = useNuxtApp();
-    const config = nuxtApp.$config?.public?.ltExtensions?.auth || {};
+    const runtimeConfig = useRuntimeConfig();
+    const config = runtimeConfig.public?.ltExtensions?.auth || {};
+    const publicApiUrl = String(runtimeConfig.public?.apiUrl || "");
 
     // When proxy is enabled, prefix basePath with /api for Vite dev proxy
     const useProxy = isLocalDevApiProxy();
@@ -59,8 +67,13 @@ export function useLtAuthClient(): LtAuthClient {
       basePath = `/api${basePath}`;
     }
 
+    // Resolve baseURL: prefer runtimeConfig.public.apiUrl (properly overridden
+    // at runtime by NUXT_PUBLIC_API_URL) over ltExtensions.auth.baseURL (which
+    // is baked at build time and may contain localhost fallbacks).
+    const authBaseURL = (publicApiUrl || config.baseURL || "").replace(/\/+$/, "");
+
     return getOrCreateLtAuthClient({
-      baseURL: useProxy ? "" : config.baseURL,
+      baseURL: useProxy ? "" : authBaseURL,
       basePath,
       twoFactorRedirectPath: config.twoFactorRedirectPath,
       enableAdmin: config.enableAdmin,

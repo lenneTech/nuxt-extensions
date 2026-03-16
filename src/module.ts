@@ -18,7 +18,7 @@ import type { LtExtensionsModuleOptions } from "./runtime/types";
 
 // Module meta
 export const name = "@lenne.tech/nuxt-extensions";
-export const version = "1.3.0";
+export const version = "1.4.0";
 export const configKey = "ltExtensions";
 
 // Default options
@@ -76,15 +76,28 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
       tus: { ...defaultOptions.tus, ...options.tus },
     };
 
-    // Sync apiUrl: if only one of NUXT_API_URL / NUXT_PUBLIC_API_URL is set, use it for both
+    // Declare runtimeConfig keys with empty defaults so Nuxt can override them at runtime.
+    //
+    // WHY no process.env reads here?
+    // This setup() runs at BUILD time. In containerized deployments (Docker, K8s),
+    // env vars are injected at RUNTIME and may differ from the build environment.
+    // Nuxt's built-in mechanism handles this correctly:
+    //
+    //   NUXT_API_URL          → runtimeConfig.apiUrl        (server only, at runtime)
+    //   NUXT_PUBLIC_API_URL   → runtimeConfig.public.apiUrl (client + server, at runtime)
+    //
+    // The actual URL resolution happens in buildLtApiUrl() which reads from
+    // useRuntimeConfig() — always returning the runtime-overridden values.
+    //
+    // SECURITY: NUXT_API_URL is never promoted to public config. It may contain
+    // internal network addresses (e.g., http://api.svc.cluster.local) that must
+    // not be exposed in the client bundle.
     const rc = nuxt.options.runtimeConfig;
-    const serverApiUrl = process.env.NUXT_API_URL || (rc as any).apiUrl;
-    const publicApiUrl = process.env.NUXT_PUBLIC_API_URL || (rc.public as any).apiUrl;
-    const resolvedApiUrl = publicApiUrl || serverApiUrl;
-
-    if (resolvedApiUrl) {
-      (rc as any).apiUrl = (rc as any).apiUrl || resolvedApiUrl;
-      (rc.public as any).apiUrl = (rc.public as any).apiUrl || resolvedApiUrl;
+    if (!(rc as any).apiUrl) {
+      (rc as any).apiUrl = "";
+    }
+    if (!(rc.public as any).apiUrl) {
+      (rc.public as any).apiUrl = "";
     }
 
     // Add runtime config

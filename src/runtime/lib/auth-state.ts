@@ -98,30 +98,60 @@ export function isLocalDevApiProxy(): boolean {
 /**
  * Build a full API URL for a given path, handling SSR, proxy, and direct modes.
  *
- * - **SSR**: `runtimeConfig.apiUrl` + path (direct backend call)
- * - **Client + Proxy** (`NUXT_PUBLIC_API_PROXY=true`): `/api` + path (Vite proxy)
- * - **Client direct**: `runtimeConfig.public.apiUrl` + path
+ * ## Resolution Strategy
+ *
+ * All environment variables are resolved **at runtime** by Nuxt's built-in
+ * `NUXT_*` → `runtimeConfig` mapping. The module only declares empty default
+ * keys at build time so Nuxt knows which keys to override.
+ *
+ * ### SSR (Server-Side Rendering)
+ * Fallback chain: `NUXT_API_URL` → `NUXT_PUBLIC_API_URL` → `auth.baseURL` → `localhost:3000`
+ *
+ * `NUXT_API_URL` allows using an internal network address (e.g., `http://api.svc.cluster.local`)
+ * that is never exposed to the client bundle. If not set, the public URL is used.
+ *
+ * ### Client + Proxy (`NUXT_PUBLIC_API_PROXY=true`)
+ * Returns `/api{path}` — the Vite dev proxy forwards to the backend and strips `/api`.
+ * This ensures same-origin requests for cookies/WebAuthn. **Only for local development.**
+ *
+ * ### Client direct (deployed instances)
+ * Fallback chain: `NUXT_PUBLIC_API_URL` → `auth.baseURL` → `localhost:3000`
+ *
+ * ## Deployment Scenarios
+ *
+ * | Scenario                 | Env Vars                                      | SSR Result              | Client Result           |
+ * |--------------------------|-----------------------------------------------|-------------------------|-------------------------|
+ * | Local dev + proxy        | `PUBLIC_API_URL=localhost:3000, API_PROXY=true`| `localhost:3000{path}`  | `/api{path}` (proxy)    |
+ * | Production (simple)      | `PUBLIC_API_URL=api.example.com`               | `api.example.com{path}` | `api.example.com{path}` |
+ * | Production (internal)    | `PUBLIC_API_URL=..., API_URL=api-internal:3000`| `api-internal:3000{path}` | `api.example.com{path}` |
+ * | Legacy (nuxt.config only)| `auth.baseURL` in config                       | `{baseURL}{path}`       | `{baseURL}{path}`       |
+ *
+ * Trailing slashes on the base URL are automatically stripped.
  *
  * @param path - The API path (e.g., `/system-setup/status`, `/i18n/errors/de`)
  */
 export function buildLtApiUrl(path: string): string {
   try {
     const runtimeConfig = useRuntimeConfig();
+    const publicUrl = (runtimeConfig.public as Record<string, string>).apiUrl || "";
+    const authBaseURL =
+      (runtimeConfig.public as Record<string, any>)?.ltExtensions?.auth?.baseURL || "";
 
     if (import.meta.server) {
-      const apiUrl = (runtimeConfig as Record<string, string>).apiUrl || "http://localhost:3000";
-      return `${apiUrl}${path}`;
+      const apiUrl =
+        (runtimeConfig as Record<string, string>).apiUrl ||
+        publicUrl ||
+        authBaseURL ||
+        "http://localhost:3000";
+      return `${apiUrl.replace(/\/+$/, "")}${path}`;
     }
 
     if (isLocalDevApiProxy()) {
       return `/api${path}`;
     }
 
-    const apiUrl =
-      (runtimeConfig.public as Record<string, string>).apiUrl ||
-      (runtimeConfig.public as Record<string, any>)?.ltExtensions?.auth?.baseURL ||
-      "http://localhost:3000";
-    return `${apiUrl}${path}`;
+    const apiUrl = publicUrl || authBaseURL || "http://localhost:3000";
+    return `${apiUrl.replace(/\/+$/, "")}${path}`;
   } catch {
     return `http://localhost:3000${path}`;
   }
@@ -181,8 +211,9 @@ export function setLtJwtToken(token: string | null): void {
   if (import.meta.server) return;
 
   const maxAge = 60 * 60 * 24 * 7; // 7 days
+  const secure = globalThis.location?.protocol === "https:" ? "; secure" : "";
   if (token) {
-    document.cookie = `lt-jwt-token=${encodeURIComponent(JSON.stringify(token))}; path=/; max-age=${maxAge}; samesite=lax`;
+    document.cookie = `lt-jwt-token=${encodeURIComponent(JSON.stringify(token))}; path=/; max-age=${maxAge}; samesite=lax${secure}`;
   } else {
     document.cookie = `lt-jwt-token=; path=/; max-age=0`;
   }
@@ -205,7 +236,8 @@ export function setLtAuthMode(mode: LtAuthMode): void {
     }
 
     const maxAge = 60 * 60 * 24 * 7; // 7 days
-    document.cookie = `lt-auth-state=${encodeURIComponent(JSON.stringify(state))}; path=/; max-age=${maxAge}; samesite=lax`;
+    const secure = globalThis.location?.protocol === "https:" ? "; secure" : "";
+    document.cookie = `lt-auth-state=${encodeURIComponent(JSON.stringify(state))}; path=/; max-age=${maxAge}; samesite=lax${secure}`;
   } catch {
     // Ignore errors
   }

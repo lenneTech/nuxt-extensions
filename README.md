@@ -42,6 +42,58 @@ npm install tus-js-client
 - **i18n Support** - English and German translations (works without i18n too)
 - **Auto-imports** - All composables and components are auto-imported
 
+## Environment Variables
+
+| Variable | Context | Description |
+|----------|---------|-------------|
+| `NUXT_PUBLIC_API_URL` | Client + Server | Public API URL. Primary way to configure the API endpoint. Used for client-side requests and as SSR fallback. |
+| `NUXT_API_URL` | Server only | Internal API URL for SSR requests. Use when the backend has a private network address that should not be exposed to the client. |
+| `NUXT_PUBLIC_API_PROXY` | Client | Set to `true` to enable the Vite dev proxy. Routes client requests through `/api/` for same-origin cookies. **Only for local development.** |
+
+### How URL Resolution Works
+
+All environment variables are resolved **at runtime** (not build time). This means you can build a Docker image once and deploy it to different environments by changing env vars — no rebuild needed.
+
+**SSR fallback chain:**
+`NUXT_API_URL` → `NUXT_PUBLIC_API_URL` → `auth.baseURL` (from nuxt.config.ts) → `http://localhost:3000`
+
+**Client fallback chain (no proxy):**
+`NUXT_PUBLIC_API_URL` → `auth.baseURL` (from nuxt.config.ts) → `http://localhost:3000`
+
+**Client with proxy (`NUXT_PUBLIC_API_PROXY=true`):**
+All requests go to `/api/{path}` — the Vite dev proxy forwards them to the backend.
+
+> **Security:** `NUXT_API_URL` is never exposed to the client bundle. It stays in `runtimeConfig.apiUrl` (server only). This is important when using internal network addresses like `http://api.svc.cluster.local`.
+
+### Deployment Scenarios
+
+**Local development** — Frontend and backend on different ports, proxy ensures same-origin cookies:
+```bash
+NUXT_PUBLIC_API_URL=http://localhost:3000
+NUXT_PUBLIC_API_PROXY=true
+```
+
+**Production (simple)** — Backend reachable via public URL from both SSR and client:
+```bash
+NUXT_PUBLIC_API_URL=https://api.example.com
+```
+
+**Production (internal network)** — SSR uses fast internal route, client uses public URL:
+```bash
+NUXT_PUBLIC_API_URL=https://api.example.com
+NUXT_API_URL=http://api-internal:3000
+```
+
+**Legacy (nuxt.config.ts only)** — Works but env vars are preferred for runtime flexibility:
+```typescript
+// nuxt.config.ts
+ltExtensions: {
+  auth: {
+    baseURL: 'https://api.example.com',
+  },
+}
+```
+
 ## Configuration
 
 ```typescript
@@ -53,7 +105,7 @@ export default defineNuxtConfig({
     // Auth configuration
     auth: {
       enabled: true,                // Enable auth features
-      baseURL: '',                  // API base URL (empty = use Nuxt proxy)
+      baseURL: '',                  // API base URL (empty = use env vars)
       basePath: '/iam',             // Better-Auth endpoint prefix
       loginPath: '/auth/login',     // Login redirect path
       twoFactorRedirectPath: '/auth/2fa',  // 2FA redirect path
@@ -68,6 +120,18 @@ export default defineNuxtConfig({
         enabled: true,              // 401 auto-handler
         publicPaths: ['/auth/login', '/auth/register'],
       },
+
+      // System setup (first admin user creation)
+      systemSetup: {
+        enabled: false,             // Enable setup flow
+        setupPath: '/auth/setup',   // Setup page path
+      },
+    },
+
+    // Error translation configuration
+    errorTranslation: {
+      enabled: true,                // Translate backend error codes
+      defaultLocale: 'de',          // Fallback locale
     },
 
     // TUS upload configuration
@@ -298,9 +362,12 @@ The package works **with or without** `@nuxtjs/i18n`:
 | Composable | Description |
 |------------|-------------|
 | `useLtAuth()` | Better-Auth integration with session, passkey, 2FA |
+| `useLtAuthClient()` | Direct access to the Better-Auth client singleton |
+| `useLtErrorTranslation()` | Translate backend error codes to user-friendly messages |
 | `useLtTusUpload()` | TUS protocol file uploads with pause/resume |
 | `useLtFile()` | File utilities (size formatting, URLs) |
 | `useLtShare()` | Web Share API with clipboard fallback |
+| `useSystemSetup()` | System setup flow for initial admin user creation |
 
 ### Components
 

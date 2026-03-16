@@ -3,7 +3,24 @@
 // =============================================================================
 
 /**
- * Auth module configuration options
+ * System setup module configuration options
+ *
+ * When enabled, a global middleware redirects to the setup page if no admin user exists.
+ *
+ * @example
+ * ```typescript
+ * // nuxt.config.ts
+ * export default defineNuxtConfig({
+ *   ltExtensions: {
+ *     auth: {
+ *       systemSetup: {
+ *         enabled: true,
+ *         setupPath: '/auth/setup',
+ *       },
+ *     },
+ *   },
+ * });
+ * ```
  */
 export interface LtSystemSetupModuleOptions {
   /** Enable system setup flow (default: false) */
