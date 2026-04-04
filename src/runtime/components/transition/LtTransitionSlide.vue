@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/**
+ /**
  * Slide transition component (from right)
  *
  * Provides a horizontal slide animation from the right side.

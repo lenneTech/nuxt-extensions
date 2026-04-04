@@ -5,6 +5,7 @@
  * Provides global helper methods: $ltTranslateError, $ltShowErrorToast
  */
 
+import type { ObjectPlugin, Plugin } from "#app";
 import { defineNuxtPlugin, useRuntimeConfig } from "#imports";
 import { useLtErrorTranslation } from "../composables/use-lt-error-translation";
 
@@ -30,4 +31,4 @@ export default defineNuxtPlugin(async (nuxtApp) => {
   // Provide helper methods globally
   nuxtApp.provide("ltTranslateError", translateError);
   nuxtApp.provide("ltShowErrorToast", showErrorToast);
-});
+}) as Plugin & ObjectPlugin;

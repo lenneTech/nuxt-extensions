@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/**
+ /**
  * Slide transition component (from bottom)
  *
  * Provides a vertical slide animation from the bottom.

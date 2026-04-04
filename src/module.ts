@@ -18,7 +18,7 @@ import type { LtExtensionsModuleOptions } from "./runtime/types";
 
 // Module meta
 export const name = "@lenne.tech/nuxt-extensions";
-export const version = "1.4.0";
+export const version = "1.5.2";
 export const configKey = "ltExtensions";
 
 // Default options

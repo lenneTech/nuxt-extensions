@@ -9,6 +9,7 @@
  * - needsSetup === false AND route === setupPath -> redirect to loginPath
  */
 
+import type { RouteMiddleware } from "#app";
 import { defineNuxtRouteMiddleware, navigateTo, useRuntimeConfig } from "#imports";
 import { useSystemSetup } from "../composables/auth/use-system-setup";
 
@@ -36,4 +37,4 @@ export default defineNuxtRouteMiddleware(async (to) => {
   } catch {
     // On error, do not redirect (backward compatibility)
   }
-});
+}) as RouteMiddleware;
