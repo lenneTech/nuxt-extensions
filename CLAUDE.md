@@ -67,6 +67,46 @@ Import from `@lenne.tech/nuxt-extensions/testing`:
 import { createTestUser, loginTestUser } from '@lenne.tech/nuxt-extensions/testing';
 ```
 
+## Authentication Cookie Rules
+
+The `useLtAuth()` composable manages the `lt-auth-state` cookie for authentication state. Projects that implement custom auth middleware MUST follow these rules:
+
+### DO:
+- Use `useLtAuth()` for all auth state management (login, logout, session validation)
+- In custom auth middleware, read `lt-auth-state` via `document.cookie` (client) or `useCookie('lt-auth-state')` (server) — but ONLY for reading, never writing
+- Let `setUser()` and `clearUser()` handle all cookie mutations
+
+### DON'T:
+- Don't manually set `lt-auth-state` via `document.cookie` outside of `useLtAuth()`
+- Don't call `useCookie('lt-auth-state')` with different options than `useLtAuth()` uses (`maxAge: 604800, sameSite: 'lax'`)
+- Don't URL-decode or JSON-parse the cookie value manually on the server — `useCookie` handles this automatically
+- Don't write to `authState.value` from custom middleware — this generates a `Set-Cookie` header in the SSR response that may overwrite the browser's cookie
+
+### How Auth Cookies Work:
+1. `setUser()` writes the cookie via both `useCookie().value` (for SSR sync) and `document.cookie` (for immediate availability)
+2. On SSR, `useCookie` reads the cookie from the HTTP Cookie header, URL-decodes it, and parses the JSON
+3. If `useLtAuth()` can't find a valid user in the cookie on the server, it initializes with `{user: null}` — this is intentional and correct
+4. The `iam.session_token` httpOnly cookie (set by Better Auth) is the actual session identifier — `lt-auth-state` is a convenience cache for the client-side middleware
+
+### Custom Auth Middleware Pattern:
+```typescript
+// CORRECT — read-only check, no cookie mutation
+export default defineNuxtRouteMiddleware((to) => {
+  if (import.meta.client) {
+    const cookie = document.cookie.split('; ').find(r => r.startsWith('lt-auth-state='));
+    if (cookie) {
+      const value = decodeURIComponent(cookie.split('=').slice(1).join('='));
+      const state = JSON.parse(value);
+      if (state?.user) return; // Authenticated
+    }
+  } else {
+    const authCookie = useCookie<{ user: unknown } | null>('lt-auth-state');
+    if (authCookie.value?.user) return; // Authenticated
+  }
+  return navigateTo('/auth/login');
+});
+```
+
 ## Development Rules
 
 1. **ALWAYS read source code** in `dist/runtime/` to understand available composables and components
