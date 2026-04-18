@@ -1,4 +1,4 @@
-import type { ComputedRef, Ref } from "vue";
+import type { ComputedRef, Ref } from 'vue';
 
 // =============================================================================
 // User & Session Types
@@ -26,7 +26,7 @@ export interface LtUser {
  * - 'cookie': Primary mode using HttpOnly session cookies (more secure)
  * - 'jwt': Fallback mode using JWT tokens in Authorization header
  */
-export type LtAuthMode = "cookie" | "jwt";
+export type LtAuthMode = 'cookie' | 'jwt';
 
 /**
  * Stored auth state (persisted in cookie for SSR compatibility)
@@ -124,28 +124,19 @@ export interface UseLtAuthReturn {
 
   // Auth actions
   authenticateWithPasskey: () => Promise<LtPasskeyAuthResult>;
-  changePassword: (
-    params: { currentPassword: string; newPassword: string },
-    options?: unknown,
-  ) => Promise<unknown>;
+  changePassword: (params: { currentPassword: string; newPassword: string }, options?: unknown) => Promise<unknown>;
   clearUser: () => void;
   fetchWithAuth: (url: string, options?: RequestInit) => Promise<Response>;
   refreshJwtToken: () => Promise<boolean>;
   registerPasskey: (name?: string) => Promise<LtPasskeyRegisterResult>;
   setUser: (userData: LtUser | null, mode?: LtAuthMode) => void;
   signIn: {
-    email: (
-      params: { email: string; password: string; rememberMe?: boolean },
-      options?: unknown,
-    ) => Promise<unknown>;
+    email: (params: { email: string; password: string; rememberMe?: boolean }, options?: unknown) => Promise<unknown>;
     passkey?: (options?: unknown) => Promise<unknown>;
   };
   signOut: (options?: unknown) => Promise<unknown>;
   signUp: {
-    email: (
-      params: { email: string; name: string; password: string } & Record<string, unknown>,
-      options?: unknown,
-    ) => Promise<unknown>;
+    email: (params: { email: string; name: string; password: string } & Record<string, unknown>, options?: unknown) => Promise<unknown>;
   };
   switchToJwtMode: () => Promise<boolean>;
   validateSession: () => Promise<boolean>;

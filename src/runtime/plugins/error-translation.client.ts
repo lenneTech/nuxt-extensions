@@ -5,9 +5,9 @@
  * Provides global helper methods: $ltTranslateError, $ltShowErrorToast
  */
 
-import type { ObjectPlugin, Plugin } from "#app";
-import { defineNuxtPlugin, useRuntimeConfig } from "#imports";
-import { useLtErrorTranslation } from "../composables/use-lt-error-translation";
+import type { ObjectPlugin, Plugin } from '#app';
+import { defineNuxtPlugin, useRuntimeConfig } from '#imports';
+import { useLtErrorTranslation } from '../composables/use-lt-error-translation';
 
 export default defineNuxtPlugin(async (nuxtApp) => {
   const runtimeConfig = useRuntimeConfig();
@@ -25,10 +25,10 @@ export default defineNuxtPlugin(async (nuxtApp) => {
   try {
     await loadTranslations();
   } catch (error) {
-    console.warn("[LtErrorTranslation] Initial load failed:", error);
+    console.warn('[LtErrorTranslation] Initial load failed:', error);
   }
 
   // Provide helper methods globally
-  nuxtApp.provide("ltTranslateError", translateError);
-  nuxtApp.provide("ltShowErrorToast", showErrorToast);
+  nuxtApp.provide('ltTranslateError', translateError);
+  nuxtApp.provide('ltShowErrorToast', showErrorToast);
 }) as Plugin & ObjectPlugin;

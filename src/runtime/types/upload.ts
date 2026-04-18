@@ -1,4 +1,4 @@
-import type { ComputedRef } from "vue";
+import type { ComputedRef } from 'vue';
 
 // =============================================================================
 // Upload Types
@@ -7,7 +7,7 @@ import type { ComputedRef } from "vue";
 /**
  * Status of an upload item
  */
-export type LtUploadStatus = "completed" | "error" | "idle" | "paused" | "uploading";
+export type LtUploadStatus = 'completed' | 'error' | 'idle' | 'paused' | 'uploading';
 
 /**
  * Progress information for an upload

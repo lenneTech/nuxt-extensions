@@ -10,9 +10,9 @@
  * management only makes sense in the browser context.
  */
 
-import type { NuxtApp } from "#app";
+import type { NuxtApp } from '#app';
 
-import { useLtAuth } from "../composables/auth/use-lt-auth";
+import { useLtAuth } from '../composables/auth/use-lt-auth';
 
 export default (nuxtApp: NuxtApp): void => {
   // Only run on client side
@@ -32,7 +32,7 @@ export default (nuxtApp: NuxtApp): void => {
 
   // Get configuration from runtime config
   const runtimeConfig = nuxtApp.$config?.public?.ltExtensions?.auth || {};
-  const loginPath = runtimeConfig.loginPath || "/auth/login";
+  const loginPath = runtimeConfig.loginPath || '/auth/login';
   const configuredPublicPaths = runtimeConfig.interceptor?.publicPaths || [];
 
   // Track if we're already handling a 401 to prevent multiple redirects
@@ -40,14 +40,7 @@ export default (nuxtApp: NuxtApp): void => {
 
   // Default paths that should not trigger auto-logout on 401
   // (public auth endpoints where 401 is expected)
-  const defaultPublicPaths = [
-    "/auth/login",
-    "/auth/register",
-    "/auth/forgot-password",
-    "/auth/reset-password",
-    "/auth/2fa",
-    "/auth/setup",
-  ];
+  const defaultPublicPaths = ['/auth/login', '/auth/register', '/auth/forgot-password', '/auth/reset-password', '/auth/2fa', '/auth/setup'];
   const publicAuthPaths = [...new Set([...defaultPublicPaths, ...configuredPublicPaths])];
 
   /**
@@ -67,23 +60,23 @@ export default (nuxtApp: NuxtApp): void => {
    */
   function isAuthEndpoint(url: string): boolean {
     const authEndpoints = [
-      "/sign-in",
-      "/sign-up",
-      "/sign-out",
-      "/forgot-password",
-      "/reset-password",
-      "/verify-email",
-      "/session",
-      "/token",
+      '/sign-in',
+      '/sign-up',
+      '/sign-out',
+      '/forgot-password',
+      '/reset-password',
+      '/verify-email',
+      '/session',
+      '/token',
       // Passkey endpoints - handled by authFetch with JWT fallback
-      "/passkey/",
-      "/list-user-passkeys",
-      "/generate-register-options",
-      "/verify-registration",
-      "/generate-authenticate-options",
-      "/verify-authentication",
+      '/passkey/',
+      '/list-user-passkeys',
+      '/generate-register-options',
+      '/verify-registration',
+      '/generate-authenticate-options',
+      '/verify-authentication',
       // Two-factor endpoints
-      "/two-factor/",
+      '/two-factor/',
     ];
     return authEndpoints.some((endpoint) => url.includes(endpoint));
   }
@@ -114,20 +107,15 @@ export default (nuxtApp: NuxtApp): void => {
       // Only handle if user was authenticated (prevents redirect loops)
       const { clearUser, isAuthenticated } = getAuth();
       if (isAuthenticated.value) {
-        console.debug("[LtAuth Interceptor] Session expired, logging out...");
+        console.debug('[LtAuth Interceptor] Session expired, logging out...');
 
         // Clear user state
         clearUser();
 
         // Redirect to login page with return URL
-        const router = nuxtApp.$router as
-          | { currentRoute?: { value?: { fullPath?: string } } }
-          | undefined;
+        const router = nuxtApp.$router as { currentRoute?: { value?: { fullPath?: string } } } | undefined;
         const currentPath = router?.currentRoute?.value?.fullPath;
-        const redirectQuery =
-          currentPath && currentPath !== loginPath
-            ? `?redirect=${encodeURIComponent(currentPath)}`
-            : "";
+        const redirectQuery = currentPath && currentPath !== loginPath ? `?redirect=${encodeURIComponent(currentPath)}` : '';
 
         // Use window.location for redirect to avoid Nuxt router issues
         window.location.href = loginPath + redirectQuery;
@@ -171,8 +159,7 @@ export default (nuxtApp: NuxtApp): void => {
 
     // Handle 401 errors from native fetch
     if (response.status === 401) {
-      const url =
-        typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
       handleUnauthorized(url);
     }
 
@@ -180,5 +167,5 @@ export default (nuxtApp: NuxtApp): void => {
   };
 
   // Provide a manual method to trigger logout on 401
-  nuxtApp.provide("ltHandleUnauthorized", handleUnauthorized);
+  nuxtApp.provide('ltHandleUnauthorized', handleUnauthorized);
 };

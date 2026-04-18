@@ -7,32 +7,24 @@
  * @see https://tus.io/
  */
 
-import { computed, ref, useRuntimeConfig } from "#imports";
-import type {
-  LtUploadItem,
-  LtUploadOptions,
-  LtUploadProgress,
-  UseLtTusUploadReturn,
-} from "../types";
+import { computed, ref, useRuntimeConfig } from '#imports';
+import type { LtUploadItem, LtUploadOptions, LtUploadProgress, UseLtTusUploadReturn } from '../types';
 
 // Type for tus.Upload - import type only to avoid ESM issues
-type TusUpload = import("tus-js-client").Upload;
+type TusUpload = import('tus-js-client').Upload;
 
 // Lazy-loaded tus module
-let tusModule: typeof import("tus-js-client") | null = null;
+let tusModule: typeof import('tus-js-client') | null = null;
 
 /**
  * Load tus-js-client dynamically to avoid ESM/CJS issues
  */
-async function getTusModule(): Promise<typeof import("tus-js-client")> {
+async function getTusModule(): Promise<typeof import('tus-js-client')> {
   if (!tusModule) {
     try {
-      tusModule = await import("tus-js-client");
+      tusModule = await import('tus-js-client');
     } catch {
-      throw new Error(
-        "[useLtTusUpload] tus-js-client is not installed. " +
-          "Please install it: npm install tus-js-client",
-      );
+      throw new Error('[useLtTusUpload] tus-js-client is not installed. ' + 'Please install it: npm install tus-js-client');
     }
   }
   return tusModule;
@@ -72,7 +64,7 @@ export function useLtTusUpload(defaultOptions: LtUploadOptions = {}): UseLtTusUp
   const defaultConfig: LtUploadOptions = {
     autoStart: true,
     chunkSize: tusConfig?.defaultChunkSize || 5 * 1024 * 1024, // 5MB chunks
-    endpoint: tusConfig?.defaultEndpoint || "/files/upload",
+    endpoint: tusConfig?.defaultEndpoint || '/files/upload',
     parallelUploads: 3,
     retryDelays: [0, 1000, 3000, 5000, 10000],
     ...defaultOptions,
@@ -80,7 +72,7 @@ export function useLtTusUpload(defaultOptions: LtUploadOptions = {}): UseLtTusUp
 
   // Computed
   const uploads = computed(() => Array.from(uploadItems.value.values()));
-  const isUploading = computed(() => uploads.value.some((u) => u.status === "uploading"));
+  const isUploading = computed(() => uploads.value.some((u) => u.status === 'uploading'));
   const totalProgress = computed<LtUploadProgress>(() => {
     const items = uploads.value;
     if (items.length === 0) {
@@ -119,8 +111,7 @@ export function useLtTusUpload(defaultOptions: LtUploadOptions = {}): UseLtTusUp
       if (timeDiff > 0) {
         const currentSpeed = bytesDiff / timeDiff;
         // Exponential moving average for smoother display
-        smoothedSpeed =
-          smoothedSpeed === 0 ? currentSpeed : smoothedSpeed * 0.7 + currentSpeed * 0.3;
+        smoothedSpeed = smoothedSpeed === 0 ? currentSpeed : smoothedSpeed * 0.7 + currentSpeed * 0.3;
       }
 
       lastBytes = bytesUploaded;
@@ -162,7 +153,7 @@ export function useLtTusUpload(defaultOptions: LtUploadOptions = {}): UseLtTusUp
       onError: (error) => {
         updateItem(item.id, {
           error: error.message,
-          status: "error",
+          status: 'error',
         });
         options.onError?.(uploadItems.value.get(item.id)!, error);
       },
@@ -180,9 +171,7 @@ export function useLtTusUpload(defaultOptions: LtUploadOptions = {}): UseLtTusUp
       },
 
       onShouldRetry: (err) => {
-        const status = (
-          err as { originalResponse?: { getStatus?: () => number } }
-        ).originalResponse?.getStatus?.();
+        const status = (err as { originalResponse?: { getStatus?: () => number } }).originalResponse?.getStatus?.();
         // Don't retry on 4xx errors (except 429 Too Many Requests)
         if (status && status >= 400 && status < 500 && status !== 429) {
           return false;
@@ -196,7 +185,7 @@ export function useLtTusUpload(defaultOptions: LtUploadOptions = {}): UseLtTusUp
         updateItem(item.id, {
           completedAt: new Date(),
           progress: { ...currentItem!.progress, percentage: 100 },
-          status: "completed",
+          status: 'completed',
           url: tusUpload?.url ?? undefined,
         });
         options.onSuccess?.(uploadItems.value.get(item.id)!);
@@ -224,7 +213,7 @@ export function useLtTusUpload(defaultOptions: LtUploadOptions = {}): UseLtTusUp
           remainingTime: 0,
           speed: 0,
         },
-        status: "idle",
+        status: 'idle',
       };
 
       const newMap = new Map(uploadItems.value);
@@ -248,8 +237,8 @@ export function useLtTusUpload(defaultOptions: LtUploadOptions = {}): UseLtTusUp
     const item = uploadItems.value.get(id);
     const tusUpload = tusUploads.value.get(id);
 
-    if (item && tusUpload && item.status !== "uploading") {
-      updateItem(id, { startedAt: new Date(), status: "uploading" });
+    if (item && tusUpload && item.status !== 'uploading') {
+      updateItem(id, { startedAt: new Date(), status: 'uploading' });
 
       // Check for previous uploads to resume
       tusUpload.findPreviousUploads().then((previousUploads) => {
@@ -263,8 +252,8 @@ export function useLtTusUpload(defaultOptions: LtUploadOptions = {}): UseLtTusUp
   }
 
   function startAll(): void {
-    const pending = uploads.value.filter((u) => u.status === "idle" || u.status === "paused");
-    const currentlyUploading = uploads.value.filter((u) => u.status === "uploading").length;
+    const pending = uploads.value.filter((u) => u.status === 'idle' || u.status === 'paused');
+    const currentlyUploading = uploads.value.filter((u) => u.status === 'uploading').length;
     const limit = (defaultConfig.parallelUploads || 3) - currentlyUploading;
 
     pending.slice(0, Math.max(0, limit)).forEach((item) => startUpload(item.id));
@@ -274,12 +263,12 @@ export function useLtTusUpload(defaultOptions: LtUploadOptions = {}): UseLtTusUp
     const tusUpload = tusUploads.value.get(id);
     if (tusUpload) {
       tusUpload.abort();
-      updateItem(id, { status: "paused" });
+      updateItem(id, { status: 'paused' });
     }
   }
 
   function pauseAll(): void {
-    uploads.value.filter((u) => u.status === "uploading").forEach((item) => pauseUpload(item.id));
+    uploads.value.filter((u) => u.status === 'uploading').forEach((item) => pauseUpload(item.id));
   }
 
   function resumeUpload(id: string): void {
@@ -287,7 +276,7 @@ export function useLtTusUpload(defaultOptions: LtUploadOptions = {}): UseLtTusUp
   }
 
   function resumeAll(): void {
-    uploads.value.filter((u) => u.status === "paused").forEach((item) => resumeUpload(item.id));
+    uploads.value.filter((u) => u.status === 'paused').forEach((item) => resumeUpload(item.id));
   }
 
   function cancelUpload(id: string): void {
@@ -311,13 +300,13 @@ export function useLtTusUpload(defaultOptions: LtUploadOptions = {}): UseLtTusUp
   }
 
   function clearCompleted(): void {
-    uploads.value.filter((u) => u.status === "completed").forEach((item) => removeUpload(item.id));
+    uploads.value.filter((u) => u.status === 'completed').forEach((item) => removeUpload(item.id));
   }
 
   function retryUpload(id: string): void {
     const item = uploadItems.value.get(id);
-    if (item && item.status === "error") {
-      updateItem(id, { error: undefined, status: "idle" });
+    if (item && item.status === 'error') {
+      updateItem(id, { error: undefined, status: 'idle' });
       startUpload(id);
     }
   }

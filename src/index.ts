@@ -3,7 +3,7 @@
 // =============================================================================
 
 // Module
-export { default, name, version, configKey } from "./module";
+export { default, name, version, configKey } from './module';
 
 // Types
 export type {
@@ -36,7 +36,7 @@ export type {
   LtErrorTranslationResponse,
   LtParsedError,
   UseLtErrorTranslationReturn,
-} from "./runtime/types";
+} from './runtime/types';
 
 // Composables
 export {
@@ -54,10 +54,10 @@ export {
   type UseLtShareReturn,
   // Error Translation
   useLtErrorTranslation,
-} from "./runtime/composables";
+} from './runtime/composables';
 
 // Utilities
-export { ltArrayBufferToBase64Url, ltBase64UrlToUint8Array, ltSha256, tw } from "./runtime/utils";
+export { ltArrayBufferToBase64Url, ltBase64UrlToUint8Array, ltSha256, tw } from './runtime/utils';
 
 // Library (Auth State utilities & Plugin Registry)
 export {
@@ -77,4 +77,4 @@ export {
   ltAuthFetch,
   setLtAuthMode,
   setLtJwtToken,
-} from "./runtime/lib";
+} from './runtime/lib';

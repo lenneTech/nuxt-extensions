@@ -10,14 +10,10 @@
  * URL handling is delegated to {@link buildLtApiUrl} (SSR / proxy / direct).
  */
 
-import type {
-  LtErrorTranslationResponse,
-  LtParsedError,
-  UseLtErrorTranslationReturn,
-} from "../types/error";
+import type { LtErrorTranslationResponse, LtParsedError, UseLtErrorTranslationReturn } from '../types/error';
 
-import { computed, ref, useState, useNuxtApp, useRuntimeConfig } from "#imports";
-import { buildLtApiUrl } from "../lib/auth-state";
+import { computed, ref, useState, useNuxtApp, useRuntimeConfig } from '#imports';
+import { buildLtApiUrl } from '../lib/auth-state';
 
 // Regex to parse #CODE: Message format
 const ERROR_CODE_REGEX = /^#([A-Z_]+_\d+):\s*(.+)$/;
@@ -49,10 +45,7 @@ export function useLtErrorTranslation(): UseLtErrorTranslationReturn {
   const runtimeConfig = useRuntimeConfig();
 
   // Shared state for translations (SSR-compatible)
-  const translations = useState<Record<string, Record<string, string>>>(
-    "lt-error-translations",
-    () => ({}),
-  );
+  const translations = useState<Record<string, Record<string, string>>>('lt-error-translations', () => ({}));
   const isLoading = ref(false);
 
   // Get module config
@@ -87,14 +80,14 @@ export function useLtErrorTranslation(): UseLtErrorTranslationReturn {
 
     // 2. Check browser language (client-side only)
     if (import.meta.client && navigator?.language) {
-      const browserLang = navigator.language.split("-")[0] ?? "de";
-      if (["de", "en"].includes(browserLang)) {
+      const browserLang = navigator.language.split('-')[0] ?? 'de';
+      if (['de', 'en'].includes(browserLang)) {
         return browserLang as string;
       }
     }
 
     // 3. Config default or fallback to 'de'
-    return config?.defaultLocale || "de";
+    return config?.defaultLocale || 'de';
   }
 
   function buildErrorUrl(locale: string): string {
@@ -140,7 +133,7 @@ export function useLtErrorTranslation(): UseLtErrorTranslationReturn {
    * Extract message string from various error formats
    */
   function extractMessage(errorOrMessage: unknown): string {
-    if (typeof errorOrMessage === "string") {
+    if (typeof errorOrMessage === 'string') {
       return errorOrMessage;
     }
 
@@ -148,13 +141,11 @@ export function useLtErrorTranslation(): UseLtErrorTranslationReturn {
       return errorOrMessage.message;
     }
 
-    if (typeof errorOrMessage === "object" && errorOrMessage !== null) {
+    if (typeof errorOrMessage === 'object' && errorOrMessage !== null) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const obj = errorOrMessage as any;
       // Try common error response formats
-      return (
-        obj.message || obj.error?.message || obj.data?.message || obj.statusMessage || String(obj)
-      );
+      return obj.message || obj.error?.message || obj.data?.message || obj.statusMessage || String(obj);
     }
 
     return String(errorOrMessage);
@@ -170,8 +161,8 @@ export function useLtErrorTranslation(): UseLtErrorTranslationReturn {
     const match = message.match(ERROR_CODE_REGEX);
 
     if (match) {
-      const code = match[1] || "";
-      const developerMessage = match[2] || "";
+      const code = match[1] || '';
+      const developerMessage = match[2] || '';
       const locale = detectLocale();
       const localeTranslations = translations.value[locale] || {};
       const translatedMessage = localeTranslations[code] || developerMessage;
@@ -214,21 +205,21 @@ export function useLtErrorTranslation(): UseLtErrorTranslationReturn {
       nuxtApp.runWithContext(() => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const toastComposable = (nuxtApp as any).useToast || (globalThis as any).useToast;
-        if (typeof toastComposable === "function") {
+        if (typeof toastComposable === 'function') {
           const toast = toastComposable();
           toast.add({
-            color: "error",
-            title: title || t("lt.error.title", "Fehler"),
+            color: 'error',
+            title: title || t('lt.error.title', 'Fehler'),
             description: parsed.translatedMessage,
           });
         } else {
           // Nuxt UI not available, fallback to console
-          console.error("[LtErrorTranslation]", parsed.translatedMessage);
+          console.error('[LtErrorTranslation]', parsed.translatedMessage);
         }
       });
     } catch {
       // Toast failed, log to console
-      console.error("[LtErrorTranslation]", parsed.translatedMessage);
+      console.error('[LtErrorTranslation]', parsed.translatedMessage);
     }
   }
 

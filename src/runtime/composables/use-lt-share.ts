@@ -7,7 +7,7 @@
  * - i18n support with German fallback
  */
 
-import { useNuxtApp, useRoute } from "#imports";
+import { useNuxtApp, useRoute } from '#imports';
 
 /**
  * Return type for useLtShare composable
@@ -72,7 +72,7 @@ export function useLtShare(): UseLtShareReturn {
           url: url ?? route.fullPath,
         });
       } catch (error) {
-        console.error("Error sharing:", error);
+        console.error('Error sharing:', error);
       }
     } else {
       // Fallback: Copy to clipboard
@@ -82,27 +82,24 @@ export function useLtShare(): UseLtShareReturn {
         // Try to use toast notification if available (Nuxt UI)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const useToast = (nuxtApp as any).$useToast || (globalThis as any).useToast;
-        if (typeof useToast === "function") {
+        if (typeof useToast === 'function') {
           try {
             const toast = useToast();
             toast.add({
-              color: "success",
-              description: t(
-                "lt.share.copiedDescription",
-                "Der Link wurde in die Zwischenablage kopiert.",
-              ),
-              title: t("lt.share.copied", "Link kopiert"),
+              color: 'success',
+              description: t('lt.share.copiedDescription', 'Der Link wurde in die Zwischenablage kopiert.'),
+              title: t('lt.share.copied', 'Link kopiert'),
             });
           } catch {
             // Toast failed, log to console
-            console.debug("Link copied to clipboard");
+            console.debug('Link copied to clipboard');
           }
         } else {
           // Nuxt UI not installed
-          console.debug("Link copied to clipboard");
+          console.debug('Link copied to clipboard');
         }
       } catch (error) {
-        console.error("Error copying to clipboard:", error);
+        console.error('Error copying to clipboard:', error);
       }
     }
   }

@@ -10,19 +10,12 @@
  * - If cookies fail (401) -> switch to JWT mode
  */
 
-import type {
-  LtAuthMode,
-  LtAuthState,
-  LtPasskeyAuthResult,
-  LtPasskeyRegisterResult,
-  LtUser,
-  UseLtAuthReturn,
-} from "../../types";
+import type { LtAuthMode, LtAuthState, LtPasskeyAuthResult, LtPasskeyRegisterResult, LtUser, UseLtAuthReturn } from '../../types';
 
-import { useNuxtApp, useCookie, useState, ref, computed, watch } from "#imports";
-import { ltArrayBufferToBase64Url, ltBase64UrlToUint8Array } from "../../utils/crypto";
-import { getLtApiBase } from "../../lib/auth-state";
-import { useLtAuthClient } from "../use-lt-auth-client";
+import { useNuxtApp, useCookie, useState, ref, computed, watch } from '#imports';
+import { ltArrayBufferToBase64Url, ltBase64UrlToUint8Array } from '../../utils/crypto';
+import { getLtApiBase } from '../../lib/auth-state';
+import { useLtAuthClient } from '../use-lt-auth-client';
 
 /**
  * Helper function for i18n with German fallback
@@ -71,19 +64,19 @@ export function useLtAuth(): UseLtAuthReturn {
 
   // Use useCookie for SSR-compatible persistent state
   // Note: No default value to prevent overwriting existing cookies during hydration
-  const authState = useCookie<LtAuthState | null>("lt-auth-state", {
+  const authState = useCookie<LtAuthState | null>('lt-auth-state', {
     maxAge: 60 * 60 * 24 * 7, // 7 days
-    sameSite: "lax",
+    sameSite: 'lax',
   });
 
   // On client, sync from browser cookie to ensure we have the latest value
   // This prevents hydration mismatch where useCookie may return stale/null value
   if (import.meta.client) {
     try {
-      const cookieStr = document.cookie.split("; ").find((row) => row.startsWith("lt-auth-state="));
+      const cookieStr = document.cookie.split('; ').find((row) => row.startsWith('lt-auth-state='));
       if (cookieStr) {
-        const parts = cookieStr.split("=");
-        const value = parts.length > 1 ? decodeURIComponent(parts.slice(1).join("=")) : "";
+        const parts = cookieStr.split('=');
+        const value = parts.length > 1 ? decodeURIComponent(parts.slice(1).join('=')) : '';
         if (value) {
           const parsed = JSON.parse(value);
           // Only update if the browser cookie has a user but useCookie doesn't
@@ -99,47 +92,44 @@ export function useLtAuth(): UseLtAuthReturn {
 
   // Initialize with default only on server if cookie doesn't exist
   if (import.meta.server && (authState.value === null || authState.value === undefined)) {
-    authState.value = { user: null, authMode: "cookie" };
+    authState.value = { user: null, authMode: 'cookie' };
   }
 
   // JWT token storage (used when cookies are not available)
-  const jwtToken = useCookie<string | null>("lt-jwt-token", {
+  const jwtToken = useCookie<string | null>('lt-jwt-token', {
     maxAge: 60 * 60 * 24 * 7, // 7 days
-    sameSite: "lax",
+    sameSite: 'lax',
   });
 
   // Loading state
   const isLoading = ref<boolean>(false);
 
   // Auth mode: 'cookie' (default) or 'jwt' (fallback)
-  const authMode = computed(() => authState.value?.authMode || "cookie");
-  const isJwtMode = computed(() => authMode.value === "jwt");
+  const authMode = computed(() => authState.value?.authMode || 'cookie');
+  const isJwtMode = computed(() => authMode.value === 'jwt');
 
   // Computed properties based on stored state
   const user = computed<LtUser | null>(() => authState.value?.user ?? null);
   const isAuthenticated = computed<boolean>(() => !!user.value);
-  const isAdmin = computed<boolean>(() => user.value?.role === "admin");
+  const isAdmin = computed<boolean>(() => user.value?.role === 'admin');
   const is2FAEnabled = computed<boolean>(() => user.value?.twoFactorEnabled ?? false);
 
   // SSR-safe shared features state (useState is isolated per request on server, shared on client)
-  const features = useState<Record<string, boolean | number | string[]>>(
-    "lt-auth-features",
-    () => ({}),
-  );
-  const featuresFetched = useState<boolean>("lt-auth-features-fetched", () => false);
+  const features = useState<Record<string, boolean | number | string[]>>('lt-auth-features', () => ({}));
+  const featuresFetched = useState<boolean>('lt-auth-features-fetched', () => false);
 
   /**
    * Set user data after successful login/signup
    * Also manually writes to browser cookie for SSR compatibility
    */
-  function setUser(userData: LtUser | null, mode: LtAuthMode = "cookie"): void {
+  function setUser(userData: LtUser | null, mode: LtAuthMode = 'cookie'): void {
     const newState = { user: userData, authMode: mode };
     authState.value = newState;
 
     // Manually write to browser cookie for immediate SSR compatibility
     if (import.meta.client) {
       const maxAge = 60 * 60 * 24 * 7; // 7 days
-      const secure = globalThis.location?.protocol === "https:" ? "; secure" : "";
+      const secure = globalThis.location?.protocol === 'https:' ? '; secure' : '';
       document.cookie = `lt-auth-state=${encodeURIComponent(JSON.stringify(newState))}; path=/; max-age=${maxAge}; samesite=lax${secure}`;
     }
   }
@@ -149,26 +139,20 @@ export function useLtAuth(): UseLtAuthReturn {
    * Also manually clears browser cookies for SSR compatibility
    */
   function clearUser(): void {
-    const clearedState = { user: null, authMode: "cookie" as const };
+    const clearedState = { user: null, authMode: 'cookie' as const };
     authState.value = clearedState;
     jwtToken.value = null;
 
     // Manually clear browser cookies for immediate SSR compatibility
     if (import.meta.client) {
       const maxAge = 60 * 60 * 24 * 7; // 7 days
-      const secure = globalThis.location?.protocol === "https:" ? "; secure" : "";
+      const secure = globalThis.location?.protocol === 'https:' ? '; secure' : '';
       document.cookie = `lt-auth-state=${encodeURIComponent(JSON.stringify(clearedState))}; path=/; max-age=${maxAge}; samesite=lax${secure}`;
       document.cookie = `lt-jwt-token=; path=/; max-age=0`;
 
       // Clear Better Auth session cookies (set by the API)
       // These cookies may have different names depending on the configuration
-      const sessionCookieNames = [
-        "better-auth.session_token",
-        "better-auth.session",
-        "__Secure-better-auth.session_token",
-        "session_token",
-        "session",
-      ];
+      const sessionCookieNames = ['better-auth.session_token', 'better-auth.session', '__Secure-better-auth.session_token', 'session_token', 'session'];
 
       for (const name of sessionCookieNames) {
         // Clear with different path variations
@@ -187,8 +171,8 @@ export function useLtAuth(): UseLtAuthReturn {
     try {
       const apiBase = getLtApiBase();
       const response = await fetch(`${apiBase}/token`, {
-        method: "GET",
-        credentials: "include",
+        method: 'GET',
+        credentials: 'include',
       });
 
       if (response.ok) {
@@ -196,7 +180,7 @@ export function useLtAuth(): UseLtAuthReturn {
         if (data.token) {
           jwtToken.value = data.token;
           if (authState.value) {
-            authState.value = { ...authState.value, authMode: "jwt" };
+            authState.value = { ...authState.value, authMode: 'jwt' };
           }
           return true;
         }
@@ -220,7 +204,7 @@ export function useLtAuth(): UseLtAuthReturn {
    * Better-Auth's Passkey and 2FA operations need the session cookie
    * for challenge/verification token handling.
    */
-  const PATHS_REQUIRING_COOKIES = ["/passkey/", "/two-factor/", "/2fa/"];
+  const PATHS_REQUIRING_COOKIES = ['/passkey/', '/two-factor/', '/2fa/'];
 
   /**
    * Check if a URL requires cookies (for Passkey/2FA operations)
@@ -241,7 +225,7 @@ export function useLtAuth(): UseLtAuthReturn {
 
     // In JWT mode, add Authorization header
     if (isJwtMode.value && jwtToken.value) {
-      headers.set("Authorization", `Bearer ${jwtToken.value}`);
+      headers.set('Authorization', `Bearer ${jwtToken.value}`);
     }
 
     // Determine credentials mode:
@@ -252,7 +236,7 @@ export function useLtAuth(): UseLtAuthReturn {
     const response = await fetch(url, {
       ...options,
       headers,
-      credentials: needsCookies ? "include" : "omit",
+      credentials: needsCookies ? 'include' : 'omit',
     });
 
     // If we get 401 in cookie mode, try switching to JWT
@@ -261,12 +245,12 @@ export function useLtAuth(): UseLtAuthReturn {
 
       if (switched) {
         // Retry the request with JWT
-        headers.set("Authorization", `Bearer ${jwtToken.value}`);
+        headers.set('Authorization', `Bearer ${jwtToken.value}`);
         const retryNeedsCookies = urlRequiresCookies(url);
         return fetch(url, {
           ...options,
           headers,
-          credentials: retryNeedsCookies ? "include" : "omit",
+          credentials: retryNeedsCookies ? 'include' : 'omit',
         });
       }
     }
@@ -301,7 +285,7 @@ export function useLtAuth(): UseLtAuthReturn {
 
       // If session has user data, update our state
       if (session.value.data?.user) {
-        setUser(session.value.data.user as LtUser, "cookie");
+        setUser(session.value.data.user as LtUser, 'cookie');
         // Pre-fetch JWT for fallback
         switchToJwtMode().catch(() => {});
         return true;
@@ -332,9 +316,7 @@ export function useLtAuth(): UseLtAuthReturn {
   async function fetchFeatures(): Promise<Record<string, boolean | number | string[]>> {
     try {
       const apiBase = getLtApiBase();
-      const result = await $fetch<Record<string, boolean | number | string[]>>(
-        `${apiBase}/features`,
-      );
+      const result = await $fetch<Record<string, boolean | number | string[]>>(`${apiBase}/features`);
       if (result) {
         features.value = result;
         featuresFetched.value = true;
@@ -351,10 +333,7 @@ export function useLtAuth(): UseLtAuthReturn {
   const signIn = {
     ...authClient.signIn,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    email: async (
-      params: { email: string; password: string; rememberMe?: boolean },
-      options?: any,
-    ) => {
+    email: async (params: { email: string; password: string; rememberMe?: boolean }, options?: any) => {
       isLoading.value = true;
       try {
         const result = await authClient.signIn.email(params, options);
@@ -369,11 +348,11 @@ export function useLtAuth(): UseLtAuthReturn {
           // JWT mode: Token is in the response
           jwtToken.value = token;
           if (userData) {
-            setUser(userData as LtUser, "jwt");
+            setUser(userData as LtUser, 'jwt');
           }
         } else if (userData) {
           // Cookie mode: No token in response, use cookies
-          setUser(userData as LtUser, "cookie");
+          setUser(userData as LtUser, 'cookie');
           // Try to get JWT token for fallback
           switchToJwtMode().catch(() => {});
         }
@@ -391,10 +370,7 @@ export function useLtAuth(): UseLtAuthReturn {
   const signUp = {
     ...authClient.signUp,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    email: async (
-      params: { email: string; name: string; password: string } & Record<string, unknown>,
-      options?: any,
-    ) => {
+    email: async (params: { email: string; name: string; password: string } & Record<string, unknown>, options?: any) => {
       isLoading.value = true;
       try {
         const result = await authClient.signUp.email(params, options);
@@ -409,11 +385,11 @@ export function useLtAuth(): UseLtAuthReturn {
           // JWT mode: Token is in the response
           jwtToken.value = token;
           if (userData) {
-            setUser(userData as LtUser, "jwt");
+            setUser(userData as LtUser, 'jwt');
           }
         } else if (userData) {
           // Cookie mode: No token in response, use cookies
-          setUser(userData as LtUser, "cookie");
+          setUser(userData as LtUser, 'cookie');
           switchToJwtMode().catch(() => {});
         }
 
@@ -458,17 +434,14 @@ export function useLtAuth(): UseLtAuthReturn {
       const apiBase = getLtApiBase();
 
       // Step 1: Get authentication options from server
-      const optionsResponse = await fetchWithAuth(
-        `${apiBase}/passkey/generate-authenticate-options`,
-        {
-          method: "GET",
-        },
-      );
+      const optionsResponse = await fetchWithAuth(`${apiBase}/passkey/generate-authenticate-options`, {
+        method: 'GET',
+      });
 
       if (!optionsResponse.ok) {
         return {
           success: false,
-          error: t("lt.auth.passkeyError", "Konnte Passkey-Optionen nicht laden"),
+          error: t('lt.auth.passkeyError', 'Konnte Passkey-Optionen nicht laden'),
         };
       }
 
@@ -489,7 +462,7 @@ export function useLtAuth(): UseLtAuthReturn {
       })) as PublicKeyCredential | null;
 
       if (!credential) {
-        return { success: false, error: t("lt.auth.noPasskeySelected", "Kein Passkey ausgewählt") };
+        return { success: false, error: t('lt.auth.noPasskeySelected', 'Kein Passkey ausgewählt') };
       }
 
       // Step 4: Convert credential response to base64url format
@@ -511,8 +484,8 @@ export function useLtAuth(): UseLtAuthReturn {
       // Note: The server expects { response: credentialData } format (matching @simplewebauthn/browser output)
       // Include challengeId for JWT mode (database challenge storage)
       const authResponse = await fetchWithAuth(`${apiBase}/passkey/verify-authentication`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ challengeId: options.challengeId, response: credentialBody }),
       });
 
@@ -521,30 +494,30 @@ export function useLtAuth(): UseLtAuthReturn {
       if (!authResponse.ok) {
         return {
           success: false,
-          error: result.message || t("lt.auth.passkeyFailed", "Passkey-Anmeldung fehlgeschlagen"),
+          error: result.message || t('lt.auth.passkeyFailed', 'Passkey-Anmeldung fehlgeschlagen'),
         };
       }
 
       // Store user data after successful passkey login
       if (result.user) {
-        setUser(result.user as LtUser, "cookie");
+        setUser(result.user as LtUser, 'cookie');
         switchToJwtMode().catch(() => {});
       } else if (result.session?.token) {
         // Passkey auth returned session without user data.
         // Store the session token and fetch user via get-session.
         jwtToken.value = result.session.token;
         if (authState.value) {
-          authState.value = { ...authState.value, authMode: "jwt" };
+          authState.value = { ...authState.value, authMode: 'jwt' };
         }
 
         // Fetch user data via get-session to populate auth state
         try {
-          const sessionResponse = await fetchWithAuth(`${apiBase}/get-session`, { method: "GET" });
+          const sessionResponse = await fetchWithAuth(`${apiBase}/get-session`, { method: 'GET' });
           if (sessionResponse.ok) {
             const sessionData = await sessionResponse.json();
             if (sessionData?.user) {
               result.user = sessionData.user;
-              setUser(sessionData.user as LtUser, "cookie");
+              setUser(sessionData.user as LtUser, 'cookie');
               switchToJwtMode().catch(() => {});
             }
           }
@@ -556,18 +529,15 @@ export function useLtAuth(): UseLtAuthReturn {
       return { success: true, user: result.user as LtUser, session: result.session };
     } catch (err: unknown) {
       // Handle WebAuthn-specific errors
-      if (err instanceof Error && err.name === "NotAllowedError") {
+      if (err instanceof Error && err.name === 'NotAllowedError') {
         return {
           success: false,
-          error: t("lt.auth.passkeyAborted", "Passkey-Authentifizierung wurde abgebrochen"),
+          error: t('lt.auth.passkeyAborted', 'Passkey-Authentifizierung wurde abgebrochen'),
         };
       }
       return {
         success: false,
-        error:
-          err instanceof Error
-            ? err.message
-            : t("lt.auth.passkeyFailed", "Passkey-Anmeldung fehlgeschlagen"),
+        error: err instanceof Error ? err.message : t('lt.auth.passkeyFailed', 'Passkey-Anmeldung fehlgeschlagen'),
       };
     } finally {
       isLoading.value = false;
@@ -593,16 +563,14 @@ export function useLtAuth(): UseLtAuthReturn {
 
       // Step 1: Get registration options from server
       const optionsResponse = await fetchWithAuth(`${apiBase}/passkey/generate-register-options`, {
-        method: "GET",
+        method: 'GET',
       });
 
       if (!optionsResponse.ok) {
         const error = await optionsResponse.json().catch(() => ({}));
         return {
           success: false,
-          error:
-            error.message ||
-            t("lt.auth.registerOptionsError", "Konnte Registrierungsoptionen nicht laden"),
+          error: error.message || t('lt.auth.registerOptionsError', 'Konnte Registrierungsoptionen nicht laden'),
         };
       }
 
@@ -638,7 +606,7 @@ export function useLtAuth(): UseLtAuthReturn {
       if (!credential) {
         return {
           success: false,
-          error: t("lt.auth.passkeyCreationAborted", "Passkey-Erstellung abgebrochen"),
+          error: t('lt.auth.passkeyCreationAborted', 'Passkey-Erstellung abgebrochen'),
         };
       }
 
@@ -663,8 +631,8 @@ export function useLtAuth(): UseLtAuthReturn {
 
       // Step 6: Send to server for verification and storage
       const registerResponse = await fetchWithAuth(`${apiBase}/passkey/verify-registration`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(credentialBody),
       });
 
@@ -673,9 +641,7 @@ export function useLtAuth(): UseLtAuthReturn {
       if (!registerResponse.ok) {
         return {
           success: false,
-          error:
-            result.message ||
-            t("lt.auth.passkeyRegisterFailed", "Passkey-Registrierung fehlgeschlagen"),
+          error: result.message || t('lt.auth.passkeyRegisterFailed', 'Passkey-Registrierung fehlgeschlagen'),
         };
       }
 
@@ -683,25 +649,21 @@ export function useLtAuth(): UseLtAuthReturn {
     } catch (err: unknown) {
       if (err instanceof Error) {
         // User cancelled the operation
-        if (err.name === "NotAllowedError") {
+        if (err.name === 'NotAllowedError') {
           return {
             success: false,
-            error: t("lt.auth.passkeyCreationAborted", "Passkey-Erstellung wurde abgebrochen"),
+            error: t('lt.auth.passkeyCreationAborted', 'Passkey-Erstellung wurde abgebrochen'),
           };
         }
 
         // Authenticator already has a credential for this user
         // Some authenticators only allow one passkey per website per user
-        if (
-          err.name === "InvalidStateError" ||
-          err.message.includes("already registered") ||
-          err.message.includes("credentials already registered")
-        ) {
+        if (err.name === 'InvalidStateError' || err.message.includes('already registered') || err.message.includes('credentials already registered')) {
           return {
             success: false,
             error: t(
-              "lt.auth.passkeyAlreadyRegistered",
-              "Du hast bereits einen Passkey für diese Website registriert. Lösche ihn zuerst oder verwende einen anderen Authenticator.",
+              'lt.auth.passkeyAlreadyRegistered',
+              'Du hast bereits einen Passkey für diese Website registriert. Lösche ihn zuerst oder verwende einen anderen Authenticator.',
             ),
           };
         }
@@ -713,7 +675,7 @@ export function useLtAuth(): UseLtAuthReturn {
       }
       return {
         success: false,
-        error: t("lt.auth.passkeyRegisterFailed", "Passkey-Registrierung fehlgeschlagen"),
+        error: t('lt.auth.passkeyRegisterFailed', 'Passkey-Registrierung fehlgeschlagen'),
       };
     } finally {
       isLoading.value = false;

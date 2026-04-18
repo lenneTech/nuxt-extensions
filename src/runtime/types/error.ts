@@ -2,7 +2,7 @@
 // Error Translation Types
 // =============================================================================
 
-import type { ComputedRef, Ref } from "vue";
+import type { ComputedRef, Ref } from 'vue';
 
 /**
  * Backend error translation response format

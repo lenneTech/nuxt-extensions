@@ -7,9 +7,9 @@
  * - File size and duration formatting
  */
 
-import type { LtFileInfo, UseLtFileReturn } from "../types";
+import type { LtFileInfo, UseLtFileReturn } from '../types';
 
-import { useRuntimeConfig } from "#imports";
+import { useRuntimeConfig } from '#imports';
 
 /**
  * File utilities composable
@@ -36,7 +36,7 @@ export function useLtFile(): UseLtFileReturn {
    */
   function getFileApiBase(): string {
     // Try to get from runtime config, fall back to current host
-    return config.public.ltExtensions?.tus?.defaultEndpoint?.replace("/upload", "") || "/files";
+    return config.public.ltExtensions?.tus?.defaultEndpoint?.replace('/upload', '') || '/files';
   }
 
   /**
@@ -64,12 +64,12 @@ export function useLtFile(): UseLtFileReturn {
     try {
       const apiBase = getFileApiBase();
       const response = await $fetch<LtFileInfo>(`${apiBase}/info/${id}`, {
-        credentials: "include",
-        method: "GET",
+        credentials: 'include',
+        method: 'GET',
       });
       return response;
     } catch (error) {
-      console.error("Error fetching file info:", error);
+      console.error('Error fetching file info:', error);
       return null;
     }
   }
@@ -105,9 +105,9 @@ export function useLtFile(): UseLtFileReturn {
    * @returns Formatted string (e.g., "1.5 MB")
    */
   function formatFileSize(bytes: number): string {
-    if (bytes === 0) return "0 B";
+    if (bytes === 0) return '0 B';
     const k = 1024;
-    const sizes = ["B", "KB", "MB", "GB", "TB"];
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
   }

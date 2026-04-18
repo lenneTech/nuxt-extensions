@@ -5,27 +5,20 @@
  * for lenne.tech projects.
  */
 
-import {
-  addComponent,
-  addImports,
-  addPlugin,
-  addRouteMiddleware,
-  createResolver,
-  defineNuxtModule,
-} from "@nuxt/kit";
+import { addComponent, addImports, addPlugin, addRouteMiddleware, createResolver, defineNuxtModule } from '@nuxt/kit';
 
-import type { LtExtensionsModuleOptions } from "./runtime/types";
+import type { LtExtensionsModuleOptions } from './runtime/types';
 
 // Module meta
-export const name = "@lenne.tech/nuxt-extensions";
-export const version = "1.5.2";
-export const configKey = "ltExtensions";
+export const name = '@lenne.tech/nuxt-extensions';
+export const version = '1.5.2';
+export const configKey = 'ltExtensions';
 
 // Default options
 const defaultOptions: LtExtensionsModuleOptions = {
   auth: {
-    basePath: "/iam",
-    baseURL: "",
+    basePath: '/iam',
+    baseURL: '',
     enabled: true,
     enableAdmin: true,
     enablePasskey: true,
@@ -34,23 +27,23 @@ const defaultOptions: LtExtensionsModuleOptions = {
       enabled: true,
       publicPaths: [],
     },
-    loginPath: "/auth/login",
+    loginPath: '/auth/login',
     systemSetup: {
       enabled: false,
-      setupPath: "/auth/setup",
+      setupPath: '/auth/setup',
     },
-    twoFactorRedirectPath: "/auth/2fa",
+    twoFactorRedirectPath: '/auth/2fa',
   },
   errorTranslation: {
     enabled: true,
-    defaultLocale: "de",
+    defaultLocale: 'de',
   },
   i18n: {
     autoMerge: true,
   },
   tus: {
     defaultChunkSize: 5 * 1024 * 1024, // 5MB
-    defaultEndpoint: "/files/upload",
+    defaultEndpoint: '/files/upload',
   },
 };
 
@@ -94,17 +87,17 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
     // not be exposed in the client bundle.
     const rc = nuxt.options.runtimeConfig;
     if (!(rc as any).apiUrl) {
-      (rc as any).apiUrl = "";
+      (rc as any).apiUrl = '';
     }
     if (!(rc.public as any).apiUrl) {
-      (rc.public as any).apiUrl = "";
+      (rc.public as any).apiUrl = '';
     }
 
     // Add runtime config
     nuxt.options.runtimeConfig.public.ltExtensions = {
       auth: {
-        basePath: resolvedOptions.auth?.basePath || "/iam",
-        baseURL: resolvedOptions.auth?.baseURL || "",
+        basePath: resolvedOptions.auth?.basePath || '/iam',
+        baseURL: resolvedOptions.auth?.baseURL || '',
         enabled: resolvedOptions.auth?.enabled ?? true,
         enableAdmin: resolvedOptions.auth?.enableAdmin ?? true,
         enablePasskey: resolvedOptions.auth?.enablePasskey ?? true,
@@ -113,69 +106,63 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
           enabled: resolvedOptions.auth?.interceptor?.enabled ?? true,
           publicPaths: resolvedOptions.auth?.interceptor?.publicPaths || [],
         },
-        loginPath: resolvedOptions.auth?.loginPath || "/auth/login",
+        loginPath: resolvedOptions.auth?.loginPath || '/auth/login',
         systemSetup: {
           enabled: resolvedOptions.auth?.systemSetup?.enabled ?? false,
-          setupPath: resolvedOptions.auth?.systemSetup?.setupPath || "/auth/setup",
+          setupPath: resolvedOptions.auth?.systemSetup?.setupPath || '/auth/setup',
         },
-        twoFactorRedirectPath: resolvedOptions.auth?.twoFactorRedirectPath || "/auth/2fa",
+        twoFactorRedirectPath: resolvedOptions.auth?.twoFactorRedirectPath || '/auth/2fa',
       },
       errorTranslation: {
         enabled: resolvedOptions.errorTranslation?.enabled ?? true,
-        defaultLocale: resolvedOptions.errorTranslation?.defaultLocale || "de",
+        defaultLocale: resolvedOptions.errorTranslation?.defaultLocale || 'de',
       },
       tus: {
         defaultChunkSize: resolvedOptions.tus?.defaultChunkSize || 5 * 1024 * 1024,
-        defaultEndpoint: resolvedOptions.tus?.defaultEndpoint || "/files/upload",
+        defaultEndpoint: resolvedOptions.tus?.defaultEndpoint || '/files/upload',
       },
     };
 
     // Add explicit imports to avoid duplicates
     addImports([
       // Composables
-      { name: "useLtAuth", from: resolve("./runtime/composables/auth/use-lt-auth") },
-      { name: "useLtAuthClient", from: resolve("./runtime/composables/use-lt-auth-client") },
-      { name: "ltAuthClient", from: resolve("./runtime/composables/use-lt-auth-client") },
+      { name: 'useLtAuth', from: resolve('./runtime/composables/auth/use-lt-auth') },
+      { name: 'useLtAuthClient', from: resolve('./runtime/composables/use-lt-auth-client') },
+      { name: 'ltAuthClient', from: resolve('./runtime/composables/use-lt-auth-client') },
       {
-        name: "useLtErrorTranslation",
-        from: resolve("./runtime/composables/use-lt-error-translation"),
+        name: 'useLtErrorTranslation',
+        from: resolve('./runtime/composables/use-lt-error-translation'),
       },
-      { name: "useLtFile", from: resolve("./runtime/composables/use-lt-file") },
-      { name: "useLtTusUpload", from: resolve("./runtime/composables/use-lt-tus-upload") },
-      { name: "useLtShare", from: resolve("./runtime/composables/use-lt-share") },
-      { name: "useSystemSetup", from: resolve("./runtime/composables/auth/use-system-setup") },
+      { name: 'useLtFile', from: resolve('./runtime/composables/use-lt-file') },
+      { name: 'useLtTusUpload', from: resolve('./runtime/composables/use-lt-tus-upload') },
+      { name: 'useLtShare', from: resolve('./runtime/composables/use-lt-share') },
+      { name: 'useSystemSetup', from: resolve('./runtime/composables/auth/use-system-setup') },
       // Utils
-      { name: "ltSha256", from: resolve("./runtime/utils/crypto") },
-      { name: "ltArrayBufferToBase64Url", from: resolve("./runtime/utils/crypto") },
-      { name: "ltBase64UrlToUint8Array", from: resolve("./runtime/utils/crypto") },
-      { name: "tw", from: resolve("./runtime/utils/tw") },
+      { name: 'ltSha256', from: resolve('./runtime/utils/crypto') },
+      { name: 'ltArrayBufferToBase64Url', from: resolve('./runtime/utils/crypto') },
+      { name: 'ltBase64UrlToUint8Array', from: resolve('./runtime/utils/crypto') },
+      { name: 'tw', from: resolve('./runtime/utils/tw') },
       // Lib - Auth Client & Plugin Registry
-      { name: "createLtAuthClient", from: resolve("./runtime/lib/auth-client") },
-      { name: "registerLtAuthPlugins", from: resolve("./runtime/lib/auth-client") },
-      { name: "getLtAuthPluginRegistry", from: resolve("./runtime/lib/auth-client") },
-      { name: "clearLtAuthPluginRegistry", from: resolve("./runtime/lib/auth-client") },
+      { name: 'createLtAuthClient', from: resolve('./runtime/lib/auth-client') },
+      { name: 'registerLtAuthPlugins', from: resolve('./runtime/lib/auth-client') },
+      { name: 'getLtAuthPluginRegistry', from: resolve('./runtime/lib/auth-client') },
+      { name: 'clearLtAuthPluginRegistry', from: resolve('./runtime/lib/auth-client') },
       // Lib - Auth State
-      { name: "getLtAuthMode", from: resolve("./runtime/lib/auth-state") },
-      { name: "setLtAuthMode", from: resolve("./runtime/lib/auth-state") },
-      { name: "getLtJwtToken", from: resolve("./runtime/lib/auth-state") },
-      { name: "setLtJwtToken", from: resolve("./runtime/lib/auth-state") },
-      { name: "getLtApiBase", from: resolve("./runtime/lib/auth-state") },
-      { name: "buildLtApiUrl", from: resolve("./runtime/lib/auth-state") },
-      { name: "isLocalDevApiProxy", from: resolve("./runtime/lib/auth-state") },
-      { name: "attemptLtJwtSwitch", from: resolve("./runtime/lib/auth-state") },
-      { name: "isLtAuthenticated", from: resolve("./runtime/lib/auth-state") },
-      { name: "createLtAuthFetch", from: resolve("./runtime/lib/auth-state") },
-      { name: "ltAuthFetch", from: resolve("./runtime/lib/auth-state") },
+      { name: 'getLtAuthMode', from: resolve('./runtime/lib/auth-state') },
+      { name: 'setLtAuthMode', from: resolve('./runtime/lib/auth-state') },
+      { name: 'getLtJwtToken', from: resolve('./runtime/lib/auth-state') },
+      { name: 'setLtJwtToken', from: resolve('./runtime/lib/auth-state') },
+      { name: 'getLtApiBase', from: resolve('./runtime/lib/auth-state') },
+      { name: 'buildLtApiUrl', from: resolve('./runtime/lib/auth-state') },
+      { name: 'isLocalDevApiProxy', from: resolve('./runtime/lib/auth-state') },
+      { name: 'attemptLtJwtSwitch', from: resolve('./runtime/lib/auth-state') },
+      { name: 'isLtAuthenticated', from: resolve('./runtime/lib/auth-state') },
+      { name: 'createLtAuthFetch', from: resolve('./runtime/lib/auth-state') },
+      { name: 'ltAuthFetch', from: resolve('./runtime/lib/auth-state') },
     ]);
 
     // Register transition components
-    const transitionComponents = [
-      "LtTransitionFade",
-      "LtTransitionSlide",
-      "LtTransitionSlideBottom",
-      "LtTransitionSlideRevert",
-      "LtTransitionFadeScale",
-    ];
+    const transitionComponents = ['LtTransitionFade', 'LtTransitionSlide', 'LtTransitionSlideBottom', 'LtTransitionSlideRevert', 'LtTransitionFadeScale'];
 
     for (const componentName of transitionComponents) {
       addComponent({
@@ -186,51 +173,43 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
 
     // Add auth interceptor plugin if enabled
     if (resolvedOptions.auth?.enabled && resolvedOptions.auth?.interceptor?.enabled) {
-      addPlugin(resolve("./runtime/plugins/auth-interceptor.client"));
+      addPlugin(resolve('./runtime/plugins/auth-interceptor.client'));
     }
 
     // Add system setup middleware if enabled
     if (resolvedOptions.auth?.systemSetup?.enabled) {
       addRouteMiddleware({
-        name: "lt-system-setup",
-        path: resolve("./runtime/middleware/setup"),
+        name: 'lt-system-setup',
+        path: resolve('./runtime/middleware/setup'),
         global: true,
       });
     }
 
     // Add error translation plugin if enabled
     if (resolvedOptions.errorTranslation?.enabled) {
-      addPlugin(resolve("./runtime/plugins/error-translation.client"));
+      addPlugin(resolve('./runtime/plugins/error-translation.client'));
     }
 
     // i18n integration - merge locale files if @nuxtjs/i18n is installed
     if (resolvedOptions.i18n?.autoMerge) {
       // Cast to any to support @nuxtjs/i18n hook which is not in base NuxtHooks
-      (nuxt.hook as any)(
-        "i18n:registerModule",
-        (
-          register: (config: {
-            langDir: string;
-            locales: Array<{ code: string; file: string }>;
-          }) => void,
-        ) => {
-          register({
-            langDir: resolve("./runtime/locales"),
-            locales: [
-              { code: "en", file: "en.json" },
-              { code: "de", file: "de.json" },
-            ],
-          });
-        },
-      );
+      (nuxt.hook as any)('i18n:registerModule', (register: (config: { langDir: string; locales: Array<{ code: string; file: string }> }) => void) => {
+        register({
+          langDir: resolve('./runtime/locales'),
+          locales: [
+            { code: 'en', file: 'en.json' },
+            { code: 'de', file: 'de.json' },
+          ],
+        });
+      });
     }
 
     // Transpile runtime directory and tus-js-client (ESM compatibility)
-    nuxt.options.build.transpile.push(resolve("./runtime"));
-    nuxt.options.build.transpile.push("tus-js-client");
+    nuxt.options.build.transpile.push(resolve('./runtime'));
+    nuxt.options.build.transpile.push('tus-js-client');
 
     console.log(`[${name}] Module loaded with config:`, {
-      auth: resolvedOptions.auth?.enabled ? "enabled" : "disabled",
+      auth: resolvedOptions.auth?.enabled ? 'enabled' : 'disabled',
       i18nAutoMerge: resolvedOptions.i18n?.autoMerge,
       tusEndpoint: resolvedOptions.tus?.defaultEndpoint,
     });
@@ -244,27 +223,10 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
 // These can be imported as: import type { LtUser } from '@lenne.tech/nuxt-extensions'
 
 // Auth Types
-export type {
-  LtAuthClientConfig,
-  LtAuthMode,
-  LtAuthResponse,
-  LtAuthState,
-  LtPasskeyAuthResult,
-  LtPasskeyRegisterResult,
-  LtUser,
-  UseLtAuthReturn,
-} from "./runtime/types/auth";
+export type { LtAuthClientConfig, LtAuthMode, LtAuthResponse, LtAuthState, LtPasskeyAuthResult, LtPasskeyRegisterResult, LtUser, UseLtAuthReturn } from './runtime/types/auth';
 
 // Upload Types
-export type {
-  LtFileInfo,
-  LtUploadItem,
-  LtUploadOptions,
-  LtUploadProgress,
-  LtUploadStatus,
-  UseLtFileReturn,
-  UseLtTusUploadReturn,
-} from "./runtime/types/upload";
+export type { LtFileInfo, LtUploadItem, LtUploadOptions, LtUploadProgress, LtUploadStatus, UseLtFileReturn, UseLtTusUploadReturn } from './runtime/types/upload';
 
 // Module Types
 export type {
@@ -275,11 +237,7 @@ export type {
   LtI18nModuleOptions,
   LtSystemSetupModuleOptions,
   LtTusModuleOptions,
-} from "./runtime/types/module";
+} from './runtime/types/module';
 
 // Error Translation Types
-export type {
-  LtErrorTranslationResponse,
-  LtParsedError,
-  UseLtErrorTranslationReturn,
-} from "./runtime/types/error";
+export type { LtErrorTranslationResponse, LtParsedError, UseLtErrorTranslationReturn } from './runtime/types/error';

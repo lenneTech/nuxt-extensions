@@ -1,6 +1,6 @@
 {
   "name": "@lenne.tech/nuxt-extensions",
-  "version": "1.5.3",
+  "version": "1.5.4",
   "description": "Reusable Nuxt 4 composables, components, and Better-Auth integration for lenne.tech projects",
   "repository": {
     "type": "git",
@@ -50,7 +50,7 @@
     "prepare": "git config core.hooksPath .githooks",
     "prepack": "node scripts/sync-module-version.mjs && nuxt-module-build build",
     "c": "pnpm run check",
-    "check": "pnpm audit && pnpm run format:check && pnpm run lint && pnpm test:types && pnpm test && pnpm run build",
+    "check": "pnpm audit && pnpm run format:check && pnpm run lint && pnpm run dev:prepare && pnpm test:types && pnpm test && pnpm run build",
     "check:fix": "pnpm install && pnpm audit --fix && pnpm run format && pnpm run lint:fix && pnpm test:types && pnpm test && pnpm run build",
     "check:naf": "pnpm install && pnpm run format && pnpm run lint:fix && pnpm test:types && pnpm test && pnpm run build",
     "cf": "pnpm run check:fix",
@@ -133,6 +133,8 @@
       "srvx@<0.11.13": ">=0.11.13",
       "svgo@=4.0.0": ">=4.0.1",
       "tar@<7.5.11": "7.5.11",
+      "unhead@<2.1.13": ">=2.1.13",
+      "vite@<7.3.2": ">=7.3.2",
       "yaml@>=2.0.0 <2.8.3": ">=2.8.3"
     }
   },

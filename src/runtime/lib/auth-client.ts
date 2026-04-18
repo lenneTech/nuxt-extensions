@@ -8,15 +8,15 @@
  * plain text password transmission over the network.
  */
 
-import { passkeyClient } from "@better-auth/passkey/client";
-import { adminClient, twoFactorClient } from "better-auth/client/plugins";
-import { createAuthClient } from "better-auth/vue";
+import { passkeyClient } from '@better-auth/passkey/client';
+import { adminClient, twoFactorClient } from 'better-auth/client/plugins';
+import { createAuthClient } from 'better-auth/vue';
 
-import { navigateTo } from "#imports";
-import type { LtAuthClientConfig } from "../types";
+import { navigateTo } from '#imports';
+import type { LtAuthClientConfig } from '../types';
 
-import { ltSha256 } from "../utils/crypto";
-import { createLtAuthFetch, isLocalDevApiProxy } from "./auth-state";
+import { ltSha256 } from '../utils/crypto';
+import { createLtAuthFetch, isLocalDevApiProxy } from './auth-state';
 
 // =============================================================================
 // Plugin Registry & Singleton Management
@@ -170,13 +170,13 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
   // runtimeConfig.public.apiUrl (set via NUXT_PUBLIC_API_URL env var).
   // This fallback only applies when createLtAuthClient() is called directly
   // without config — e.g., from the catch block of useLtAuthClient().
-  const defaultBaseURL = useProxy ? "" : import.meta.env?.VITE_API_URL || process.env.API_URL || "";
-  const defaultBasePath = useProxy ? "/api/iam" : "/iam";
+  const defaultBaseURL = useProxy ? '' : import.meta.env?.VITE_API_URL || process.env.API_URL || '';
+  const defaultBasePath = useProxy ? '/api/iam' : '/iam';
 
   const {
     baseURL = defaultBaseURL,
     basePath = defaultBasePath,
-    twoFactorRedirectPath = "/auth/2fa",
+    twoFactorRedirectPath = '/auth/2fa',
     enableAdmin = true,
     enableTwoFactor = true,
     enablePasskey = true,
@@ -212,7 +212,7 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
   plugins.push(..._ltAuthPluginRegistry);
 
   // Create custom auth fetch that handles JWT fallback
-  const authFetch = createLtAuthFetch(basePath.replace("/api", ""));
+  const authFetch = createLtAuthFetch(basePath.replace('/api', ''));
 
   // Create base client with configuration
   // Uses authFetch for automatic Cookie/JWT dual-mode authentication
@@ -245,18 +245,9 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
      * Change password for an authenticated user (both passwords are hashed)
      */
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    changePassword: async (
-      params: { currentPassword: string; newPassword: string },
-      options?: any,
-    ) => {
-      const [hashedCurrent, hashedNew] = await Promise.all([
-        ltSha256(params.currentPassword),
-        ltSha256(params.newPassword),
-      ]);
-      return baseClient.changePassword?.(
-        { currentPassword: hashedCurrent, newPassword: hashedNew },
-        options,
-      );
+    changePassword: async (params: { currentPassword: string; newPassword: string }, options?: any) => {
+      const [hashedCurrent, hashedNew] = await Promise.all([ltSha256(params.currentPassword), ltSha256(params.newPassword)]);
+      return baseClient.changePassword?.({ currentPassword: hashedCurrent, newPassword: hashedNew }, options);
     },
 
     /**
@@ -265,10 +256,7 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resetPassword: async (params: { newPassword: string; token: string }, options?: any) => {
       const hashedPassword = await ltSha256(params.newPassword);
-      return baseClient.resetPassword?.(
-        { newPassword: hashedPassword, token: params.token },
-        options,
-      );
+      return baseClient.resetPassword?.({ newPassword: hashedPassword, token: params.token }, options);
     },
 
     // Override signIn to hash password (keep passkey method from plugin)
@@ -278,10 +266,7 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
        * Sign in with email and password (password is hashed before sending)
        */
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      email: async (
-        params: { email: string; password: string; rememberMe?: boolean },
-        options?: any,
-      ) => {
+      email: async (params: { email: string; password: string; rememberMe?: boolean }, options?: any) => {
         const hashedPassword = await ltSha256(params.password);
         return baseClient.signIn.email({ ...params, password: hashedPassword }, options);
       },
@@ -303,10 +288,7 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
        * Sign up with email and password (password is hashed before sending)
        */
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      email: async (
-        params: { email: string; name: string; password: string } & Record<string, unknown>,
-        options?: any,
-      ) => {
+      email: async (params: { email: string; name: string; password: string } & Record<string, unknown>, options?: any) => {
         const hashedPassword = await ltSha256(params.password);
         return baseClient.signUp.email({ ...params, password: hashedPassword }, options);
       },
@@ -341,10 +323,7 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
       generateBackupCodes: async (params: { password: string }, options?: any) => {
         const hashedPassword = await ltSha256(params.password);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return (baseClient as any).twoFactor.generateBackupCodes(
-          { password: hashedPassword },
-          options,
-        );
+        return (baseClient as any).twoFactor.generateBackupCodes({ password: hashedPassword }, options);
       },
       /**
        * Verify TOTP code (pass through to base client)

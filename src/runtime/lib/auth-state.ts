@@ -12,8 +12,8 @@
  * The state is persisted in cookies for SSR compatibility.
  */
 
-import { useRuntimeConfig } from "#imports";
-import type { LtAuthMode } from "../types";
+import { useRuntimeConfig } from '#imports';
+import type { LtAuthMode } from '../types';
 
 // =============================================================================
 // API Proxy Detection
@@ -65,21 +65,19 @@ export function isLocalDevApiProxy(): boolean {
     const apiProxy = (runtimeConfig.public as Record<string, unknown>)?.apiProxy;
 
     // Explicit configuration: NUXT_PUBLIC_API_PROXY=true
-    if (apiProxy !== undefined && apiProxy !== null && apiProxy !== "") {
-      return apiProxy === true || apiProxy === "true";
+    if (apiProxy !== undefined && apiProxy !== null && apiProxy !== '') {
+      return apiProxy === true || apiProxy === 'true';
     }
 
     // Fallback: activate proxy under `nuxt dev` with a warning
-    const buildId =
-      (runtimeConfig as Record<string, unknown>)?.app &&
-      ((runtimeConfig as Record<string, unknown>).app as Record<string, unknown>)?.buildId;
-    if (buildId === "dev") {
+    const buildId = (runtimeConfig as Record<string, unknown>)?.app && ((runtimeConfig as Record<string, unknown>).app as Record<string, unknown>)?.buildId;
+    if (buildId === 'dev') {
       if (!_proxyFallbackWarned) {
         _proxyFallbackWarned = true;
         console.warn(
-          "\n⚠️  [LtExtensions] API proxy activated implicitly because nuxt dev was detected.\n" +
-            "    To make this explicit, add NUXT_PUBLIC_API_PROXY=true to your .env file.\n" +
-            "    If you do NOT want the proxy, set NUXT_PUBLIC_API_PROXY=false.\n",
+          '\n⚠️  [LtExtensions] API proxy activated implicitly because nuxt dev was detected.\n' +
+            '    To make this explicit, add NUXT_PUBLIC_API_PROXY=true to your .env file.\n' +
+            '    If you do NOT want the proxy, set NUXT_PUBLIC_API_PROXY=false.\n',
         );
       }
       return true;
@@ -133,18 +131,15 @@ export function isLocalDevApiProxy(): boolean {
 export function buildLtApiUrl(path: string): string {
   try {
     const runtimeConfig = useRuntimeConfig();
-    const publicUrl = (runtimeConfig.public as Record<string, string>).apiUrl || "";
-    const authBaseURL =
-      (runtimeConfig.public as Record<string, any>)?.ltExtensions?.auth?.baseURL || "";
+    const publicUrl = (runtimeConfig.public as Record<string, string>).apiUrl || '';
+    const authBaseURL = (runtimeConfig.public as Record<string, any>)?.ltExtensions?.auth?.baseURL || '';
 
     if (import.meta.server) {
       const apiUrl = (runtimeConfig as Record<string, string>).apiUrl || publicUrl || authBaseURL;
       if (!apiUrl) {
-        console.warn(
-          "[LtExtensions] No API URL configured. Set NUXT_API_URL or NUXT_PUBLIC_API_URL.",
-        );
+        console.warn('[LtExtensions] No API URL configured. Set NUXT_API_URL or NUXT_PUBLIC_API_URL.');
       }
-      return `${(apiUrl || "").replace(/\/+$/, "")}${path}`;
+      return `${(apiUrl || '').replace(/\/+$/, '')}${path}`;
     }
 
     if (isLocalDevApiProxy()) {
@@ -153,9 +148,9 @@ export function buildLtApiUrl(path: string): string {
 
     const apiUrl = publicUrl || authBaseURL;
     if (!apiUrl) {
-      console.warn("[LtExtensions] No API URL configured. Set NUXT_PUBLIC_API_URL.");
+      console.warn('[LtExtensions] No API URL configured. Set NUXT_PUBLIC_API_URL.');
     }
-    return `${(apiUrl || "").replace(/\/+$/, "")}${path}`;
+    return `${(apiUrl || '').replace(/\/+$/, '')}${path}`;
   } catch {
     return path;
   }
@@ -169,20 +164,20 @@ export function buildLtApiUrl(path: string): string {
  * Get the current auth mode from cookie
  */
 export function getLtAuthMode(): LtAuthMode {
-  if (import.meta.server) return "cookie";
+  if (import.meta.server) return 'cookie';
 
   try {
-    const cookie = document.cookie.split("; ").find((row) => row.startsWith("lt-auth-state="));
+    const cookie = document.cookie.split('; ').find((row) => row.startsWith('lt-auth-state='));
     if (cookie) {
-      const parts = cookie.split("=");
-      const value = parts.length > 1 ? decodeURIComponent(parts.slice(1).join("=")) : "";
+      const parts = cookie.split('=');
+      const value = parts.length > 1 ? decodeURIComponent(parts.slice(1).join('=')) : '';
       const state = JSON.parse(value);
-      return state?.authMode || "cookie";
+      return state?.authMode || 'cookie';
     }
   } catch {
     // Ignore parse errors
   }
-  return "cookie";
+  return 'cookie';
 }
 
 /**
@@ -192,10 +187,10 @@ export function getLtJwtToken(): string | null {
   if (import.meta.server) return null;
 
   try {
-    const cookie = document.cookie.split("; ").find((row) => row.startsWith("lt-jwt-token="));
+    const cookie = document.cookie.split('; ').find((row) => row.startsWith('lt-jwt-token='));
     if (cookie) {
-      const parts = cookie.split("=");
-      const value = parts.length > 1 ? decodeURIComponent(parts.slice(1).join("=")) : "";
+      const parts = cookie.split('=');
+      const value = parts.length > 1 ? decodeURIComponent(parts.slice(1).join('=')) : '';
       // Handle JSON-encoded string (useCookie stores as JSON)
       if (value.startsWith('"') && value.endsWith('"')) {
         return JSON.parse(value);
@@ -215,7 +210,7 @@ export function setLtJwtToken(token: string | null): void {
   if (import.meta.server) return;
 
   const maxAge = 60 * 60 * 24 * 7; // 7 days
-  const secure = globalThis.location?.protocol === "https:" ? "; secure" : "";
+  const secure = globalThis.location?.protocol === 'https:' ? '; secure' : '';
   if (token) {
     document.cookie = `lt-jwt-token=${encodeURIComponent(JSON.stringify(token))}; path=/; max-age=${maxAge}; samesite=lax${secure}`;
   } else {
@@ -230,17 +225,17 @@ export function setLtAuthMode(mode: LtAuthMode): void {
   if (import.meta.server) return;
 
   try {
-    const cookie = document.cookie.split("; ").find((row) => row.startsWith("lt-auth-state="));
+    const cookie = document.cookie.split('; ').find((row) => row.startsWith('lt-auth-state='));
 
     let state = { user: null, authMode: mode };
     if (cookie) {
-      const parts = cookie.split("=");
-      const value = parts.length > 1 ? decodeURIComponent(parts.slice(1).join("=")) : "";
+      const parts = cookie.split('=');
+      const value = parts.length > 1 ? decodeURIComponent(parts.slice(1).join('=')) : '';
       state = { ...JSON.parse(value), authMode: mode };
     }
 
     const maxAge = 60 * 60 * 24 * 7; // 7 days
-    const secure = globalThis.location?.protocol === "https:" ? "; secure" : "";
+    const secure = globalThis.location?.protocol === 'https:' ? '; secure' : '';
     document.cookie = `lt-auth-state=${encodeURIComponent(JSON.stringify(state))}; path=/; max-age=${maxAge}; samesite=lax${secure}`;
   } catch {
     // Ignore errors
@@ -267,7 +262,7 @@ export function getLtApiBase(basePath?: string): string {
       // Ignore — use default
     }
   }
-  return buildLtApiUrl(basePath || "/iam");
+  return buildLtApiUrl(basePath || '/iam');
 }
 
 /**
@@ -275,20 +270,20 @@ export function getLtApiBase(basePath?: string): string {
  *
  * @param basePath - The auth API base path (default: '/iam')
  */
-export async function attemptLtJwtSwitch(basePath: string = "/iam"): Promise<boolean> {
+export async function attemptLtJwtSwitch(basePath: string = '/iam'): Promise<boolean> {
   try {
     const apiBase = getLtApiBase(basePath);
     const response = await fetch(`${apiBase}/token`, {
-      method: "GET",
-      credentials: "include",
+      method: 'GET',
+      credentials: 'include',
     });
 
     if (response.ok) {
       const data = await response.json();
       if (data.token) {
         setLtJwtToken(data.token);
-        setLtAuthMode("jwt");
-        console.debug("[LtAuth] Switched to JWT mode");
+        setLtAuthMode('jwt');
+        console.debug('[LtAuth] Switched to JWT mode');
         return true;
       }
     }
@@ -305,10 +300,10 @@ export function isLtAuthenticated(): boolean {
   if (import.meta.server) return false;
 
   try {
-    const cookie = document.cookie.split("; ").find((row) => row.startsWith("lt-auth-state="));
+    const cookie = document.cookie.split('; ').find((row) => row.startsWith('lt-auth-state='));
     if (cookie) {
-      const parts = cookie.split("=");
-      const value = parts.length > 1 ? decodeURIComponent(parts.slice(1).join("=")) : "";
+      const parts = cookie.split('=');
+      const value = parts.length > 1 ? decodeURIComponent(parts.slice(1).join('=')) : '';
       const state = JSON.parse(value);
       return !!state?.user;
     }
@@ -328,19 +323,16 @@ export function isLtAuthenticated(): boolean {
  *
  * @param basePath - The auth API base path for JWT switch (default: '/iam')
  */
-export function createLtAuthFetch(basePath: string = "/iam") {
-  return async function ltAuthFetch(
-    input: RequestInfo | URL,
-    init?: RequestInit,
-  ): Promise<Response> {
+export function createLtAuthFetch(basePath: string = '/iam') {
+  return async function ltAuthFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     const authMode = getLtAuthMode();
     const jwtToken = getLtJwtToken();
 
     const headers = new Headers(init?.headers);
 
     // In JWT mode, add Authorization header
-    if (authMode === "jwt" && jwtToken) {
-      headers.set("Authorization", `Bearer ${jwtToken}`);
+    if (authMode === 'jwt' && jwtToken) {
+      headers.set('Authorization', `Bearer ${jwtToken}`);
     }
 
     // Always include credentials for cookie-based session auth
@@ -349,23 +341,23 @@ export function createLtAuthFetch(basePath: string = "/iam") {
     const response = await fetch(input, {
       ...init,
       headers,
-      credentials: "include",
+      credentials: 'include',
     });
 
     // If we get 401 in cookie mode and user is authenticated, try JWT fallback
-    if (response.status === 401 && authMode === "cookie" && isLtAuthenticated()) {
-      console.debug("[LtAuth] Cookie auth failed, attempting JWT fallback...");
+    if (response.status === 401 && authMode === 'cookie' && isLtAuthenticated()) {
+      console.debug('[LtAuth] Cookie auth failed, attempting JWT fallback...');
       const switched = await attemptLtJwtSwitch(basePath);
 
       if (switched) {
         // Retry the request with JWT
         const newToken = getLtJwtToken();
         if (newToken) {
-          headers.set("Authorization", `Bearer ${newToken}`);
+          headers.set('Authorization', `Bearer ${newToken}`);
           return fetch(input, {
             ...init,
             headers,
-            credentials: "include",
+            credentials: 'include',
           });
         }
       }
@@ -376,4 +368,4 @@ export function createLtAuthFetch(basePath: string = "/iam") {
 }
 
 // Default auth fetch using '/iam' base path
-export const ltAuthFetch = createLtAuthFetch("/iam");
+export const ltAuthFetch = createLtAuthFetch('/iam');

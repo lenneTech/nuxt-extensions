@@ -21,8 +21,8 @@
  * ```
  */
 
-import type { Page } from "@playwright/test";
-import * as crypto from "crypto";
+import type { Page } from '@playwright/test';
+import * as crypto from 'crypto';
 
 // =============================================================================
 // Nuxt Hydration Helpers
@@ -49,10 +49,7 @@ export const DEFAULT_HYDRATION_TIMEOUT = 15000;
  * await page.click('button'); // Now safe to interact
  * ```
  */
-export async function waitForHydration(
-  page: Page,
-  options: { timeout?: number } = {},
-): Promise<void> {
+export async function waitForHydration(page: Page, options: { timeout?: number } = {}): Promise<void> {
   const timeout = options.timeout ?? DEFAULT_HYDRATION_TIMEOUT;
 
   await page.waitForFunction(() => (window as any).useNuxtApp?.()?.isHydrating === false, {
@@ -77,11 +74,7 @@ export async function waitForHydration(
  * // Page is now hydrated and ready for interaction
  * ```
  */
-export async function gotoAndWaitForHydration(
-  page: Page,
-  url: string,
-  options: { timeout?: number } = {},
-): Promise<void> {
+export async function gotoAndWaitForHydration(page: Page, url: string, options: { timeout?: number } = {}): Promise<void> {
   await page.goto(url);
   await waitForHydration(page, options);
 }
@@ -104,11 +97,7 @@ export async function gotoAndWaitForHydration(
  * await waitForURLAndHydration(page, /\/dashboard/);
  * ```
  */
-export async function waitForURLAndHydration(
-  page: Page,
-  url: string | RegExp,
-  options: { timeout?: number; hydrationTimeout?: number } = {},
-): Promise<void> {
+export async function waitForURLAndHydration(page: Page, url: string | RegExp, options: { timeout?: number; hydrationTimeout?: number } = {}): Promise<void> {
   const { timeout = 30000, hydrationTimeout } = options;
 
   await page.waitForURL(url, { timeout });
@@ -139,12 +128,7 @@ export async function waitForURLAndHydration(
  * await fillInput(page, '#password', 'secret', { delay: 10 });
  * ```
  */
-export async function fillInput(
-  page: Page,
-  selector: string,
-  value: string,
-  options: { delay?: number; clear?: boolean } = {},
-): Promise<void> {
+export async function fillInput(page: Page, selector: string, value: string, options: { delay?: number; clear?: boolean } = {}): Promise<void> {
   const { delay = 5, clear = true } = options;
   const locator = page.locator(selector);
 
@@ -153,8 +137,8 @@ export async function fillInput(
 
   // Clear existing content if requested
   if (clear) {
-    await page.keyboard.press("Control+a");
-    await page.keyboard.press("Backspace");
+    await page.keyboard.press('Control+a');
+    await page.keyboard.press('Backspace');
   }
 
   // Type the value - triggers Vue's reactivity through keyboard events
@@ -178,11 +162,7 @@ export async function fillInput(
  * });
  * ```
  */
-export async function fillInputs(
-  page: Page,
-  fields: Record<string, string>,
-  options: { delay?: number; clear?: boolean } = {},
-): Promise<void> {
+export async function fillInputs(page: Page, fields: Record<string, string>, options: { delay?: number; clear?: boolean } = {}): Promise<void> {
   for (const [selector, value] of Object.entries(fields)) {
     await fillInput(page, selector, value, options);
   }
@@ -216,7 +196,7 @@ export interface TestUser {
  * // { email: 'auth-test-abc123@test.com', password: 'TestPassabc123!', name: 'E2E Test User auth-test' }
  * ```
  */
-export function generateTestUser(prefix: string = "e2e"): TestUser {
+export function generateTestUser(prefix: string = 'e2e'): TestUser {
   const testId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
   return {
@@ -238,11 +218,8 @@ export function generateTestUser(prefix: string = "e2e"): TestUser {
  * const code = generateRandomString(6, '0123456789');
  * ```
  */
-export function generateRandomString(
-  length: number = 8,
-  charset: string = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
-): string {
-  let result = "";
+export function generateRandomString(length: number = 8, charset: string = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'): string {
+  let result = '';
   for (let i = 0; i < length; i++) {
     result += charset.charAt(Math.floor(Math.random() * charset.length));
   }
@@ -273,20 +250,17 @@ export function generateRandomString(
  * await page.fill('input[name="code"]', code);
  * ```
  */
-export function generateTOTP(
-  secret: string,
-  options: { digits?: number; period?: number; algorithm?: "sha1" | "sha256" | "sha512" } = {},
-): string {
-  const { digits = 6, period = 30, algorithm = "sha1" } = options;
+export function generateTOTP(secret: string, options: { digits?: number; period?: number; algorithm?: 'sha1' | 'sha256' | 'sha512' } = {}): string {
+  const { digits = 6, period = 30, algorithm = 'sha1' } = options;
 
   // Decode Base32 secret
-  const base32Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-  let bits = "";
+  const base32Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let bits = '';
 
-  for (const char of secret.toUpperCase().replace(/=/g, "")) {
+  for (const char of secret.toUpperCase().replace(/=/g, '')) {
     const val = base32Chars.indexOf(char);
     if (val === -1) continue;
-    bits += val.toString(2).padStart(5, "0");
+    bits += val.toString(2).padStart(5, '0');
   }
 
   const keyBytes = Buffer.alloc(Math.floor(bits.length / 8));
@@ -306,15 +280,11 @@ export function generateTOTP(
 
   // Dynamic truncation
   const offset = (hash[hash.length - 1] ?? 0) & 0x0f;
-  const code =
-    (((hash[offset] ?? 0) & 0x7f) << 24) |
-    (((hash[offset + 1] ?? 0) & 0xff) << 16) |
-    (((hash[offset + 2] ?? 0) & 0xff) << 8) |
-    ((hash[offset + 3] ?? 0) & 0xff);
+  const code = (((hash[offset] ?? 0) & 0x7f) << 24) | (((hash[offset + 1] ?? 0) & 0xff) << 16) | (((hash[offset + 2] ?? 0) & 0xff) << 8) | ((hash[offset + 3] ?? 0) & 0xff);
 
   // Generate code with correct number of digits
   const mod = Math.pow(10, digits);
-  return (code % mod).toString().padStart(digits, "0");
+  return (code % mod).toString().padStart(digits, '0');
 }
 
 /**
@@ -368,17 +338,17 @@ export function parseTOTPUrl(otpauthUrl: string): {
 
   // Extract query parameters
   const getParam = (name: string): string | null => {
-    const match = decoded.match(new RegExp(`${name}=([^&]+)`, "i"));
+    const match = decoded.match(new RegExp(`${name}=([^&]+)`, 'i'));
     return match?.[1] ?? null;
   };
 
   return {
-    issuer: getParam("issuer") ?? pathMatch?.[1] ?? null,
+    issuer: getParam('issuer') ?? pathMatch?.[1] ?? null,
     account: pathMatch?.[2] ?? null,
-    secret: getParam("secret")?.toUpperCase() ?? null,
-    algorithm: getParam("algorithm") || "SHA1",
-    digits: parseInt(getParam("digits") || "6", 10),
-    period: parseInt(getParam("period") || "30", 10),
+    secret: getParam('secret')?.toUpperCase() ?? null,
+    algorithm: getParam('algorithm') || 'SHA1',
+    digits: parseInt(getParam('digits') || '6', 10),
+    period: parseInt(getParam('period') || '30', 10),
   };
 }
 
@@ -402,15 +372,11 @@ export function parseTOTPUrl(otpauthUrl: string): {
  * await waitForElement(page, '.modal-content');
  * ```
  */
-export async function waitForElement(
-  page: Page,
-  selector: string,
-  options: { timeout?: number; stable?: boolean } = {},
-): Promise<void> {
+export async function waitForElement(page: Page, selector: string, options: { timeout?: number; stable?: boolean } = {}): Promise<void> {
   const { timeout = 10000, stable = true } = options;
   const locator = page.locator(selector);
 
-  await locator.waitFor({ state: "visible", timeout });
+  await locator.waitFor({ state: 'visible', timeout });
 
   if (stable) {
     // Wait for element to be stable (no longer animating)
@@ -441,12 +407,9 @@ export async function waitForElement(
  * await waitForNetworkIdle(page);
  * ```
  */
-export async function waitForNetworkIdle(
-  page: Page,
-  options: { timeout?: number } = {},
-): Promise<void> {
+export async function waitForNetworkIdle(page: Page, options: { timeout?: number } = {}): Promise<void> {
   const { timeout = 30000 } = options;
-  await page.waitForLoadState("networkidle", { timeout });
+  await page.waitForLoadState('networkidle', { timeout });
 }
 
 // =============================================================================

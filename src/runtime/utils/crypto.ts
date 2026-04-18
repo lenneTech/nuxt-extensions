@@ -17,9 +17,9 @@
  */
 export async function ltSha256(message: string): Promise<string> {
   const msgBuffer = new TextEncoder().encode(message);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", msgBuffer);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 // =============================================================================
@@ -40,9 +40,9 @@ export async function ltSha256(message: string): Promise<string> {
  */
 export function ltArrayBufferToBase64Url(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
-  let binary = "";
+  let binary = '';
   bytes.forEach((b) => (binary += String.fromCharCode(b)));
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
 /**
@@ -58,7 +58,7 @@ export function ltArrayBufferToBase64Url(buffer: ArrayBuffer): string {
  * ```
  */
 export function ltBase64UrlToUint8Array(base64url: string): Uint8Array {
-  const base64 = base64url.replace(/-/g, "+").replace(/_/g, "/");
-  const paddedBase64 = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+  const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
+  const paddedBase64 = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
   return Uint8Array.from(atob(paddedBase64), (c) => c.charCodeAt(0));
 }

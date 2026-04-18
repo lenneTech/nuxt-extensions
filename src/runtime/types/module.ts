@@ -138,10 +138,10 @@ export interface LtExtensionsPublicRuntimeConfig {
 }
 
 // Extend Nuxt's runtime config types
-declare module "nuxt/schema" {
+declare module 'nuxt/schema' {
   interface PublicRuntimeConfig extends LtExtensionsPublicRuntimeConfig {}
 }
 
-declare module "@nuxt/schema" {
+declare module '@nuxt/schema' {
   interface PublicRuntimeConfig extends LtExtensionsPublicRuntimeConfig {}
 }

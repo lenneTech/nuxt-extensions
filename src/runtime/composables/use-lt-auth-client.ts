@@ -17,14 +17,10 @@
  * ```
  */
 
-import { useRuntimeConfig } from "#imports";
+import { useRuntimeConfig } from '#imports';
 
-import {
-  getOrCreateLtAuthClient,
-  resetLtAuthClientSingleton,
-  type LtAuthClient,
-} from "../lib/auth-client";
-import { isLocalDevApiProxy } from "../lib/auth-state";
+import { getOrCreateLtAuthClient, resetLtAuthClientSingleton, type LtAuthClient } from '../lib/auth-client';
+import { isLocalDevApiProxy } from '../lib/auth-state';
 
 /**
  * Reset the auth client singleton (useful for testing or config changes)
@@ -56,24 +52,24 @@ export function useLtAuthClient(): LtAuthClient {
   try {
     const runtimeConfig = useRuntimeConfig();
     const config = runtimeConfig.public?.ltExtensions?.auth || {};
-    const publicApiUrl = String(runtimeConfig.public?.apiUrl || "");
+    const publicApiUrl = String(runtimeConfig.public?.apiUrl || '');
 
     // When proxy is enabled, prefix basePath with /api for Vite dev proxy
     const useProxy = isLocalDevApiProxy();
-    let basePath = config.basePath || "/iam";
+    let basePath = config.basePath || '/iam';
 
     // Prefix with /api if proxy is active and not already prefixed
-    if (useProxy && basePath && !basePath.startsWith("/api")) {
+    if (useProxy && basePath && !basePath.startsWith('/api')) {
       basePath = `/api${basePath}`;
     }
 
     // Resolve baseURL: prefer runtimeConfig.public.apiUrl (properly overridden
     // at runtime by NUXT_PUBLIC_API_URL) over ltExtensions.auth.baseURL (which
     // is baked at build time and may contain localhost fallbacks).
-    const authBaseURL = (publicApiUrl || config.baseURL || "").replace(/\/+$/, "");
+    const authBaseURL = (publicApiUrl || config.baseURL || '').replace(/\/+$/, '');
 
     return getOrCreateLtAuthClient({
-      baseURL: useProxy ? "" : authBaseURL,
+      baseURL: useProxy ? '' : authBaseURL,
       basePath,
       twoFactorRedirectPath: config.twoFactorRedirectPath,
       enableAdmin: config.enableAdmin,

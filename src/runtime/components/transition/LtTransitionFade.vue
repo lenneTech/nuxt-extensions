@@ -31,9 +31,7 @@ const props = withDefaults(
 </script>
 
 <template>
-  <div
-    :style="`--start-duration: ${props.startDuration}ms; --leave-duration: ${props.leaveDuration}ms;`"
-  >
+  <div :style="`--start-duration: ${props.startDuration}ms; --leave-duration: ${props.leaveDuration}ms;`">
     <Transition
       enter-active-class="transition ease-out duration-[--start-duration]"
       enter-from-class="transform opacity-0"

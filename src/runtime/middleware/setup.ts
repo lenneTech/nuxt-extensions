@@ -9,15 +9,15 @@
  * - needsSetup === false AND route === setupPath -> redirect to loginPath
  */
 
-import type { RouteMiddleware } from "#app";
-import { defineNuxtRouteMiddleware, navigateTo, useRuntimeConfig } from "#imports";
-import { useSystemSetup } from "../composables/auth/use-system-setup";
+import type { RouteMiddleware } from '#app';
+import { defineNuxtRouteMiddleware, navigateTo, useRuntimeConfig } from '#imports';
+import { useSystemSetup } from '../composables/auth/use-system-setup';
 
 export default defineNuxtRouteMiddleware(async (to) => {
   const runtimeConfig = useRuntimeConfig();
   const authConfig = runtimeConfig.public?.ltExtensions?.auth;
-  const setupPath = authConfig?.systemSetup?.setupPath || "/auth/setup";
-  const loginPath = authConfig?.loginPath || "/auth/login";
+  const setupPath = authConfig?.systemSetup?.setupPath || '/auth/setup';
+  const loginPath = authConfig?.loginPath || '/auth/login';
 
   const { needsSetup, checkSetupStatus } = useSystemSetup();
 

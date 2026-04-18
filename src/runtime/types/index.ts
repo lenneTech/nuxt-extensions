@@ -3,27 +3,10 @@
 // =============================================================================
 
 // Auth Types
-export type {
-  LtAuthClientConfig,
-  LtAuthMode,
-  LtAuthResponse,
-  LtAuthState,
-  LtPasskeyAuthResult,
-  LtPasskeyRegisterResult,
-  LtUser,
-  UseLtAuthReturn,
-} from "./auth";
+export type { LtAuthClientConfig, LtAuthMode, LtAuthResponse, LtAuthState, LtPasskeyAuthResult, LtPasskeyRegisterResult, LtUser, UseLtAuthReturn } from './auth';
 
 // Upload Types
-export type {
-  LtFileInfo,
-  LtUploadItem,
-  LtUploadOptions,
-  LtUploadProgress,
-  LtUploadStatus,
-  UseLtFileReturn,
-  UseLtTusUploadReturn,
-} from "./upload";
+export type { LtFileInfo, LtUploadItem, LtUploadOptions, LtUploadProgress, LtUploadStatus, UseLtFileReturn, UseLtTusUploadReturn } from './upload';
 
 // Module Types
 export type {
@@ -34,11 +17,7 @@ export type {
   LtI18nModuleOptions,
   LtSystemSetupModuleOptions,
   LtTusModuleOptions,
-} from "./module";
+} from './module';
 
 // Error Translation Types
-export type {
-  LtErrorTranslationResponse,
-  LtParsedError,
-  UseLtErrorTranslationReturn,
-} from "./error";
+export type { LtErrorTranslationResponse, LtParsedError, UseLtErrorTranslationReturn } from './error';

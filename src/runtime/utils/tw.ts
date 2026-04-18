@@ -17,5 +17,4 @@
  * const classes = tw('flex items-center gap-2');
  * ```
  */
-export const tw = <T extends string | TemplateStringsArray>(tailwindClasses: T): T =>
-  tailwindClasses;
+export const tw = <T extends string | TemplateStringsArray>(tailwindClasses: T): T => tailwindClasses;
