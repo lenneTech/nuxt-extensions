@@ -3,7 +3,21 @@
 // =============================================================================
 
 // Auth State utilities
-export { attemptLtJwtSwitch, createLtAuthFetch, getLtApiBase, getLtAuthMode, getLtJwtToken, isLtAuthenticated, ltAuthFetch, setLtAuthMode, setLtJwtToken } from './auth-state';
+export {
+  attemptLtJwtSwitch,
+  clearLtAuthCookies,
+  createLtAuthFetch,
+  getLtApiBase,
+  getLtAuthCookieNames,
+  getLtAuthMode,
+  getLtJwtToken,
+  isLtAuthenticated,
+  LT_AUTH_STATE_COOKIE_DEFAULT,
+  LT_JWT_TOKEN_COOKIE_DEFAULT,
+  ltAuthFetch,
+  setLtAuthMode,
+  setLtJwtToken,
+} from './auth-state';
 
 // Auth Client Factory & Plugin Registry
 export {

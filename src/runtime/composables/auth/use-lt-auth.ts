@@ -14,7 +14,7 @@ import type { LtAuthMode, LtAuthState, LtPasskeyAuthResult, LtPasskeyRegisterRes
 
 import { useNuxtApp, useCookie, useState, ref, computed, watch } from '#imports';
 import { ltArrayBufferToBase64Url, ltBase64UrlToUint8Array } from '../../utils/crypto';
-import { getLtApiBase } from '../../lib/auth-state';
+import { clearLtAuthCookies, getLtApiBase, getLtAuthCookieNames } from '../../lib/auth-state';
 import { useLtAuthClient } from '../use-lt-auth-client';
 
 /**
@@ -62,9 +62,12 @@ export function useLtAuth(): UseLtAuthReturn {
   const authClient = useLtAuthClient();
   const t = useTranslation();
 
+  // Resolve cookie names once per composable invocation (configurable per project)
+  const { state: stateCookieName, token: tokenCookieName } = getLtAuthCookieNames();
+
   // Use useCookie for SSR-compatible persistent state
   // Note: No default value to prevent overwriting existing cookies during hydration
-  const authState = useCookie<LtAuthState | null>('lt-auth-state', {
+  const authState = useCookie<LtAuthState | null>(stateCookieName, {
     maxAge: 60 * 60 * 24 * 7, // 7 days
     sameSite: 'lax',
   });
@@ -73,7 +76,7 @@ export function useLtAuth(): UseLtAuthReturn {
   // This prevents hydration mismatch where useCookie may return stale/null value
   if (import.meta.client) {
     try {
-      const cookieStr = document.cookie.split('; ').find((row) => row.startsWith('lt-auth-state='));
+      const cookieStr = document.cookie.split('; ').find((row) => row.startsWith(`${stateCookieName}=`));
       if (cookieStr) {
         const parts = cookieStr.split('=');
         const value = parts.length > 1 ? decodeURIComponent(parts.slice(1).join('=')) : '';
@@ -96,7 +99,7 @@ export function useLtAuth(): UseLtAuthReturn {
   }
 
   // JWT token storage (used when cookies are not available)
-  const jwtToken = useCookie<string | null>('lt-jwt-token', {
+  const jwtToken = useCookie<string | null>(tokenCookieName, {
     maxAge: 60 * 60 * 24 * 7, // 7 days
     sameSite: 'lax',
   });
@@ -130,37 +133,31 @@ export function useLtAuth(): UseLtAuthReturn {
     if (import.meta.client) {
       const maxAge = 60 * 60 * 24 * 7; // 7 days
       const secure = globalThis.location?.protocol === 'https:' ? '; secure' : '';
-      document.cookie = `lt-auth-state=${encodeURIComponent(JSON.stringify(newState))}; path=/; max-age=${maxAge}; samesite=lax${secure}`;
+      document.cookie = `${stateCookieName}=${encodeURIComponent(JSON.stringify(newState))}; path=/; max-age=${maxAge}; samesite=lax${secure}`;
     }
   }
 
   /**
-   * Clear user data on logout
-   * Also manually clears browser cookies for SSR compatibility
+   * Clear user data on logout.
+   *
+   * Resets the reactive auth state and hard-deletes all auth cookies via
+   * {@link clearLtAuthCookies} so no orphan "logged out" cookie lingers
+   * in the browser. The reactive `authState` ref is set back to the
+   * neutral `{ user: null, authMode: 'cookie' }` shape so consumers
+   * reading the ref immediately see the logged-out state, while the
+   * underlying cookies are removed entirely.
    */
   function clearUser(): void {
     const clearedState = { user: null, authMode: 'cookie' as const };
     authState.value = clearedState;
     jwtToken.value = null;
 
-    // Manually clear browser cookies for immediate SSR compatibility
+    // Hard-delete the cookies in the browser (no payload, max-age=0).
+    // Centralised in `clearLtAuthCookies` so the helper-based call sites
+    // (e.g. session-expired interceptors) and the composable agree on the
+    // exact attributes the browser needs to actually evict the cookies.
     if (import.meta.client) {
-      const maxAge = 60 * 60 * 24 * 7; // 7 days
-      const secure = globalThis.location?.protocol === 'https:' ? '; secure' : '';
-      document.cookie = `lt-auth-state=${encodeURIComponent(JSON.stringify(clearedState))}; path=/; max-age=${maxAge}; samesite=lax${secure}`;
-      document.cookie = `lt-jwt-token=; path=/; max-age=0`;
-
-      // Clear Better Auth session cookies (set by the API)
-      // These cookies may have different names depending on the configuration
-      const sessionCookieNames = ['better-auth.session_token', 'better-auth.session', '__Secure-better-auth.session_token', 'session_token', 'session'];
-
-      for (const name of sessionCookieNames) {
-        // Clear with different path variations
-        document.cookie = `${name}=; path=/; max-age=0`;
-        document.cookie = `${name}=; path=/api; max-age=0`;
-        document.cookie = `${name}=; path=/api/iam; max-age=0`;
-        document.cookie = `${name}=; path=/iam; max-age=0`;
-      }
+      clearLtAuthCookies();
     }
   }
 

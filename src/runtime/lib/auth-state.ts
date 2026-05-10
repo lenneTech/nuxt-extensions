@@ -16,6 +16,34 @@ import { useRuntimeConfig } from '#imports';
 import type { LtAuthMode } from '../types';
 
 // =============================================================================
+// Cookie Name Resolution
+// =============================================================================
+
+/** Default name of the auth-state cookie. Used when the module config has not been resolved yet. */
+export const LT_AUTH_STATE_COOKIE_DEFAULT = 'lt-auth-state';
+/** Default name of the JWT-token cookie. Used when the module config has not been resolved yet. */
+export const LT_JWT_TOKEN_COOKIE_DEFAULT = 'lt-jwt-token';
+
+/**
+ * Resolve the configured auth cookie names from runtime config.
+ *
+ * Falls back to the defaults (`lt-auth-state`, `lt-jwt-token`) so callers
+ * keep working even outside a Nuxt context (tests, edge SSR boots).
+ */
+export function getLtAuthCookieNames(): { state: string; token: string } {
+  try {
+    const runtimeConfig = useRuntimeConfig();
+    const configured = (runtimeConfig.public as Record<string, any>)?.ltExtensions?.auth?.cookieNames;
+    return {
+      state: configured?.state || LT_AUTH_STATE_COOKIE_DEFAULT,
+      token: configured?.token || LT_JWT_TOKEN_COOKIE_DEFAULT,
+    };
+  } catch {
+    return { state: LT_AUTH_STATE_COOKIE_DEFAULT, token: LT_JWT_TOKEN_COOKIE_DEFAULT };
+  }
+}
+
+// =============================================================================
 // API Proxy Detection
 // =============================================================================
 
@@ -167,7 +195,8 @@ export function getLtAuthMode(): LtAuthMode {
   if (import.meta.server) return 'cookie';
 
   try {
-    const cookie = document.cookie.split('; ').find((row) => row.startsWith('lt-auth-state='));
+    const { state: stateCookieName } = getLtAuthCookieNames();
+    const cookie = document.cookie.split('; ').find((row) => row.startsWith(`${stateCookieName}=`));
     if (cookie) {
       const parts = cookie.split('=');
       const value = parts.length > 1 ? decodeURIComponent(parts.slice(1).join('=')) : '';
@@ -187,7 +216,8 @@ export function getLtJwtToken(): string | null {
   if (import.meta.server) return null;
 
   try {
-    const cookie = document.cookie.split('; ').find((row) => row.startsWith('lt-jwt-token='));
+    const { token: tokenCookieName } = getLtAuthCookieNames();
+    const cookie = document.cookie.split('; ').find((row) => row.startsWith(`${tokenCookieName}=`));
     if (cookie) {
       const parts = cookie.split('=');
       const value = parts.length > 1 ? decodeURIComponent(parts.slice(1).join('=')) : '';
@@ -209,23 +239,67 @@ export function getLtJwtToken(): string | null {
 export function setLtJwtToken(token: string | null): void {
   if (import.meta.server) return;
 
+  const { token: tokenCookieName } = getLtAuthCookieNames();
   const maxAge = 60 * 60 * 24 * 7; // 7 days
   const secure = globalThis.location?.protocol === 'https:' ? '; secure' : '';
   if (token) {
-    document.cookie = `lt-jwt-token=${encodeURIComponent(JSON.stringify(token))}; path=/; max-age=${maxAge}; samesite=lax${secure}`;
+    document.cookie = `${tokenCookieName}=${encodeURIComponent(JSON.stringify(token))}; path=/; max-age=${maxAge}; samesite=lax${secure}`;
   } else {
-    document.cookie = `lt-jwt-token=; path=/; max-age=0`;
+    document.cookie = `${tokenCookieName}=; path=/; max-age=0; samesite=lax${secure}`;
   }
 }
 
 /**
- * Update auth mode in the lt-auth-state cookie
+ * Hard-delete all auth cookies on logout.
+ *
+ * This is the single source of truth for "remove every auth cookie this
+ * module owns". It expires:
+ * - the configured auth-state cookie (default `lt-auth-state`)
+ * - the configured JWT token cookie (default `lt-jwt-token`)
+ * - the Better-Auth session fallbacks the client may have set
+ *
+ * Browsers only delete a cookie when the path / sameSite / secure
+ * attributes match the ones used when it was written, so we mirror the
+ * attributes from `setUser()` / `setLtJwtToken()`. The Better-Auth
+ * session cookies are httpOnly when set by the API and cannot be touched
+ * from JS — clearing them here is best-effort for any non-httpOnly
+ * variant the framework might have written client-side.
+ */
+export function clearLtAuthCookies(): void {
+  if (import.meta.server) return;
+
+  const { state: stateCookieName, token: tokenCookieName } = getLtAuthCookieNames();
+  const secure = globalThis.location?.protocol === 'https:' ? '; secure' : '';
+
+  // Hard-delete the auth-state cookie: max-age=0 with the same attributes used
+  // by setUser() so the browser actually drops it instead of leaving a stub.
+  document.cookie = `${stateCookieName}=; path=/; max-age=0; samesite=lax${secure}`;
+
+  // JWT token cookie — mirror setLtJwtToken's clear branch.
+  document.cookie = `${tokenCookieName}=; path=/; max-age=0; samesite=lax${secure}`;
+
+  // Best-effort: clear Better-Auth client-side session cookies. These are
+  // usually httpOnly (set by the API) and unreachable from JS, but covering
+  // all known variants keeps stale entries out of the jar when a project
+  // disables httpOnly for local debugging.
+  const sessionCookieNames = ['better-auth.session_token', 'better-auth.session', '__Secure-better-auth.session_token', 'session_token', 'session'];
+  for (const name of sessionCookieNames) {
+    document.cookie = `${name}=; path=/; max-age=0`;
+    document.cookie = `${name}=; path=/api; max-age=0`;
+    document.cookie = `${name}=; path=/api/iam; max-age=0`;
+    document.cookie = `${name}=; path=/iam; max-age=0`;
+  }
+}
+
+/**
+ * Update auth mode in the auth-state cookie
  */
 export function setLtAuthMode(mode: LtAuthMode): void {
   if (import.meta.server) return;
 
   try {
-    const cookie = document.cookie.split('; ').find((row) => row.startsWith('lt-auth-state='));
+    const { state: stateCookieName } = getLtAuthCookieNames();
+    const cookie = document.cookie.split('; ').find((row) => row.startsWith(`${stateCookieName}=`));
 
     let state = { user: null, authMode: mode };
     if (cookie) {
@@ -236,7 +310,7 @@ export function setLtAuthMode(mode: LtAuthMode): void {
 
     const maxAge = 60 * 60 * 24 * 7; // 7 days
     const secure = globalThis.location?.protocol === 'https:' ? '; secure' : '';
-    document.cookie = `lt-auth-state=${encodeURIComponent(JSON.stringify(state))}; path=/; max-age=${maxAge}; samesite=lax${secure}`;
+    document.cookie = `${stateCookieName}=${encodeURIComponent(JSON.stringify(state))}; path=/; max-age=${maxAge}; samesite=lax${secure}`;
   } catch {
     // Ignore errors
   }
@@ -294,13 +368,14 @@ export async function attemptLtJwtSwitch(basePath: string = '/iam'): Promise<boo
 }
 
 /**
- * Check if user is authenticated (has lt-auth-state with user)
+ * Check if user is authenticated (has auth-state with user)
  */
 export function isLtAuthenticated(): boolean {
   if (import.meta.server) return false;
 
   try {
-    const cookie = document.cookie.split('; ').find((row) => row.startsWith('lt-auth-state='));
+    const { state: stateCookieName } = getLtAuthCookieNames();
+    const cookie = document.cookie.split('; ').find((row) => row.startsWith(`${stateCookieName}=`));
     if (cookie) {
       const parts = cookie.split('=');
       const value = parts.length > 1 ? decodeURIComponent(parts.slice(1).join('=')) : '';

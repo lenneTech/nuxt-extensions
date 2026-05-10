@@ -29,11 +29,43 @@ export interface LtSystemSetupModuleOptions {
   setupPath?: string;
 }
 
+/**
+ * Configurable cookie names used by the auth module.
+ *
+ * The two cookies are written and read across `useLtAuth()` and the
+ * `auth-state.ts` helpers. Override them per project to avoid clashes
+ * when multiple lenne.tech apps share a domain. Each key is independent;
+ * unspecified keys keep their default value.
+ *
+ * @example
+ * ```typescript
+ * // nuxt.config.ts
+ * export default defineNuxtConfig({
+ *   ltExtensions: {
+ *     auth: {
+ *       cookieNames: {
+ *         state: 'my-app-auth-state',
+ *         token: 'my-app-jwt',
+ *       },
+ *     },
+ *   },
+ * });
+ * ```
+ */
+export interface LtAuthCookieNamesOptions {
+  /** Name of the auth-state cookie (default: 'lt-auth-state') */
+  state?: string;
+  /** Name of the JWT-token cookie (default: 'lt-jwt-token') */
+  token?: string;
+}
+
 export interface LtAuthModuleOptions {
   /** Auth API base path (default: '/iam' - must match nest-server betterAuth.basePath) */
   basePath?: string;
   /** API base URL (default: from env or http://localhost:3000) */
   baseURL?: string;
+  /** Override the cookie names used for auth state and JWT storage */
+  cookieNames?: LtAuthCookieNamesOptions;
   /** Enable the auth module (default: true) */
   enabled?: boolean;
   /** Enable admin plugin (default: true) */
@@ -111,6 +143,10 @@ export interface LtExtensionsPublicRuntimeConfig {
     auth: {
       basePath: string;
       baseURL: string;
+      cookieNames: {
+        state: string;
+        token: string;
+      };
       enabled: boolean;
       enableAdmin: boolean;
       enablePasskey: boolean;

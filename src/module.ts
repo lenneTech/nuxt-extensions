@@ -14,11 +14,20 @@ export const name = '@lenne.tech/nuxt-extensions';
 export const version = '1.5.2';
 export const configKey = 'ltExtensions';
 
+// Default cookie names — re-exported from auth-state so consumers can read
+// them as a fallback before runtime config is available.
+export const DEFAULT_LT_AUTH_STATE_COOKIE = 'lt-auth-state';
+export const DEFAULT_LT_JWT_TOKEN_COOKIE = 'lt-jwt-token';
+
 // Default options
 const defaultOptions: LtExtensionsModuleOptions = {
   auth: {
     basePath: '/iam',
     baseURL: '',
+    cookieNames: {
+      state: DEFAULT_LT_AUTH_STATE_COOKIE,
+      token: DEFAULT_LT_JWT_TOKEN_COOKIE,
+    },
     enabled: true,
     enableAdmin: true,
     enablePasskey: true,
@@ -62,6 +71,7 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
       auth: {
         ...defaultOptions.auth,
         ...options.auth,
+        cookieNames: { ...defaultOptions.auth!.cookieNames, ...options.auth?.cookieNames },
         systemSetup: { ...defaultOptions.auth!.systemSetup, ...options.auth?.systemSetup },
       },
       errorTranslation: { ...defaultOptions.errorTranslation, ...options.errorTranslation },
@@ -98,6 +108,10 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
       auth: {
         basePath: resolvedOptions.auth?.basePath || '/iam',
         baseURL: resolvedOptions.auth?.baseURL || '',
+        cookieNames: {
+          state: resolvedOptions.auth?.cookieNames?.state || DEFAULT_LT_AUTH_STATE_COOKIE,
+          token: resolvedOptions.auth?.cookieNames?.token || DEFAULT_LT_JWT_TOKEN_COOKIE,
+        },
         enabled: resolvedOptions.auth?.enabled ?? true,
         enableAdmin: resolvedOptions.auth?.enableAdmin ?? true,
         enablePasskey: resolvedOptions.auth?.enablePasskey ?? true,
@@ -153,6 +167,7 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
       { name: 'getLtJwtToken', from: resolve('./runtime/lib/auth-state') },
       { name: 'setLtJwtToken', from: resolve('./runtime/lib/auth-state') },
       { name: 'getLtApiBase', from: resolve('./runtime/lib/auth-state') },
+      { name: 'getLtAuthCookieNames', from: resolve('./runtime/lib/auth-state') },
       { name: 'buildLtApiUrl', from: resolve('./runtime/lib/auth-state') },
       { name: 'isLocalDevApiProxy', from: resolve('./runtime/lib/auth-state') },
       { name: 'attemptLtJwtSwitch', from: resolve('./runtime/lib/auth-state') },
@@ -230,6 +245,7 @@ export type { LtFileInfo, LtUploadItem, LtUploadOptions, LtUploadProgress, LtUpl
 
 // Module Types
 export type {
+  LtAuthCookieNamesOptions,
   LtAuthModuleOptions,
   LtErrorTranslationModuleOptions,
   LtExtensionsModuleOptions,

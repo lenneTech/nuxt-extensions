@@ -1,0 +1,84 @@
+/**
+ * Test-only stub of Nuxt's virtual `#imports` module.
+ *
+ * The stub exposes the small surface used by `auth-state.ts` and the
+ * `useLtAuth()` composable so unit tests can import runtime sources directly
+ * without spinning up a Nuxt context. The runtimeConfig store is mutable, so
+ * each test can configure it via `setStubRuntimeConfig()` and reset it via
+ * `resetStubRuntimeConfig()` (called in `beforeEach`).
+ *
+ * Reactive primitives (`ref`, `computed`, `watch`) are re-exported from `vue`
+ * — that's what the real `#imports` resolves to in production. The
+ * Nuxt-specific helpers (`useCookie`, `useState`, `useNuxtApp`) are lightweight
+ * stubs sufficient for unit testing.
+ */
+
+import { computed, ref, watch, type Ref } from 'vue';
+
+interface StubRuntimeConfig {
+  app?: Record<string, unknown>;
+  public: Record<string, any>;
+  [key: string]: any;
+}
+
+let runtimeConfig: StubRuntimeConfig = { public: {} };
+
+// Per-test isolated stores. Reset via the helpers below.
+const cookieRefs = new Map<string, Ref<unknown>>();
+const stateRefs = new Map<string, Ref<unknown>>();
+
+export function setStubRuntimeConfig(next: StubRuntimeConfig): void {
+  runtimeConfig = next;
+}
+
+export function resetStubRuntimeConfig(): void {
+  runtimeConfig = { public: {} };
+}
+
+/** Reset the in-memory cookie / state ref stores between tests. */
+export function resetStubReactiveStores(): void {
+  cookieRefs.clear();
+  stateRefs.clear();
+}
+
+export function useRuntimeConfig(): StubRuntimeConfig {
+  return runtimeConfig;
+}
+
+/**
+ * Minimal `useCookie` stub. Returns a cached reactive ref keyed by name so
+ * repeated calls within the same composable hand back the same handle. The
+ * stub does not write through to `document.cookie` — production code does
+ * that explicitly via `document.cookie = ...` for SSR-immediate sync, which
+ * already runs in happy-dom and is what the tests assert against.
+ */
+export function useCookie<T = unknown>(name: string, _options?: Record<string, unknown>): Ref<T | null> {
+  let cookie = cookieRefs.get(name);
+  if (!cookie) {
+    cookie = ref<T | null>(null) as Ref<unknown>;
+    cookieRefs.set(name, cookie);
+  }
+  return cookie as Ref<T | null>;
+}
+
+/**
+ * Minimal `useState` stub — caches a ref by key with the supplied initialiser.
+ */
+export function useState<T = unknown>(key: string, init?: () => T): Ref<T> {
+  let state = stateRefs.get(key);
+  if (!state) {
+    state = ref(init ? init() : (undefined as unknown as T)) as Ref<unknown>;
+    stateRefs.set(key, state);
+  }
+  return state as Ref<T>;
+}
+
+/**
+ * Minimal `useNuxtApp` stub — returns an empty object so optional `$i18n`
+ * lookups fall through to the German fallback path in `useTranslation()`.
+ */
+export function useNuxtApp(): Record<string, unknown> {
+  return {};
+}
+
+export { computed, ref, watch };
