@@ -118,9 +118,22 @@ export interface LtErrorTranslationModuleOptions {
 }
 
 /**
+ * AI module configuration options (client side). Mirrors the nest-server AI
+ * module's REST base path so the composables hit the right endpoints.
+ */
+export interface LtAiModuleOptions {
+  /** AI API base path (default: '/ai' — must match the nest-server AI controller). */
+  basePath?: string;
+  /** Enable the AI composables/auto-imports (default: true). */
+  enabled?: boolean;
+}
+
+/**
  * Main module options for @lenne.tech/nuxt-extensions
  */
 export interface LtExtensionsModuleOptions {
+  /** AI module configuration */
+  ai?: LtAiModuleOptions;
   /** Auth module configuration */
   auth?: LtAuthModuleOptions;
   /** Error translation configuration */
@@ -140,6 +153,10 @@ export interface LtExtensionsModuleOptions {
  */
 export interface LtExtensionsPublicRuntimeConfig {
   ltExtensions: {
+    ai: {
+      basePath: string;
+      enabled: boolean;
+    };
     auth: {
       basePath: string;
       baseURL: string;

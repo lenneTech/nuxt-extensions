@@ -36,6 +36,30 @@ export type {
   LtErrorTranslationResponse,
   LtParsedError,
   UseLtErrorTranslationReturn,
+  // AI Types
+  LtAiAction,
+  LtAiAvailableConnection,
+  LtAiBudgetLimit,
+  LtAiBudgetSummary,
+  LtAiConnection,
+  LtAiConnectionInput,
+  LtAiConnectionPreference,
+  LtAiInteraction,
+  LtAiMessage,
+  LtAiMode,
+  LtAiPromptInput,
+  LtAiResponse,
+  LtAiStreamEvent,
+  LtAiStreamHandlers,
+  LtAiUsage,
+  LtAiUsageInfo,
+  LtAiUsageScope,
+  UseLtAiAdminReturn,
+  UseLtAiChatOptions,
+  UseLtAiChatReturn,
+  UseLtAiConnectionsReturn,
+  UseLtAiReturn,
+  UseLtAiUsageReturn,
 } from './runtime/types';
 
 // Composables
@@ -54,6 +78,12 @@ export {
   type UseLtShareReturn,
   // Error Translation
   useLtErrorTranslation,
+  // AI
+  useLtAi,
+  useLtAiChat,
+  useLtAiConnections,
+  useLtAiUsage,
+  useLtAiAdmin,
 } from './runtime/composables';
 
 // Utilities
@@ -77,4 +107,10 @@ export {
   ltAuthFetch,
   setLtAuthMode,
   setLtJwtToken,
+  // AI client helpers
+  buildLtAiUrl,
+  getLtAiBasePath,
+  ltAiRequest,
+  ltAiResponseError,
+  parseLtAiSseStream,
 } from './runtime/lib';

@@ -21,6 +21,10 @@ export const DEFAULT_LT_JWT_TOKEN_COOKIE = 'lt-jwt-token';
 
 // Default options
 const defaultOptions: LtExtensionsModuleOptions = {
+  ai: {
+    basePath: '/ai',
+    enabled: true,
+  },
   auth: {
     basePath: '/iam',
     baseURL: '',
@@ -68,6 +72,7 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
 
     // Merge options with defaults
     const resolvedOptions = {
+      ai: { ...defaultOptions.ai, ...options.ai },
       auth: {
         ...defaultOptions.auth,
         ...options.auth,
@@ -105,6 +110,10 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
 
     // Add runtime config
     nuxt.options.runtimeConfig.public.ltExtensions = {
+      ai: {
+        basePath: resolvedOptions.ai?.basePath || '/ai',
+        enabled: resolvedOptions.ai?.enabled ?? true,
+      },
       auth: {
         basePath: resolvedOptions.auth?.basePath || '/iam',
         baseURL: resolvedOptions.auth?.baseURL || '',
@@ -176,6 +185,20 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
       { name: 'ltAuthFetch', from: resolve('./runtime/lib/auth-state') },
     ]);
 
+    // AI composables + helpers (only when the AI module is enabled)
+    if (resolvedOptions.ai?.enabled !== false) {
+      addImports([
+        { name: 'useLtAi', from: resolve('./runtime/composables/use-lt-ai') },
+        { name: 'useLtAiChat', from: resolve('./runtime/composables/use-lt-ai-chat') },
+        { name: 'useLtAiConnections', from: resolve('./runtime/composables/use-lt-ai-connections') },
+        { name: 'useLtAiUsage', from: resolve('./runtime/composables/use-lt-ai-usage') },
+        { name: 'useLtAiAdmin', from: resolve('./runtime/composables/use-lt-ai-admin') },
+        { name: 'buildLtAiUrl', from: resolve('./runtime/lib/ai') },
+        { name: 'ltAiRequest', from: resolve('./runtime/lib/ai') },
+        { name: 'parseLtAiSseStream', from: resolve('./runtime/lib/ai') },
+      ]);
+    }
+
     // Register transition components
     const transitionComponents = ['LtTransitionFade', 'LtTransitionSlide', 'LtTransitionSlideBottom', 'LtTransitionSlideRevert', 'LtTransitionFadeScale'];
 
@@ -245,6 +268,7 @@ export type { LtFileInfo, LtUploadItem, LtUploadOptions, LtUploadProgress, LtUpl
 
 // Module Types
 export type {
+  LtAiModuleOptions,
   LtAuthCookieNamesOptions,
   LtAuthModuleOptions,
   LtErrorTranslationModuleOptions,
@@ -257,3 +281,30 @@ export type {
 
 // Error Translation Types
 export type { LtErrorTranslationResponse, LtParsedError, UseLtErrorTranslationReturn } from './runtime/types/error';
+
+// AI Types
+export type {
+  LtAiAction,
+  LtAiAvailableConnection,
+  LtAiBudgetLimit,
+  LtAiBudgetSummary,
+  LtAiConnection,
+  LtAiConnectionInput,
+  LtAiConnectionPreference,
+  LtAiInteraction,
+  LtAiMessage,
+  LtAiMode,
+  LtAiPromptInput,
+  LtAiResponse,
+  LtAiStreamEvent,
+  LtAiStreamHandlers,
+  LtAiUsage,
+  LtAiUsageInfo,
+  LtAiUsageScope,
+  UseLtAiAdminReturn,
+  UseLtAiChatOptions,
+  UseLtAiChatReturn,
+  UseLtAiConnectionsReturn,
+  UseLtAiReturn,
+  UseLtAiUsageReturn,
+} from './runtime/types/ai';

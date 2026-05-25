@@ -22,3 +22,30 @@ export type {
 
 // Error Translation Types
 export type { LtErrorTranslationResponse, LtParsedError, UseLtErrorTranslationReturn } from './error';
+
+// AI Types
+export type {
+  LtAiAction,
+  LtAiAvailableConnection,
+  LtAiBudgetLimit,
+  LtAiBudgetSummary,
+  LtAiConnection,
+  LtAiConnectionInput,
+  LtAiConnectionPreference,
+  LtAiInteraction,
+  LtAiMessage,
+  LtAiMode,
+  LtAiPromptInput,
+  LtAiResponse,
+  LtAiStreamEvent,
+  LtAiStreamHandlers,
+  LtAiUsage,
+  LtAiUsageInfo,
+  LtAiUsageScope,
+  UseLtAiAdminReturn,
+  UseLtAiChatOptions,
+  UseLtAiChatReturn,
+  UseLtAiConnectionsReturn,
+  UseLtAiReturn,
+  UseLtAiUsageReturn,
+} from './ai';
