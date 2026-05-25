@@ -136,7 +136,9 @@ export function useLtAiChat(options: UseLtAiChatOptions = {}): UseLtAiChatReturn
     confirm,
     conversationId: readonly(conversationId),
     error: readonly(error),
-    messages: readonly(messages),
+    // Returned as a shallow Readonly<Ref> (see UseLtAiChatReturn): consumers cannot
+    // reassign the ref but can bind individual messages to child components.
+    messages,
     requiresConfirmation,
     send,
     stop,

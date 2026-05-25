@@ -247,7 +247,9 @@ export interface UseLtAiChatReturn {
   confirm: () => Promise<void>;
   conversationId: DeepReadonly<Ref<string | undefined>>;
   error: DeepReadonly<Ref<null | string>>;
-  messages: DeepReadonly<Ref<LtAiMessage[]>>;
+  // Shallow readonly: the ref cannot be reassigned, but message elements stay
+  // bindable to child components (avoids DeepReadonly friction in consumers).
+  messages: Readonly<Ref<LtAiMessage[]>>;
   requiresConfirmation: ComputedRef<boolean>;
   send: (content: string) => Promise<void>;
   stop: () => void;
