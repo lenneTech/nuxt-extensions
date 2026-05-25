@@ -5,7 +5,7 @@
  * destructive actions.
  */
 
-import { computed, readonly, ref, unref } from '#imports';
+import { computed, reactive, readonly, ref, unref } from '#imports';
 
 import type { LtAiBudgetSummary, LtAiMessage, LtAiPromptInput, LtAiResponse, UseLtAiChatOptions, UseLtAiChatReturn } from '../types/ai';
 import { useLtAi } from './use-lt-ai';
@@ -48,7 +48,10 @@ export function useLtAiChat(options: UseLtAiChatOptions = {}): UseLtAiChatReturn
   /** Run one assistant turn for the given input, streaming into a new message. */
   async function runTurn(input: LtAiPromptInput): Promise<void> {
     error.value = null;
-    const assistant: LtAiMessage = { content: '', createdAt: new Date().toISOString(), pending: true, role: 'assistant' };
+    // Must be reactive: we mutate this object (content/actions/…) while streaming.
+    // A plain object pushed into the ref array would be wrapped in a *separate*
+    // reactive proxy, so mutating the original reference would not trigger re-renders.
+    const assistant = reactive<LtAiMessage>({ content: '', createdAt: new Date().toISOString(), pending: true, role: 'assistant' });
     messages.value.push(assistant);
     controller = new AbortController();
     const useStream = options.stream !== false;
