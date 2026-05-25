@@ -128,8 +128,13 @@ export default (nuxtApp: NuxtApp): void => {
     }
   }
 
-  // Override the default $fetch to add response error handling
-  const originalFetch = globalThis.$fetch;
+  // Override the default $fetch to add response error handling.
+  // $fetch's type embeds Nuxt's generated route union; calling it with a plain
+  // string url makes vue-tsc instantiate that deeply-nested conditional type and
+  // fail with "Excessive stack depth". Cast to a loose callable — the wrapper
+  // below is reassigned `as typeof globalThis.$fetch`, so the public type is kept.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const originalFetch = globalThis.$fetch as any;
 
   // Use a wrapper to intercept responses
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
