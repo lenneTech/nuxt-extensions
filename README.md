@@ -344,6 +344,45 @@ const base64 = ltArrayBufferToBase64Url(buffer);
 const uint8 = ltBase64UrlToUint8Array(base64String);
 ```
 
+## AI Assistant
+
+Headless, provider-agnostic composables for the `@lenne.tech/nest-server` **AI module**
+(REST + SSE). All requests use the same auth-aware `ltAuthFetch` (Cookie/JWT) and URL
+resolution as the rest of the library. Configure via `ltExtensions.ai`:
+
+```typescript
+// nuxt.config.ts
+ltExtensions: {
+  ai: { enabled: true, basePath: '/ai' }, // basePath must match the nest-server AI controller
+}
+```
+
+### Chat (streaming, multi-turn)
+
+```vue
+<script setup lang="ts">
+const { budget, confirm, messages, requiresConfirmation, send, streaming } = useLtAiChat();
+</script>
+```
+
+`useLtAiChat()` streams the answer token-by-token, tracks the `conversationId`, exposes
+the per-response `budget` summary, and drives the confirmation flow for mutating/
+destructive actions (`requiresConfirmation` → `confirm()`).
+
+### Lower-level + supporting composables
+
+| Composable | Purpose |
+|------------|---------|
+| `useLtAi()` | One-shot `prompt(input)` and streaming `promptStream(input, handlers)` (POST `/ai/stream`) |
+| `useLtAiChat()` | Multi-turn chat state, streaming, budget, confirmation, `stop()`/`clear()` |
+| `useLtAiConnections()` | User self-service: available connections + `select()` (`selected`/`locked`) |
+| `useLtAiUsage()` | Full token/prompt usage breakdown (`GET /ai/usage`) |
+| `useLtAiAdmin()` | Admin CRUD: connections (+ `detectCapabilities`), preferences, budget-limits, interactions |
+
+Helpers: `buildLtAiUrl(path)`, `ltAiRequest(method, path, body?)`, `parseLtAiSseStream(response, onEvent)`.
+All AI DTOs are exported as `LtAi*` types. The streaming endpoint is consumed via a
+`fetch` + `ReadableStream` SSE reader (not `EventSource`, since it is a `POST` with auth).
+
 ## i18n Support
 
 The package works **with or without** `@nuxtjs/i18n`:
