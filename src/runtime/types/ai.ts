@@ -216,6 +216,75 @@ export interface LtAiInteraction {
   userId?: string;
 }
 
+/**
+ * An admin-editable prompt-template fragment (a logical slot of the system prompt).
+ * The backend ships built-in defaults for every key; a row here overrides the
+ * default for its `key` (optionally scoped by `locale`/`capability`).
+ */
+export interface LtAiPromptTemplate {
+  /** Capability scope: 'all', 'native' or 'emulated'. */
+  capability?: string;
+  /** Fragment text (supports {{placeholders}}). */
+  content: string;
+  createdAt?: string;
+  /** Admin-facing description of the fragment. */
+  description?: string;
+  /** Whether the fragment is included in the prompt. */
+  enabled?: boolean;
+  id: string;
+  /** Logical prompt slot (e.g. 'base', 'permissions', 'anti_hallucination'). */
+  key: string;
+  /** Locale (e.g. 'en', 'de'); empty = all languages. */
+  locale?: string;
+  /** Assembly order (ascending). */
+  order?: number;
+  updatedAt?: string;
+}
+
+/** Input to create/update a prompt-template fragment. */
+export interface LtAiPromptTemplateInput {
+  capability?: string;
+  content?: string;
+  description?: string;
+  enabled?: boolean;
+  key?: string;
+  locale?: string;
+  order?: number;
+}
+
+/**
+ * A learned prompt hint from the governed self-improvement loop. Only `approved`
+ * + enabled hints reach the prompt; hints only ever ADD guidance and can never
+ * relax the backend-enforced security core.
+ */
+export interface LtAiPromptHint {
+  /** Guidance text added to the prompt when approved. */
+  content: string;
+  createdAt?: string;
+  /** Whether the hint is active. */
+  enabled?: boolean;
+  id: string;
+  /** Number of times the failure pattern was observed. */
+  occurrences?: number;
+  /** Scope the hint applies to (e.g. a tool name); empty = global. */
+  scope?: string;
+  /** Governance status: 'suggested', 'approved' or 'rejected'. */
+  status?: string;
+  /** Failure-pattern identifier that produced the hint. */
+  trigger?: string;
+  updatedAt?: string;
+}
+
+/** Input to create/update a learned prompt hint (typically approve/reject or edit). */
+export interface LtAiPromptHintInput {
+  content?: string;
+  enabled?: boolean;
+  occurrences?: number;
+  scope?: string;
+  status?: string;
+  trigger?: string;
+}
+
 // =============================================================================
 // Composable return types
 // =============================================================================
@@ -276,16 +345,24 @@ export interface UseLtAiUsageReturn {
 export interface UseLtAiAdminReturn {
   createBudgetLimit: (input: LtAiBudgetLimit) => Promise<LtAiBudgetLimit>;
   createConnection: (input: LtAiConnectionInput) => Promise<LtAiConnection>;
+  createPromptHint: (input: LtAiPromptHintInput) => Promise<LtAiPromptHint>;
+  createPromptTemplate: (input: LtAiPromptTemplateInput) => Promise<LtAiPromptTemplate>;
   deleteBudgetLimit: (id: string) => Promise<LtAiBudgetLimit>;
   deleteConnection: (id: string) => Promise<LtAiConnection>;
   deletePreference: (id: string) => Promise<LtAiConnectionPreference>;
+  deletePromptHint: (id: string) => Promise<LtAiPromptHint>;
+  deletePromptTemplate: (id: string) => Promise<LtAiPromptTemplate>;
   detectCapabilities: (id: string) => Promise<LtAiConnection>;
   getConnection: (id: string) => Promise<LtAiConnection>;
   listBudgetLimits: () => Promise<LtAiBudgetLimit[]>;
   listConnections: () => Promise<LtAiConnection[]>;
   listInteractions: () => Promise<LtAiInteraction[]>;
   listPreferences: () => Promise<LtAiConnectionPreference[]>;
+  listPromptHints: () => Promise<LtAiPromptHint[]>;
+  listPromptTemplates: () => Promise<LtAiPromptTemplate[]>;
   setPreference: (input: LtAiConnectionPreference) => Promise<LtAiConnectionPreference>;
   updateBudgetLimit: (id: string, input: LtAiBudgetLimit) => Promise<LtAiBudgetLimit>;
   updateConnection: (id: string, input: LtAiConnectionInput) => Promise<LtAiConnection>;
+  updatePromptHint: (id: string, input: LtAiPromptHintInput) => Promise<LtAiPromptHint>;
+  updatePromptTemplate: (id: string, input: LtAiPromptTemplateInput) => Promise<LtAiPromptTemplate>;
 }

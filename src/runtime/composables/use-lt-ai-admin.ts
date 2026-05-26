@@ -6,7 +6,18 @@
  * Pair with your own UI (the nuxt-base-starter ships a reference admin area).
  */
 
-import type { LtAiBudgetLimit, LtAiConnection, LtAiConnectionInput, LtAiConnectionPreference, LtAiInteraction, UseLtAiAdminReturn } from '../types/ai';
+import type {
+  LtAiBudgetLimit,
+  LtAiConnection,
+  LtAiConnectionInput,
+  LtAiConnectionPreference,
+  LtAiInteraction,
+  LtAiPromptHint,
+  LtAiPromptHintInput,
+  LtAiPromptTemplate,
+  LtAiPromptTemplateInput,
+  UseLtAiAdminReturn,
+} from '../types/ai';
 import { ltAiRequest } from '../lib/ai';
 
 export function useLtAiAdmin(): UseLtAiAdminReturn {
@@ -29,6 +40,18 @@ export function useLtAiAdmin(): UseLtAiAdminReturn {
     deleteBudgetLimit: (id: string) => ltAiRequest<LtAiBudgetLimit>('DELETE', `/budget-limits/${id}`),
     listBudgetLimits: () => ltAiRequest<LtAiBudgetLimit[]>('GET', '/budget-limits'),
     updateBudgetLimit: (id: string, input: LtAiBudgetLimit) => ltAiRequest<LtAiBudgetLimit>('PUT', `/budget-limits/${id}`, input),
+
+    // Prompt templates (admin-editable prompt building blocks)
+    createPromptTemplate: (input: LtAiPromptTemplateInput) => ltAiRequest<LtAiPromptTemplate>('POST', '/prompt-templates', input),
+    deletePromptTemplate: (id: string) => ltAiRequest<LtAiPromptTemplate>('DELETE', `/prompt-templates/${id}`),
+    listPromptTemplates: () => ltAiRequest<LtAiPromptTemplate[]>('GET', '/prompt-templates'),
+    updatePromptTemplate: (id: string, input: LtAiPromptTemplateInput) => ltAiRequest<LtAiPromptTemplate>('PUT', `/prompt-templates/${id}`, input),
+
+    // Learned prompt hints (governed self-improvement loop)
+    createPromptHint: (input: LtAiPromptHintInput) => ltAiRequest<LtAiPromptHint>('POST', '/prompt-hints', input),
+    deletePromptHint: (id: string) => ltAiRequest<LtAiPromptHint>('DELETE', `/prompt-hints/${id}`),
+    listPromptHints: () => ltAiRequest<LtAiPromptHint[]>('GET', '/prompt-hints'),
+    updatePromptHint: (id: string, input: LtAiPromptHintInput) => ltAiRequest<LtAiPromptHint>('PUT', `/prompt-hints/${id}`, input),
 
     // Audit
     listInteractions: () => ltAiRequest<LtAiInteraction[]>('GET', '/interactions'),
