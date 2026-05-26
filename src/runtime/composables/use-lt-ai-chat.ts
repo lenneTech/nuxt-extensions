@@ -15,6 +15,7 @@ export function useLtAiChat(options: UseLtAiChatOptions = {}): UseLtAiChatReturn
   const messages = ref<LtAiMessage[]>([]);
   const conversationId = ref<string | undefined>(options.conversationId);
   const budget = ref<LtAiBudgetSummary | null>(null);
+  const contextWindow = ref<{ total: number; used: number } | null>(null);
   const error = ref<null | string>(null);
   let lastPrompt = '';
   let controller: AbortController | undefined;
@@ -39,6 +40,9 @@ export function useLtAiChat(options: UseLtAiChatOptions = {}): UseLtAiChatReturn
     assistant.pendingActions = response.pendingActions;
     if (response.budget) {
       budget.value = response.budget;
+    }
+    if (response.contextWindow) {
+      contextWindow.value = response.contextWindow;
     }
     if (response.conversationId) {
       conversationId.value = response.conversationId;
@@ -129,12 +133,14 @@ export function useLtAiChat(options: UseLtAiChatOptions = {}): UseLtAiChatReturn
   function clear(): void {
     messages.value = [];
     budget.value = null;
+    contextWindow.value = null;
     error.value = null;
     lastPrompt = '';
   }
 
   return {
     budget: readonly(budget),
+    contextWindow: readonly(contextWindow),
     clear,
     confirm,
     conversationId: readonly(conversationId),

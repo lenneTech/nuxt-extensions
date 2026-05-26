@@ -47,9 +47,13 @@ export interface LtAiUsage {
 
 /** Compact token-budget summary attached to every response. */
 export interface LtAiBudgetSummary {
+  /** Effective limit (user → tenant → LLM context window → null). Null = no limit. */
+  maxTokens?: number;
   promptTokens?: number;
   remainingTokens?: number;
   resetAt?: string;
+  /** Which scope yielded maxTokens: 'user', 'tenant' or 'llm'. */
+  scope?: 'llm' | 'tenant' | 'user';
   usedTokens?: number;
 }
 
@@ -58,12 +62,15 @@ export interface LtAiResponse {
   actions?: LtAiAction[];
   budget?: LtAiBudgetSummary;
   connectionId?: string;
+  /** Context-window utilization at the end of the run (used/total tokens). */
+  contextWindow?: { total: number; used: number };
   conversationId?: string;
   data?: any;
   denied?: boolean;
   deniedActions?: LtAiAction[];
   iterations?: number;
   pendingActions?: LtAiAction[];
+  pendingQuestion?: { options?: { label: string; value: string }[]; question: string };
   plan?: LtAiAction[];
   requiresConfirmation?: boolean;
   text: string;
@@ -314,6 +321,8 @@ export interface UseLtAiChatReturn {
   budget: DeepReadonly<Ref<LtAiBudgetSummary | null>>;
   clear: () => void;
   confirm: () => Promise<void>;
+  /** Context-window utilization of the latest assistant turn (used/total tokens). */
+  contextWindow: DeepReadonly<Ref<{ total: number; used: number } | null>>;
   conversationId: DeepReadonly<Ref<string | undefined>>;
   error: DeepReadonly<Ref<null | string>>;
   // Shallow readonly: the ref cannot be reassigned, but message elements stay
