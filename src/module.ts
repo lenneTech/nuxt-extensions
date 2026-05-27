@@ -192,6 +192,7 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
         { name: 'useLtAiChat', from: resolve('./runtime/composables/use-lt-ai-chat') },
         { name: 'useLtAiConnections', from: resolve('./runtime/composables/use-lt-ai-connections') },
         { name: 'useLtAiUsage', from: resolve('./runtime/composables/use-lt-ai-usage') },
+        { name: 'useLtAiSnippets', from: resolve('./runtime/composables/use-lt-ai-snippets') },
         { name: 'useLtAiAdmin', from: resolve('./runtime/composables/use-lt-ai-admin') },
         { name: 'buildLtAiUrl', from: resolve('./runtime/lib/ai') },
         { name: 'ltAiRequest', from: resolve('./runtime/lib/ai') },

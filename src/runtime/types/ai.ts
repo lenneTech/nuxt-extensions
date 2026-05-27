@@ -292,6 +292,51 @@ export interface LtAiPromptHintInput {
   trigger?: string;
 }
 
+/**
+ * A user-facing prompt snippet ("Vorlage"): a short, named piece of text the
+ * user can insert into the chat input with one click. Different from
+ * {@link LtAiPromptTemplate}, which is the admin-only system-prompt building block.
+ *
+ * Visibility scopes:
+ *  - `user`   — only the owner sees it (default).
+ *  - `tenant` — all members of the owner's tenant see it.
+ *  - `global` — every signed-in user sees it (creation requires admin).
+ */
+export interface LtAiPromptSnippet {
+  /** The snippet text inserted into the chat input (may contain placeholders). */
+  content: string;
+  createdAt?: string;
+  /** Optional description. */
+  description?: string;
+  /** Whether the snippet is active (disabled snippets are hidden). */
+  enabled?: boolean;
+  /** Optional icon hint (lucide name or single emoji). */
+  icon?: string;
+  id: string;
+  /** Display label shown in the picker. */
+  name: string;
+  /** Owner user id (set automatically by the server). */
+  ownerId?: string;
+  /** Sort order in the picker (ascending). */
+  order?: number;
+  /** Visibility scope (`'user'` | `'tenant'` | `'global'`). */
+  scope: string;
+  /** Tenant id when `scope === 'tenant'` (set automatically by the server). */
+  tenantId?: string;
+  updatedAt?: string;
+}
+
+/** Input to create/update a {@link LtAiPromptSnippet}. */
+export interface LtAiPromptSnippetInput {
+  content?: string;
+  description?: string;
+  enabled?: boolean;
+  icon?: string;
+  name?: string;
+  order?: number;
+  scope?: string;
+}
+
 // =============================================================================
 // Composable return types
 // =============================================================================
@@ -349,6 +394,20 @@ export interface UseLtAiUsageReturn {
   loading: DeepReadonly<Ref<boolean>>;
   load: () => Promise<void>;
   usage: DeepReadonly<Ref<LtAiUsageInfo | null>>;
+}
+
+/**
+ * User-facing prompt-snippet composable. Lets any signed-in user manage their
+ * own snippets and use the visible ones (own + tenant + global) in a chat.
+ */
+export interface UseLtAiSnippetsReturn {
+  create: (input: LtAiPromptSnippetInput) => Promise<LtAiPromptSnippet>;
+  remove: (id: string) => Promise<LtAiPromptSnippet>;
+  error: DeepReadonly<Ref<null | string>>;
+  load: () => Promise<void>;
+  loading: DeepReadonly<Ref<boolean>>;
+  snippets: DeepReadonly<Ref<LtAiPromptSnippet[]>>;
+  update: (id: string, input: LtAiPromptSnippetInput) => Promise<LtAiPromptSnippet>;
 }
 
 export interface UseLtAiAdminReturn {
