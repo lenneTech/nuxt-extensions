@@ -264,6 +264,47 @@ export interface LtAiSlotInput {
 }
 
 /**
+ * Effective slot for the admin UI — framework defaults + tenant overrides +
+ * tenant customs in one list. The `isSystem` / `isOverride` flags drive which
+ * actions the UI renders:
+ *  - `isSystem: true`  → virtual default row (no `id`). Action: "Bearbeiten" → POST creates an override.
+ *  - `isOverride: true` → tenant row that overrides a system default. Action: "Zurücksetzen" → reset.
+ *  - else               → custom tenant slot. Action: "Löschen" → real delete (no restore).
+ */
+export interface LtAiEffectiveSlot {
+  capability?: string;
+  content: string;
+  description?: string;
+  enabled: boolean;
+  id?: string;
+  /** True when a tenant row overrides a framework default. */
+  isOverride: boolean;
+  /** True for built-in framework defaults (no DB row). */
+  isSystem: boolean;
+  key: string;
+  locale?: string;
+  order: number;
+  scope?: string;
+  /** System-default key this row overrides (only on overrides). */
+  systemKey?: string;
+  tenantId?: string;
+}
+
+/**
+ * Public metadata of a registered placeholder — returned by the placeholders
+ * endpoint. Used by the slot / prompt editors to render a "what can I insert"
+ * hint sidebar dynamically (no hard-coded list in the frontend).
+ */
+export interface LtAiPlaceholder {
+  /** One-sentence description shown in the helper sidebar. */
+  description: string;
+  /** Optional example value (tooltip). */
+  example?: string;
+  /** Token name without curly braces (e.g. `'roles'` matches `{{roles}}`). */
+  name: string;
+}
+
+/**
  * A learned prompt hint from the governed self-improvement loop. Only `approved`
  * + enabled hints reach the prompt; hints only ever ADD guidance and can never
  * relax the backend-enforced security core.
@@ -428,13 +469,29 @@ export interface UseLtAiAdminReturn {
   getConnection: (id: string) => Promise<LtAiConnection>;
   listBudgetLimits: () => Promise<LtAiBudgetLimit[]>;
   listConnections: () => Promise<LtAiConnection[]>;
+  /** Effective slots view — framework defaults overlaid by tenant overrides + tenant customs. */
+  listEffectiveSlots: () => Promise<LtAiEffectiveSlot[]>;
   listInteractions: () => Promise<LtAiInteraction[]>;
   listPreferences: () => Promise<LtAiConnectionPreference[]>;
   listPromptHints: () => Promise<LtAiPromptHint[]>;
   listSlots: () => Promise<LtAiSlot[]>;
+  /** Reset a tenant override → framework default applies again. */
+  resetSlot: (id: string) => Promise<boolean>;
   setPreference: (input: LtAiConnectionPreference) => Promise<LtAiConnectionPreference>;
   updateBudgetLimit: (id: string, input: LtAiBudgetLimit) => Promise<LtAiBudgetLimit>;
   updateConnection: (id: string, input: LtAiConnectionInput) => Promise<LtAiConnection>;
   updatePromptHint: (id: string, input: LtAiPromptHintInput) => Promise<LtAiPromptHint>;
   updateSlot: (id: string, input: LtAiSlotInput) => Promise<LtAiSlot>;
+}
+
+/**
+ * Placeholder list composable. Loads the runtime placeholder registry from
+ * the backend (`GET /ai/placeholders`) so slot / prompt editors can render
+ * a dynamic helper sidebar without hard-coding any names in the frontend.
+ */
+export interface UseLtAiPlaceholdersReturn {
+  error: DeepReadonly<Ref<null | string>>;
+  load: () => Promise<void>;
+  loading: DeepReadonly<Ref<boolean>>;
+  placeholders: DeepReadonly<Ref<LtAiPlaceholder[]>>;
 }

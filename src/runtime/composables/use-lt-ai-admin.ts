@@ -11,6 +11,7 @@ import type {
   LtAiConnection,
   LtAiConnectionInput,
   LtAiConnectionPreference,
+  LtAiEffectiveSlot,
   LtAiInteraction,
   LtAiPromptHint,
   LtAiPromptHintInput,
@@ -41,10 +42,12 @@ export function useLtAiAdmin(): UseLtAiAdminReturn {
     listBudgetLimits: () => ltAiRequest<LtAiBudgetLimit[]>('GET', '/budget-limits'),
     updateBudgetLimit: (id: string, input: LtAiBudgetLimit) => ltAiRequest<LtAiBudgetLimit>('PUT', `/budget-limits/${id}`, input),
 
-    // Prompt templates (admin-editable prompt building blocks)
+    // System-prompt slots (admin-editable; tenant-scoped)
     createSlot: (input: LtAiSlotInput) => ltAiRequest<LtAiSlot>('POST', '/slots', input),
     deleteSlot: (id: string) => ltAiRequest<LtAiSlot>('DELETE', `/slots/${id}`),
+    listEffectiveSlots: () => ltAiRequest<LtAiEffectiveSlot[]>('GET', '/slots/effective'),
     listSlots: () => ltAiRequest<LtAiSlot[]>('GET', '/slots'),
+    resetSlot: (id: string) => ltAiRequest<boolean>('POST', `/slots/${id}/reset`),
     updateSlot: (id: string, input: LtAiSlotInput) => ltAiRequest<LtAiSlot>('PUT', `/slots/${id}`, input),
 
     // Learned prompt hints (governed self-improvement loop)
