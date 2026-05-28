@@ -224,32 +224,36 @@ export interface LtAiInteraction {
 }
 
 /**
- * An admin-editable prompt-template fragment (a logical slot of the system prompt).
- * The backend ships built-in defaults for every key; a row here overrides the
+ * An admin-editable AI slot — a logical building block of the SYSTEM prompt
+ * (e.g. `base`, `permissions`, `anti_hallucination`, `tool_catalog`).
+ * The backend ships built-in defaults for every key; a row here OVERRIDES the
  * default for its `key` (optionally scoped by `locale`/`capability`).
+ * When multi-tenancy is active, slots are tenant-scoped.
  */
-export interface LtAiPromptTemplate {
+export interface LtAiSlot {
   /** Capability scope: 'all', 'native' or 'emulated'. */
   capability?: string;
-  /** Fragment text (supports {{placeholders}}). */
+  /** Slot text (supports {{placeholders}}). */
   content: string;
   createdAt?: string;
-  /** Admin-facing description of the fragment. */
+  /** Admin-facing description of the slot. */
   description?: string;
-  /** Whether the fragment is included in the prompt. */
+  /** Whether the slot is included in the prompt. */
   enabled?: boolean;
   id: string;
-  /** Logical prompt slot (e.g. 'base', 'permissions', 'anti_hallucination'). */
+  /** Logical prompt slot key (e.g. 'base', 'permissions', 'anti_hallucination'). */
   key: string;
   /** Locale (e.g. 'en', 'de'); empty = all languages. */
   locale?: string;
   /** Assembly order (ascending). */
   order?: number;
+  /** Tenant id the slot applies to (auto-set; undefined = system-wide). */
+  tenantId?: string;
   updatedAt?: string;
 }
 
-/** Input to create/update a prompt-template fragment. */
-export interface LtAiPromptTemplateInput {
+/** Input to create/update an admin AI slot. */
+export interface LtAiSlotInput {
   capability?: string;
   content?: string;
   description?: string;
@@ -293,22 +297,21 @@ export interface LtAiPromptHintInput {
 }
 
 /**
- * A user-facing prompt snippet ("Vorlage"): a short, named piece of text the
- * user can insert into the chat input with one click. Different from
- * {@link LtAiPromptTemplate}, which is the admin-only system-prompt building block.
+ * A user-facing prompt ("Vorlage") — a short, named piece of text the user
+ * can insert into the chat input with one click. Different from
+ * {@link LtAiSlot}, which is the admin-only system-prompt building block.
  *
  * Visibility scopes:
- *  - `user`   — only the owner sees it (default).
- *  - `tenant` — all members of the owner's tenant see it.
- *  - `global` — every signed-in user sees it (creation requires admin).
+ *  - `user`   — only the owner sees it ("private", default).
+ *  - `tenant` — all members of the owner's tenant see it ("public").
  */
-export interface LtAiPromptSnippet {
-  /** The snippet text inserted into the chat input (may contain placeholders). */
+export interface LtAiPrompt {
+  /** The prompt text inserted into the chat input (may contain placeholders). */
   content: string;
   createdAt?: string;
   /** Optional description. */
   description?: string;
-  /** Whether the snippet is active (disabled snippets are hidden). */
+  /** Whether the prompt is active (disabled prompts are hidden). */
   enabled?: boolean;
   /** Optional icon hint (lucide name or single emoji). */
   icon?: string;
@@ -326,8 +329,8 @@ export interface LtAiPromptSnippet {
   updatedAt?: string;
 }
 
-/** Input to create/update a {@link LtAiPromptSnippet}. */
-export interface LtAiPromptSnippetInput {
+/** Input to create/update a {@link LtAiPrompt}. */
+export interface LtAiPromptInput {
   content?: string;
   description?: string;
   enabled?: boolean;
@@ -397,29 +400,30 @@ export interface UseLtAiUsageReturn {
 }
 
 /**
- * User-facing prompt-snippet composable. Lets any signed-in user manage their
- * own snippets and use the visible ones (own + tenant + global) in a chat.
+ * User-facing prompt composable. Lets any signed-in user manage their own
+ * prompts ("Vorlagen") and use the visible ones (own private + tenant public)
+ * in a chat.
  */
-export interface UseLtAiSnippetsReturn {
-  create: (input: LtAiPromptSnippetInput) => Promise<LtAiPromptSnippet>;
-  remove: (id: string) => Promise<LtAiPromptSnippet>;
+export interface UseLtAiPromptsReturn {
+  create: (input: LtAiPromptInput) => Promise<LtAiPrompt>;
   error: DeepReadonly<Ref<null | string>>;
   load: () => Promise<void>;
   loading: DeepReadonly<Ref<boolean>>;
-  snippets: DeepReadonly<Ref<LtAiPromptSnippet[]>>;
-  update: (id: string, input: LtAiPromptSnippetInput) => Promise<LtAiPromptSnippet>;
+  prompts: DeepReadonly<Ref<LtAiPrompt[]>>;
+  remove: (id: string) => Promise<LtAiPrompt>;
+  update: (id: string, input: LtAiPromptInput) => Promise<LtAiPrompt>;
 }
 
 export interface UseLtAiAdminReturn {
   createBudgetLimit: (input: LtAiBudgetLimit) => Promise<LtAiBudgetLimit>;
   createConnection: (input: LtAiConnectionInput) => Promise<LtAiConnection>;
   createPromptHint: (input: LtAiPromptHintInput) => Promise<LtAiPromptHint>;
-  createPromptTemplate: (input: LtAiPromptTemplateInput) => Promise<LtAiPromptTemplate>;
+  createSlot: (input: LtAiSlotInput) => Promise<LtAiSlot>;
   deleteBudgetLimit: (id: string) => Promise<LtAiBudgetLimit>;
   deleteConnection: (id: string) => Promise<LtAiConnection>;
   deletePreference: (id: string) => Promise<LtAiConnectionPreference>;
   deletePromptHint: (id: string) => Promise<LtAiPromptHint>;
-  deletePromptTemplate: (id: string) => Promise<LtAiPromptTemplate>;
+  deleteSlot: (id: string) => Promise<LtAiSlot>;
   detectCapabilities: (id: string) => Promise<LtAiConnection>;
   getConnection: (id: string) => Promise<LtAiConnection>;
   listBudgetLimits: () => Promise<LtAiBudgetLimit[]>;
@@ -427,10 +431,10 @@ export interface UseLtAiAdminReturn {
   listInteractions: () => Promise<LtAiInteraction[]>;
   listPreferences: () => Promise<LtAiConnectionPreference[]>;
   listPromptHints: () => Promise<LtAiPromptHint[]>;
-  listPromptTemplates: () => Promise<LtAiPromptTemplate[]>;
+  listSlots: () => Promise<LtAiSlot[]>;
   setPreference: (input: LtAiConnectionPreference) => Promise<LtAiConnectionPreference>;
   updateBudgetLimit: (id: string, input: LtAiBudgetLimit) => Promise<LtAiBudgetLimit>;
   updateConnection: (id: string, input: LtAiConnectionInput) => Promise<LtAiConnection>;
   updatePromptHint: (id: string, input: LtAiPromptHintInput) => Promise<LtAiPromptHint>;
-  updatePromptTemplate: (id: string, input: LtAiPromptTemplateInput) => Promise<LtAiPromptTemplate>;
+  updateSlot: (id: string, input: LtAiSlotInput) => Promise<LtAiSlot>;
 }

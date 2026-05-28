@@ -14,8 +14,8 @@ import type {
   LtAiInteraction,
   LtAiPromptHint,
   LtAiPromptHintInput,
-  LtAiPromptTemplate,
-  LtAiPromptTemplateInput,
+  LtAiSlot,
+  LtAiSlotInput,
   UseLtAiAdminReturn,
 } from '../types/ai';
 import { ltAiRequest } from '../lib/ai';
@@ -42,10 +42,10 @@ export function useLtAiAdmin(): UseLtAiAdminReturn {
     updateBudgetLimit: (id: string, input: LtAiBudgetLimit) => ltAiRequest<LtAiBudgetLimit>('PUT', `/budget-limits/${id}`, input),
 
     // Prompt templates (admin-editable prompt building blocks)
-    createPromptTemplate: (input: LtAiPromptTemplateInput) => ltAiRequest<LtAiPromptTemplate>('POST', '/prompt-templates', input),
-    deletePromptTemplate: (id: string) => ltAiRequest<LtAiPromptTemplate>('DELETE', `/prompt-templates/${id}`),
-    listPromptTemplates: () => ltAiRequest<LtAiPromptTemplate[]>('GET', '/prompt-templates'),
-    updatePromptTemplate: (id: string, input: LtAiPromptTemplateInput) => ltAiRequest<LtAiPromptTemplate>('PUT', `/prompt-templates/${id}`, input),
+    createSlot: (input: LtAiSlotInput) => ltAiRequest<LtAiSlot>('POST', '/slots', input),
+    deleteSlot: (id: string) => ltAiRequest<LtAiSlot>('DELETE', `/slots/${id}`),
+    listSlots: () => ltAiRequest<LtAiSlot[]>('GET', '/slots'),
+    updateSlot: (id: string, input: LtAiSlotInput) => ltAiRequest<LtAiSlot>('PUT', `/slots/${id}`, input),
 
     // Learned prompt hints (governed self-improvement loop)
     createPromptHint: (input: LtAiPromptHintInput) => ltAiRequest<LtAiPromptHint>('POST', '/prompt-hints', input),
