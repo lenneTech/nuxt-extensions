@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-05-30
+
+### Added
+
+- **AI assistant composables** for the `@lenne.tech/nest-server` AI module
+  - `useLtAi()` — one-shot prompts + SSE streaming
+  - `useLtAiChat()` — multi-turn conversation with budget summary + context-window utilization + confirmation gate
+  - `useLtAiConnections()` — user self-service connection selection
+  - `useLtAiUsage()` — token usage info per user / tenant
+  - `useLtAiAdmin()` — admin CRUD (connections, preferences, budget limits, slots, prompt hints, interactions)
+- **Slot-management composable extensions** (matching the nest-server tenant-scoped slot store)
+  - `listEffectiveSlots()` — framework defaults + tenant overrides + custom rows with `isSystem` / `isOverride` flags
+  - `resetSlot(id)` — delete a tenant override → framework default applies again
+- **User-facing prompt composable** `useLtAiPrompts()` — owner-scoped CRUD for re-usable user prompts ("Vorlagen") with `scope: 'user'` (private) / `'tenant'` (public)
+- **Placeholder registry composable** `useLtAiPlaceholders()` — loads `{{placeholder}}` definitions from the backend so editors render a dynamic helper sidebar without hard-coded names
+- **Types** — `LtAiBudgetSummary` (with cumulative `usedTokens` at every scope incl. `'llm'`), `LtAiEffectiveSlot`, `LtAiPlaceholder`, `LtAiPrompt`, `LtAiPromptInput`, `LtAiSlot`, `LtAiSlotInput`
+
+### Changed
+
+- `LtAiBudgetSummary.usedTokens` is now the running per-period total at every scope (was per-request `promptTokens` under `scope: 'llm'`)
+- Chat composable `messages` ref is now `shallowReadonly` so child components can bind individual messages while preserving streaming reactivity
+
+### Breaking
+
+- **Pre-release AI builds only:** the rename `useLtAiSnippets()` → `useLtAiPrompts()` (collection / types correspondingly) follows the nest-server rename `Snippet → Prompt`, `Template → Slot`. Projects that never installed a pre-release AI build aren't affected.
+
 ## [1.1.0] - 2026-01-24
 
 ### Added
