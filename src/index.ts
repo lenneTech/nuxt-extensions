@@ -5,72 +5,8 @@
 // Module
 export { default, name, version, configKey } from './module';
 
-// Types
-export type {
-  // Auth Types
-  LtAuthClientConfig,
-  LtAuthMode,
-  LtAuthResponse,
-  LtAuthState,
-  LtPasskeyAuthResult,
-  LtPasskeyRegisterResult,
-  LtUser,
-  UseLtAuthReturn,
-  // Upload Types
-  LtFileInfo,
-  LtUploadItem,
-  LtUploadOptions,
-  LtUploadProgress,
-  LtUploadStatus,
-  UseLtFileReturn,
-  UseLtTusUploadReturn,
-  // Module Types
-  LtAuthModuleOptions,
-  LtErrorTranslationModuleOptions,
-  LtExtensionsModuleOptions,
-  LtExtensionsPublicRuntimeConfig,
-  LtI18nModuleOptions,
-  LtSystemSetupModuleOptions,
-  LtTusModuleOptions,
-  // Error Translation Types
-  LtErrorTranslationResponse,
-  LtParsedError,
-  UseLtErrorTranslationReturn,
-  // AI Types
-  LtAiAction,
-  LtAiAvailableConnection,
-  LtAiBudgetLimit,
-  LtAiBudgetSummary,
-  LtAiConnection,
-  LtAiConnectionInput,
-  LtAiConnectionPreference,
-  LtAiEffectiveSlot,
-  LtAiInteraction,
-  LtAiMessage,
-  LtAiMode,
-  LtAiPlaceholder,
-  LtAiPrompt,
-  LtAiPromptHint,
-  LtAiPromptHintInput,
-  LtAiPromptInput,
-  LtAiPromptRunInput,
-  LtAiResponse,
-  LtAiSlot,
-  LtAiSlotInput,
-  LtAiStreamEvent,
-  LtAiStreamHandlers,
-  LtAiUsage,
-  LtAiUsageInfo,
-  LtAiUsageScope,
-  UseLtAiAdminReturn,
-  UseLtAiChatOptions,
-  UseLtAiChatReturn,
-  UseLtAiConnectionsReturn,
-  UseLtAiPlaceholdersReturn,
-  UseLtAiPromptsReturn,
-  UseLtAiReturn,
-  UseLtAiUsageReturn,
-} from './runtime/types';
+// Types — single source of truth in src/runtime/types/. See note in src/module.ts.
+export type * from './runtime/types';
 
 // Composables
 export {

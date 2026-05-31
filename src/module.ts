@@ -262,55 +262,9 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
 // Re-export all public types for external use
 // These can be imported as: import type { LtUser } from '@lenne.tech/nuxt-extensions'
 
-// Auth Types
-export type { LtAuthClientConfig, LtAuthMode, LtAuthResponse, LtAuthState, LtPasskeyAuthResult, LtPasskeyRegisterResult, LtUser, UseLtAuthReturn } from './runtime/types/auth';
-
-// Upload Types
-export type { LtFileInfo, LtUploadItem, LtUploadOptions, LtUploadProgress, LtUploadStatus, UseLtFileReturn, UseLtTusUploadReturn } from './runtime/types/upload';
-
-// Module Types
-export type {
-  LtAiModuleOptions,
-  LtAuthCookieNamesOptions,
-  LtAuthModuleOptions,
-  LtErrorTranslationModuleOptions,
-  LtExtensionsModuleOptions,
-  LtExtensionsPublicRuntimeConfig,
-  LtI18nModuleOptions,
-  LtSystemSetupModuleOptions,
-  LtTusModuleOptions,
-} from './runtime/types/module';
-
-// Error Translation Types
-export type { LtErrorTranslationResponse, LtParsedError, UseLtErrorTranslationReturn } from './runtime/types/error';
-
-// AI Types
-export type {
-  LtAiAction,
-  LtAiAvailableConnection,
-  LtAiBudgetLimit,
-  LtAiBudgetSummary,
-  LtAiConnection,
-  LtAiConnectionInput,
-  LtAiConnectionPreference,
-  LtAiInteraction,
-  LtAiMessage,
-  LtAiMode,
-  LtAiPromptHint,
-  LtAiPromptHintInput,
-  LtAiPromptInput,
-  LtAiSlot,
-  LtAiSlotInput,
-  LtAiResponse,
-  LtAiStreamEvent,
-  LtAiStreamHandlers,
-  LtAiUsage,
-  LtAiUsageInfo,
-  LtAiUsageScope,
-  UseLtAiAdminReturn,
-  UseLtAiChatOptions,
-  UseLtAiChatReturn,
-  UseLtAiConnectionsReturn,
-  UseLtAiReturn,
-  UseLtAiUsageReturn,
-} from './runtime/types/ai';
+// Single source of truth: every public type lives in src/runtime/types/.
+// Forwarding via the barrel prevents the historical drift where this module's
+// re-export list silently fell behind src/runtime/types/* and dropped types
+// from the consumer-facing dist/types.d.mts. The Vitest export-coverage spec
+// (test/public-exports.test.ts) guards against the same drift inside the barrel.
+export type * from './runtime/types';

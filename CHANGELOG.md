@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.1] - 2026-05-31
+
+### Fixed
+
+- Six 1.7.0 public AI types were defined but unreachable via the package entry — they existed in `src/runtime/types/ai.ts` but were missing from the manually-maintained re-export block in `src/module.ts`, so `nuxt-module-builder` emitted a `dist/types.d.mts` without them. Consumers got `TS2614: Module '"@lenne.tech/nuxt-extensions"' has no exported member ...` for: `LtAiPrompt`, `LtAiEffectiveSlot`, `LtAiPlaceholder`, `LtAiPromptRunInput`, `UseLtAiPromptsReturn`, `UseLtAiPlaceholdersReturn`.
+- `LtAiModuleOptions` was likewise defined in `src/runtime/types/module.ts` but missing from the runtime types barrel, so it was unreachable from `src/index.ts`.
+
+### Changed
+
+- **Root-cause fix.** Replaced the three hand-maintained type re-export lists in `src/module.ts`, `src/index.ts`, and the runtime barrel with a single source of truth: `src/runtime/types/index.ts` re-exports every public type, and both entry files forward via `export type * from './runtime/types'`. No new type can be added now and silently miss the public surface.
+- Added `test/public-exports.test.ts`, a Vitest spec that diffs every `export interface | export type` in `src/runtime/types/*.ts` against the barrel and fails if a type is missing.
+
 ## [1.7.0] - 2026-05-30
 
 ### Added

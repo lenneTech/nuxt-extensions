@@ -1,6 +1,6 @@
 {
   "name": "@lenne.tech/nuxt-extensions",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "Reusable Nuxt 4 composables, components, and Better-Auth integration for lenne.tech projects",
   "repository": {
     "type": "git",
@@ -71,7 +71,7 @@
     "release": "pnpm format:check && pnpm lint && pnpm test:types && pnpm test && pnpm prepack"
   },
   "dependencies": {
-    "@nuxt/kit": "4.4.4"
+    "@nuxt/kit": "4.4.6"
   },
   "peerDependencies": {
     "@better-auth/passkey": ">=1.0.0",
@@ -95,22 +95,22 @@
     }
   },
   "devDependencies": {
-    "@better-auth/passkey": "1.6.10",
+    "@better-auth/passkey": "1.6.13",
     "@nuxt/devtools": "3.2.4",
     "@nuxt/module-builder": "1.0.2",
-    "@nuxt/schema": "4.4.4",
-    "@playwright/test": "1.59.1",
-    "@types/node": "25.6.2",
-    "@vitest/coverage-v8": "4.1.5",
-    "better-auth": "1.6.10",
+    "@nuxt/schema": "4.4.6",
+    "@playwright/test": "1.60.0",
+    "@types/node": "25.9.1",
+    "@vitest/coverage-v8": "4.1.7",
+    "better-auth": "1.6.13",
     "happy-dom": "20.9.0",
     "nuxt": "4.4.6",
-    "oxfmt": "0.48.0",
-    "oxlint": "1.63.0",
+    "oxfmt": "0.52.0",
+    "oxlint": "1.67.0",
     "tus-js-client": "4.3.1",
     "typescript": "5.9.3",
-    "vitest": "4.1.5",
-    "vue-tsc": "3.2.8"
+    "vitest": "4.1.7",
+    "vue-tsc": "3.3.3"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -118,9 +118,6 @@
       "esbuild"
     ],
     "overrides": {
-      "@nuxt/kit@>=4.0.0 <4.4.6": "4.4.6",
-      "@nuxt/nitro-server@>=4.2.0 <=4.4.5": "4.4.6",
-      "@nuxt/schema@>=4.0.0 <4.4.6": "4.4.6",
       "brace-expansion@>=5.0.0 <5.0.6": "5.0.6",
       "devalue@>=5.6.3 <=5.8.0": "5.8.1",
       "kysely@>=0.26.0 <0.28.17": "0.28.17",

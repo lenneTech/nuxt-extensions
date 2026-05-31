@@ -10,6 +10,7 @@ export type { LtFileInfo, LtUploadItem, LtUploadOptions, LtUploadProgress, LtUpl
 
 // Module Types
 export type {
+  LtAiModuleOptions,
   LtAuthCookieNamesOptions,
   LtAuthModuleOptions,
   LtErrorTranslationModuleOptions,
