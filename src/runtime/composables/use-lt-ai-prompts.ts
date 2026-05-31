@@ -34,21 +34,48 @@ export function useLtAiPrompts(): UseLtAiPromptsReturn {
   }
 
   async function create(input: LtAiPromptInput): Promise<LtAiPrompt> {
-    const created = await ltAiRequest<LtAiPrompt>('POST', '/prompts', input);
-    await load();
-    return created;
+    loading.value = true;
+    error.value = null;
+    try {
+      const created = await ltAiRequest<LtAiPrompt>('POST', '/prompts', input);
+      await load();
+      return created;
+    } catch (err) {
+      error.value = (err as Error).message;
+      throw err;
+    } finally {
+      loading.value = false;
+    }
   }
 
   async function update(id: string, input: LtAiPromptInput): Promise<LtAiPrompt> {
-    const updated = await ltAiRequest<LtAiPrompt>('PUT', `/prompts/${id}`, input);
-    await load();
-    return updated;
+    loading.value = true;
+    error.value = null;
+    try {
+      const updated = await ltAiRequest<LtAiPrompt>('PUT', `/prompts/${encodeURIComponent(id)}`, input);
+      await load();
+      return updated;
+    } catch (err) {
+      error.value = (err as Error).message;
+      throw err;
+    } finally {
+      loading.value = false;
+    }
   }
 
   async function remove(id: string): Promise<LtAiPrompt> {
-    const removed = await ltAiRequest<LtAiPrompt>('DELETE', `/prompts/${id}`);
-    await load();
-    return removed;
+    loading.value = true;
+    error.value = null;
+    try {
+      const removed = await ltAiRequest<LtAiPrompt>('DELETE', `/prompts/${encodeURIComponent(id)}`);
+      await load();
+      return removed;
+    } catch (err) {
+      error.value = (err as Error).message;
+      throw err;
+    } finally {
+      loading.value = false;
+    }
   }
 
   return {

@@ -144,6 +144,12 @@ export default defineNuxtConfig({
     i18n: {
       autoMerge: true,              // Auto-merge locales with @nuxtjs/i18n
     },
+
+    // AI module configuration
+    ai: {
+      enabled: true,                // Enable AI composables / auto-imports
+      basePath: '/ai',              // Must match the nest-server AI controller
+    },
   },
 });
 ```
@@ -369,19 +375,39 @@ const { budget, confirm, messages, requiresConfirmation, send, streaming } = use
 the per-response `budget` summary, and drives the confirmation flow for mutating/
 destructive actions (`requiresConfirmation` → `confirm()`).
 
+### User-facing prompts ("Vorlagen")
+
+```vue
+<script setup lang="ts">
+const { create, error, load, loading, prompts, remove, update } = useLtAiPrompts();
+await load();
+// create({ name: 'Summary', content: 'Summarize {{topic}}', scope: 'user' });
+</script>
+```
+
+`useLtAiPrompts()` lets any signed-in user manage re-usable prompt snippets. `scope: 'user'`
+is private to the owner; `scope: 'tenant'` is shared across the owner's tenant. The list
+returned by `load()` is already server-filtered to what the user is allowed to see.
+
 ### Lower-level + supporting composables
 
 | Composable | Purpose |
 |------------|---------|
 | `useLtAi()` | One-shot `prompt(input)` and streaming `promptStream(input, handlers)` (POST `/ai/stream`) |
-| `useLtAiChat()` | Multi-turn chat state, streaming, budget, confirmation, `stop()`/`clear()` |
+| `useLtAiChat()` | Multi-turn chat state, streaming, budget, confirmation, `stop()`/`clear()`, optional `maxMessages` cap, auto-stop on component unmount |
 | `useLtAiConnections()` | User self-service: available connections + `select()` (`selected`/`locked`) |
 | `useLtAiUsage()` | Full token/prompt usage breakdown (`GET /ai/usage`) |
-| `useLtAiAdmin()` | Admin CRUD: connections (+ `detectCapabilities`), preferences, budget-limits, interactions |
+| `useLtAiPrompts()` | User-facing CRUD for re-usable prompt snippets ("Vorlagen", `scope: 'user'` / `'tenant'`) |
+| `useLtAiPlaceholders()` | Loads `{{placeholder}}` registry from the backend so slot / prompt editors render a dynamic helper sidebar |
+| `useLtAiAdmin()` | Admin CRUD: connections (+ `detectCapabilities`), preferences, budget-limits, slots (incl. `listEffectiveSlots`/`resetSlot`), prompt hints, interactions |
 
-Helpers: `buildLtAiUrl(path)`, `ltAiRequest(method, path, body?)`, `parseLtAiSseStream(response, onEvent)`.
+Helpers: `buildLtAiUrl(path)`, `ltAiRequest(method, path, body?)`, `parseLtAiSseStream(response, onEvent, options?)`.
 All AI DTOs are exported as `LtAi*` types. The streaming endpoint is consumed via a
 `fetch` + `ReadableStream` SSE reader (not `EventSource`, since it is a `POST` with auth).
+
+> **Security note:** `useLtAiAdmin()` is exposed as a regular composable; admin gating
+> is enforced server-side (`@Restricted(ADMIN)`). Render admin UI behind a frontend
+> route guard for UX, but trust the backend for authorization.
 
 ## i18n Support
 
@@ -407,6 +433,13 @@ The package works **with or without** `@nuxtjs/i18n`:
 | `useLtFile()` | File utilities (size formatting, URLs) |
 | `useLtShare()` | Web Share API with clipboard fallback |
 | `useSystemSetup()` | System setup flow for initial admin user creation |
+| `useLtAi()` | One-shot `prompt()` + streaming `promptStream()` for the nest-server AI module |
+| `useLtAiChat()` | Multi-turn chat state, streaming, budget summary, confirmation gate, `maxMessages` cap |
+| `useLtAiConnections()` | User self-service connection list + `select()` |
+| `useLtAiUsage()` | Token/prompt usage breakdown per user / tenant |
+| `useLtAiPrompts()` | User-facing prompt snippet CRUD (`'user'` / `'tenant'` scope) |
+| `useLtAiPlaceholders()` | Loads the backend's `{{placeholder}}` registry |
+| `useLtAiAdmin()` | Admin CRUD for connections, preferences, budget limits, slots, prompt hints, interactions |
 
 ### Components
 

@@ -43,6 +43,9 @@ coverage
 *.iml
 .idea
 
+# Claude Code (agent memory, local settings)
+.claude
+
 # OSX
 .DS_Store
 .AppleDouble

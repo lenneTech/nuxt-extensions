@@ -10,8 +10,15 @@ import type { ComputedRef, DeepReadonly, Ref } from 'vue';
 /** Execution mode for a prompt. `auto` = reactive agent loop, `plan` = validate-all-then-execute. */
 export type LtAiMode = 'auto' | 'plan';
 
-/** Input for a prompt sent to the AI assistant (`POST /ai/prompt` | `/ai/stream`). */
-export interface LtAiPromptInput {
+/**
+ * Input for a single AI run — sent to `POST /ai/prompt` | `POST /ai/stream`.
+ *
+ * Distinct from {@link LtAiPromptInput} (CRUD input for the user-facing
+ * `LtAiPrompt` entity). Pre-1.7.0 release builds called this type
+ * `LtAiPromptInput`; renamed to avoid a silent declaration merge with the
+ * CRUD input introduced for `useLtAiPrompts()`.
+ */
+export interface LtAiPromptRunInput {
   /** Confirm execution of actions that required confirmation in a previous turn. */
   confirm?: boolean;
   /** Id of the connection to use (omit to let the backend resolution chain decide). */
@@ -19,9 +26,9 @@ export interface LtAiPromptInput {
   /** Conversation id for multi-turn continuation. */
   conversationId?: string;
   /** Structured context the assistant should consider. */
-  context?: Record<string, any>;
+  context?: Record<string, unknown>;
   /** Untrusted client metadata (current URL, navigation, console logs) for enrichment. */
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   /** Execution mode (defaults to the backend's `ai.defaultMode`). */
   mode?: LtAiMode;
   /** The user's prompt text. */
@@ -370,7 +377,12 @@ export interface LtAiPrompt {
   updatedAt?: string;
 }
 
-/** Input to create/update a {@link LtAiPrompt}. */
+/**
+ * Input to create/update a {@link LtAiPrompt} (user-facing "Vorlage").
+ *
+ * Distinct from {@link LtAiPromptRunInput} (the payload for `useLtAi.prompt()`).
+ * Used by `useLtAiPrompts().create()` / `.update()`.
+ */
 export interface LtAiPromptInput {
   content?: string;
   description?: string;
@@ -388,8 +400,8 @@ export interface LtAiPromptInput {
 export interface UseLtAiReturn {
   error: DeepReadonly<Ref<null | string>>;
   loading: DeepReadonly<Ref<boolean>>;
-  prompt: (input: LtAiPromptInput) => Promise<LtAiResponse>;
-  promptStream: (input: LtAiPromptInput, handlers?: LtAiStreamHandlers, options?: { signal?: AbortSignal }) => Promise<LtAiResponse | undefined>;
+  prompt: (input: LtAiPromptRunInput) => Promise<LtAiResponse>;
+  promptStream: (input: LtAiPromptRunInput, handlers?: LtAiStreamHandlers, options?: { signal?: AbortSignal }) => Promise<LtAiResponse | undefined>;
   streaming: DeepReadonly<Ref<boolean>>;
 }
 
@@ -398,12 +410,18 @@ export interface UseLtAiChatOptions {
   connectionId?: Ref<string | undefined> | string;
   /** Existing conversation id to continue. */
   conversationId?: string;
-  /** Whether to stream responses (default true). */
-  stream?: boolean;
+  /**
+   * Cap the local `messages` array. When the cap is exceeded after a new push,
+   * the oldest entries are removed. Use this for long-running chats to prevent
+   * unbounded memory growth. Server-side conversation history is unaffected.
+   */
+  maxMessages?: number;
+  /** Producer for per-turn client metadata (e.g. current URL). */
+  metadata?: () => Record<string, unknown>;
   /** Execution mode for every turn. */
   mode?: LtAiMode;
-  /** Producer for per-turn client metadata (e.g. current URL). */
-  metadata?: () => Record<string, any>;
+  /** Whether to stream responses (default true). */
+  stream?: boolean;
 }
 
 export interface UseLtAiChatReturn {
@@ -455,30 +473,61 @@ export interface UseLtAiPromptsReturn {
   update: (id: string, input: LtAiPromptInput) => Promise<LtAiPrompt>;
 }
 
+/**
+ * Admin AI composable surface — headless on purpose: every method returns the
+ * raw backend response. No shared `loading` / `error` refs because admin
+ * screens typically need per-row spinners and per-action toasts that a single
+ * shared ref cannot model. Wire each call to your UI layer's loading/error
+ * scheme.
+ *
+ * All endpoints are server-side `@Restricted(ADMIN)`; the composable itself
+ * does not enforce role. Render admin UI behind a frontend route guard for UX,
+ * but trust the backend for authorization.
+ */
 export interface UseLtAiAdminReturn {
+  /** Create a per-user/per-tenant budget limit override (POST /ai/budget-limits). */
   createBudgetLimit: (input: LtAiBudgetLimit) => Promise<LtAiBudgetLimit>;
+  /** Create a connection. `input.apiKey` is write-only; the response never echoes it. */
   createConnection: (input: LtAiConnectionInput) => Promise<LtAiConnection>;
+  /** Create a learned prompt hint (typically used to manually approve/reject). */
   createPromptHint: (input: LtAiPromptHintInput) => Promise<LtAiPromptHint>;
+  /** Create a tenant-scoped system-prompt slot row (overrides framework default for `key`). */
   createSlot: (input: LtAiSlotInput) => Promise<LtAiSlot>;
   deleteBudgetLimit: (id: string) => Promise<LtAiBudgetLimit>;
   deleteConnection: (id: string) => Promise<LtAiConnection>;
+  /** Delete a connection preference by its preference id (NOT the user/tenant id). */
   deletePreference: (id: string) => Promise<LtAiConnectionPreference>;
   deletePromptHint: (id: string) => Promise<LtAiPromptHint>;
   deleteSlot: (id: string) => Promise<LtAiSlot>;
+  /**
+   * Re-detect a connection's `capabilities` / `supportsNativeTools` / `supportsVision`
+   * by probing the provider. Mutates the persisted connection row.
+   */
   detectCapabilities: (id: string) => Promise<LtAiConnection>;
+  /** Returns the connection WITHOUT the `apiKey` (only `hasApiKey: boolean`). */
   getConnection: (id: string) => Promise<LtAiConnection>;
   listBudgetLimits: () => Promise<LtAiBudgetLimit[]>;
   listConnections: () => Promise<LtAiConnection[]>;
   /** Effective slots view — framework defaults overlaid by tenant overrides + tenant customs. */
   listEffectiveSlots: () => Promise<LtAiEffectiveSlot[]>;
+  /** Recent AI interactions (audit log, ADMIN-only). */
   listInteractions: () => Promise<LtAiInteraction[]>;
   listPreferences: () => Promise<LtAiConnectionPreference[]>;
   listPromptHints: () => Promise<LtAiPromptHint[]>;
+  /** List ONLY tenant overrides + customs (not the framework defaults — use `listEffectiveSlots` for that). */
   listSlots: () => Promise<LtAiSlot[]>;
   /** Reset a tenant override → framework default applies again. */
   resetSlot: (id: string) => Promise<boolean>;
+  /**
+   * Upsert a connection preference for the given `refId` (user or tenant) +
+   * `scope`. Replaces the existing row for that scope if present.
+   */
   setPreference: (input: LtAiConnectionPreference) => Promise<LtAiConnectionPreference>;
   updateBudgetLimit: (id: string, input: LtAiBudgetLimit) => Promise<LtAiBudgetLimit>;
+  /**
+   * Update a connection. `input.apiKey`: pass the new value to set, an empty
+   * string `''` to clear, omit to leave the stored key unchanged.
+   */
   updateConnection: (id: string, input: LtAiConnectionInput) => Promise<LtAiConnection>;
   updatePromptHint: (id: string, input: LtAiPromptHintInput) => Promise<LtAiPromptHint>;
   updateSlot: (id: string, input: LtAiSlotInput) => Promise<LtAiSlot>;

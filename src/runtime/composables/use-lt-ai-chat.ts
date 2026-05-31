@@ -5,9 +5,9 @@
  * destructive actions.
  */
 
-import { computed, reactive, readonly, ref, unref } from '#imports';
+import { computed, getCurrentScope, onScopeDispose, reactive, readonly, ref, unref } from '#imports';
 
-import type { LtAiBudgetSummary, LtAiMessage, LtAiPromptInput, LtAiResponse, UseLtAiChatOptions, UseLtAiChatReturn } from '../types/ai';
+import type { LtAiBudgetSummary, LtAiMessage, LtAiPromptRunInput, LtAiResponse, UseLtAiChatOptions, UseLtAiChatReturn } from '../types/ai';
 import { useLtAi } from './use-lt-ai';
 
 export function useLtAiChat(options: UseLtAiChatOptions = {}): UseLtAiChatReturn {
@@ -17,6 +17,7 @@ export function useLtAiChat(options: UseLtAiChatOptions = {}): UseLtAiChatReturn
   const budget = ref<LtAiBudgetSummary | null>(null);
   const contextWindow = ref<{ total: number; used: number } | null>(null);
   const error = ref<null | string>(null);
+  const maxMessages = options.maxMessages;
   let lastPrompt = '';
   let controller: AbortController | undefined;
 
@@ -27,6 +28,12 @@ export function useLtAiChat(options: UseLtAiChatOptions = {}): UseLtAiChatReturn
 
   function resolveConnectionId(): string | undefined {
     return unref(options.connectionId) ?? undefined;
+  }
+
+  function trimMessageHistory(): void {
+    if (maxMessages && messages.value.length > maxMessages) {
+      messages.value.splice(0, messages.value.length - maxMessages);
+    }
   }
 
   /** Apply a final response to the streaming assistant message. */
@@ -50,18 +57,24 @@ export function useLtAiChat(options: UseLtAiChatOptions = {}): UseLtAiChatReturn
   }
 
   /** Run one assistant turn for the given input, streaming into a new message. */
-  async function runTurn(input: LtAiPromptInput): Promise<void> {
+  async function runTurn(input: LtAiPromptRunInput): Promise<void> {
     error.value = null;
     // Must be reactive: we mutate this object (content/actions/…) while streaming.
     // A plain object pushed into the ref array would be wrapped in a *separate*
     // reactive proxy, so mutating the original reference would not trigger re-renders.
     const assistant = reactive<LtAiMessage>({ content: '', createdAt: new Date().toISOString(), pending: true, role: 'assistant' });
     messages.value.push(assistant);
+    trimMessageHistory();
     controller = new AbortController();
     const useStream = options.stream !== false;
     try {
       if (useStream) {
-        const final = await ai.promptStream(
+        // applyFinal runs from the onFinal callback so consumers see budget /
+        // contextWindow / conversationId mutations the moment the backend emits
+        // the final event — not only after promptStream resolves. The post-await
+        // branch only handles the edge case where the stream closes WITHOUT a
+        // final event (older backends, premature disconnect).
+        await ai.promptStream(
           input,
           {
             onToken: (token) => {
@@ -71,9 +84,7 @@ export function useLtAiChat(options: UseLtAiChatOptions = {}): UseLtAiChatReturn
           },
           { signal: controller.signal },
         );
-        if (final) {
-          applyFinal(assistant, final);
-        } else {
+        if (assistant.pending) {
           assistant.pending = false;
         }
       } else {
@@ -81,6 +92,12 @@ export function useLtAiChat(options: UseLtAiChatOptions = {}): UseLtAiChatReturn
       }
     } catch (err) {
       assistant.pending = false;
+      // A user-initiated stop() aborts the underlying fetch and throws AbortError —
+      // that is NOT an error condition for the assistant turn: keep the streamed
+      // content as-is and do not surface a message to the user.
+      if ((err as Error).name === 'AbortError') {
+        return;
+      }
       assistant.error = true;
       error.value = (err as Error).message;
       if (!assistant.content) {
@@ -99,6 +116,7 @@ export function useLtAiChat(options: UseLtAiChatOptions = {}): UseLtAiChatReturn
     }
     lastPrompt = text;
     messages.value.push({ content: text, createdAt: new Date().toISOString(), role: 'user' });
+    trimMessageHistory();
     await runTurn({
       connectionId: resolveConnectionId(),
       conversationId: conversationId.value,
@@ -131,11 +149,20 @@ export function useLtAiChat(options: UseLtAiChatOptions = {}): UseLtAiChatReturn
 
   /** Clear the message history (does not delete the server-side conversation). */
   function clear(): void {
+    // Abort an in-flight stream so it does not keep writing to an orphaned
+    // assistant message after the consumer has already cleared the UI.
+    stop();
     messages.value = [];
     budget.value = null;
     contextWindow.value = null;
     error.value = null;
     lastPrompt = '';
+  }
+
+  // Abort an in-flight stream when the consuming component unmounts so the
+  // underlying fetch / SSE reader stops writing into a now-detached message.
+  if (getCurrentScope()) {
+    onScopeDispose(() => stop());
   }
 
   return {

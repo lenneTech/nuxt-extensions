@@ -7,7 +7,7 @@
 
 import { readonly, ref } from '#imports';
 
-import type { LtAiPromptInput, LtAiResponse, LtAiStreamHandlers, UseLtAiReturn } from '../types/ai';
+import type { LtAiPromptRunInput, LtAiResponse, LtAiStreamHandlers, UseLtAiReturn } from '../types/ai';
 import { buildLtAiUrl, ltAiRequest, ltAiResponseError, parseLtAiSseStream } from '../lib/ai';
 import { ltAuthFetch } from '../lib/auth-state';
 
@@ -17,7 +17,7 @@ export function useLtAi(): UseLtAiReturn {
   const error = ref<null | string>(null);
 
   /** Run a prompt and return the full structured response. */
-  async function prompt(input: LtAiPromptInput): Promise<LtAiResponse> {
+  async function prompt(input: LtAiPromptRunInput): Promise<LtAiResponse> {
     loading.value = true;
     error.value = null;
     try {
@@ -30,8 +30,15 @@ export function useLtAi(): UseLtAiReturn {
     }
   }
 
-  /** Run a prompt and stream the answer; resolves with the final response. */
-  async function promptStream(input: LtAiPromptInput, handlers?: LtAiStreamHandlers, options?: { signal?: AbortSignal }): Promise<LtAiResponse | undefined> {
+  /**
+   * Run a prompt and stream the answer; resolves with the final response.
+   *
+   * Intended for client-side use. Running this during SSR holds the SSR response
+   * open until the stream terminates — guard with `if (import.meta.client)` in
+   * page-level code if needed. Resolves to `undefined` when the backend closes
+   * the stream without emitting a `type: 'final'` event.
+   */
+  async function promptStream(input: LtAiPromptRunInput, handlers?: LtAiStreamHandlers, options?: { signal?: AbortSignal }): Promise<LtAiResponse | undefined> {
     streaming.value = true;
     error.value = null;
     let final: LtAiResponse | undefined;

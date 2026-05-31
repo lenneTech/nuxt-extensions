@@ -44,15 +44,19 @@ export type {
   LtAiConnection,
   LtAiConnectionInput,
   LtAiConnectionPreference,
+  LtAiEffectiveSlot,
   LtAiInteraction,
   LtAiMessage,
   LtAiMode,
+  LtAiPlaceholder,
+  LtAiPrompt,
   LtAiPromptHint,
   LtAiPromptHintInput,
   LtAiPromptInput,
+  LtAiPromptRunInput,
+  LtAiResponse,
   LtAiSlot,
   LtAiSlotInput,
-  LtAiResponse,
   LtAiStreamEvent,
   LtAiStreamHandlers,
   LtAiUsage,
@@ -62,6 +66,8 @@ export type {
   UseLtAiChatOptions,
   UseLtAiChatReturn,
   UseLtAiConnectionsReturn,
+  UseLtAiPlaceholdersReturn,
+  UseLtAiPromptsReturn,
   UseLtAiReturn,
   UseLtAiUsageReturn,
 } from './runtime/types';
@@ -88,6 +94,8 @@ export {
   useLtAiConnections,
   useLtAiUsage,
   useLtAiAdmin,
+  useLtAiPrompts,
+  useLtAiPlaceholders,
 } from './runtime/composables';
 
 // Utilities
