@@ -29,3 +29,6 @@ export {
   resetLtAuthClientSingleton,
   type LtAuthClient,
 } from './auth-client';
+
+// AI client helpers (URL builder, JSON request, SSE parser)
+export { buildLtAiUrl, getLtAiBasePath, ltAiRequest, ltAiResponseError, parseLtAiSseStream } from './ai';

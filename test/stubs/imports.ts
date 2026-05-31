@@ -13,7 +13,7 @@
  * stubs sufficient for unit testing.
  */
 
-import { computed, ref, watch, type Ref } from 'vue';
+import { computed, getCurrentScope, onScopeDispose, reactive, readonly, ref, shallowReadonly, unref, watch, type Ref } from 'vue';
 
 interface StubRuntimeConfig {
   app?: Record<string, unknown>;
@@ -81,4 +81,4 @@ export function useNuxtApp(): Record<string, unknown> {
   return {};
 }
 
-export { computed, ref, watch };
+export { computed, getCurrentScope, onScopeDispose, reactive, readonly, ref, shallowReadonly, unref, watch };

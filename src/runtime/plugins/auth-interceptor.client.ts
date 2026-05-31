@@ -128,43 +128,59 @@ export default (nuxtApp: NuxtApp): void => {
     }
   }
 
-  // Override the default $fetch to add response error handling
-  const originalFetch = globalThis.$fetch;
-
-  // Use a wrapper to intercept responses
+  // Guard against double-wrapping on HMR / repeated plugin invocation. Without
+  // this, `originalFetch` / `originalNativeFetch` become the *previous wrapper*
+  // on each reload — stack growth + duplicated 401 handlers (double redirect).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  globalThis.$fetch = ((url: string, options?: any) => {
-    return originalFetch(url, {
-      ...options,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      onResponseError: (context: any) => {
-        // Call original onResponseError if provided
-        if (options?.onResponseError) {
-          options.onResponseError(context);
-        }
+  const wrapMarker = '__ltAuthFetchWrapped';
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (!(globalThis as any)[wrapMarker]) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (globalThis as any)[wrapMarker] = true;
 
-        // Handle 401 errors
-        if (context.response?.status === 401) {
-          handleUnauthorized(url);
-        }
-      },
-    });
-  }) as typeof globalThis.$fetch;
+    // Override the default $fetch to add response error handling.
+    // $fetch's type embeds Nuxt's generated route union; calling it with a plain
+    // string url makes vue-tsc instantiate that deeply-nested conditional type and
+    // fail with "Excessive stack depth". Cast to a loose callable — the wrapper
+    // below is reassigned `as typeof globalThis.$fetch`, so the public type is kept.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const originalFetch = globalThis.$fetch as any;
 
-  // Also intercept native fetch for manual API calls
-  const originalNativeFetch = globalThis.fetch;
+    // Use a wrapper to intercept responses
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    globalThis.$fetch = ((url: string, options?: any) => {
+      return originalFetch(url, {
+        ...options,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        onResponseError: (context: any) => {
+          // Call original onResponseError if provided
+          if (options?.onResponseError) {
+            options.onResponseError(context);
+          }
 
-  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-    const response = await originalNativeFetch(input, init);
+          // Handle 401 errors
+          if (context.response?.status === 401) {
+            handleUnauthorized(url);
+          }
+        },
+      });
+    }) as typeof globalThis.$fetch;
 
-    // Handle 401 errors from native fetch
-    if (response.status === 401) {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-      handleUnauthorized(url);
-    }
+    // Also intercept native fetch for manual API calls
+    const originalNativeFetch = globalThis.fetch;
 
-    return response;
-  };
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const response = await originalNativeFetch(input, init);
+
+      // Handle 401 errors from native fetch
+      if (response.status === 401) {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        handleUnauthorized(url);
+      }
+
+      return response;
+    };
+  }
 
   // Provide a manual method to trigger logout on 401
   nuxtApp.provide('ltHandleUnauthorized', handleUnauthorized);
