@@ -13,7 +13,7 @@
  */
 
 import { useRuntimeConfig } from '#imports';
-import type { LtAuthMode } from '../types';
+import type { LtAuthMode, LtAuthState } from '../types';
 
 // =============================================================================
 // Cookie Name Resolution
@@ -25,22 +25,126 @@ export const LT_AUTH_STATE_COOKIE_DEFAULT = 'lt-auth-state';
 export const LT_JWT_TOKEN_COOKIE_DEFAULT = 'lt-jwt-token';
 
 /**
+ * Sanitise a raw prefix into a valid cookie-name token. Only RFC 6265
+ * token characters survive (`[A-Za-z0-9._-]`); surrounding whitespace and any
+ * illegal character (space, `;`, `=`, …) are stripped so a typo can never
+ * produce a malformed `Set-Cookie` name. Returns `''` for non-strings / empties.
+ */
+function sanitizeCookiePrefix(raw: unknown): string {
+  if (typeof raw !== 'string') {
+    return '';
+  }
+  return raw.trim().replace(/[^A-Za-z0-9._-]/g, '');
+}
+
+/**
+ * Resolve the cookie prefix that drives the auth cookie names.
+ *
+ * A single, dedicated, OPT-IN knob with a safe default:
+ *   - **`cookiePrefix`** (`NUXT_PUBLIC_COOKIE_PREFIX` →
+ *     `runtimeConfig.public.cookiePrefix`) → `<prefix>-auth-state` /
+ *     `<prefix>-jwt-token`. Lets a project run with its own cookie namespace —
+ *     e.g. several lenne.tech apps on a shared host during development, where
+ *     cookies collide by host (not port) and would otherwise read each other's
+ *     `lt-auth-state` (a "ghost" user from the other project).
+ *   - otherwise `''` → the default `lt-auth-state` / `lt-jwt-token`.
+ *
+ * `storagePrefix` deliberately does NOT influence the cookie name. It is a
+ * localStorage-namespacing convention; coupling it to cookies would silently
+ * rename auth cookies on a mere upgrade (logging every user out, bouncing valid
+ * sessions in custom middleware that reads `lt-auth-state` directly) and force
+ * frontend/backend to be deployed in lockstep. Cookie naming is therefore
+ * controlled ONLY by this explicit, opt-in knob → fully backward compatible.
+ *
+ * IMPORTANT: when you set `cookiePrefix`, mirror it on the backend
+ * (`COOKIE_PREFIX` env — see nest-server `resolveBetterAuthCookiePrefix`) so
+ * both sides always agree on the cookie name.
+ */
+export function resolveLtCookiePrefix(pub: null | Record<string, any> | undefined): string {
+  return sanitizeCookiePrefix(pub?.cookiePrefix);
+}
+
+/**
  * Resolve the configured auth cookie names from runtime config.
  *
- * Falls back to the defaults (`lt-auth-state`, `lt-jwt-token`) so callers
- * keep working even outside a Nuxt context (tests, edge SSR boots).
+ * **Per-project isolation (collision avoidance).** Cookies are scoped by
+ * host+path, NOT by port. Two lenne.tech apps sharing a host during development
+ * (e.g. both on `localhost`) would otherwise read each other's `lt-auth-state`
+ * cookie — surfacing a "ghost" user from the other project. The cookie name is
+ * therefore derived from a per-project prefix (see {@link resolveLtCookiePrefix}).
+ *
+ * Resolution order:
+ *   1. an explicitly configured `cookieNames.state/token` (exact name) always wins;
+ *   2. otherwise `<prefix>-auth-state` / `<prefix>-jwt-token` where `prefix`
+ *      comes from {@link resolveLtCookiePrefix} (the opt-in `cookiePrefix`);
+ *   3. otherwise fall back to the legacy `lt-auth-state` / `lt-jwt-token`
+ *      (backward compatible — no behaviour change for apps without a prefix).
+ *
+ * Falls back to the defaults so callers keep working even outside a Nuxt
+ * context (tests, edge SSR boots).
  */
 export function getLtAuthCookieNames(): { state: string; token: string } {
   try {
     const runtimeConfig = useRuntimeConfig();
-    const configured = (runtimeConfig.public as Record<string, any>)?.ltExtensions?.auth?.cookieNames;
-    return {
-      state: configured?.state || LT_AUTH_STATE_COOKIE_DEFAULT,
-      token: configured?.token || LT_JWT_TOKEN_COOKIE_DEFAULT,
-    };
+    const pub = runtimeConfig.public as Record<string, any>;
+    const configured = pub?.ltExtensions?.auth?.cookieNames;
+    const prefix = resolveLtCookiePrefix(pub);
+
+    // An explicit config value (anything other than the module default) wins;
+    // otherwise derive from the resolved prefix; otherwise keep the legacy name.
+    const state = configured?.state && configured.state !== LT_AUTH_STATE_COOKIE_DEFAULT ? configured.state : prefix ? `${prefix}-auth-state` : LT_AUTH_STATE_COOKIE_DEFAULT;
+    const token = configured?.token && configured.token !== LT_JWT_TOKEN_COOKIE_DEFAULT ? configured.token : prefix ? `${prefix}-jwt-token` : LT_JWT_TOKEN_COOKIE_DEFAULT;
+    return { state, token };
   } catch {
     return { state: LT_AUTH_STATE_COOKIE_DEFAULT, token: LT_JWT_TOKEN_COOKIE_DEFAULT };
   }
+}
+
+/**
+ * Resolve the authoritative auth state from a raw `Cookie` header /
+ * `document.cookie` string, tolerating **multiple** auth-state cookies with the
+ * same name.
+ *
+ * A deployed setup can end up with TWO auth-state cookies in parallel — a
+ * host-only one (written by `useCookie` / `setUser`) and a domain-scoped one
+ * (e.g. set by a backend SAML callback with `Domain=<appHost>` so it is
+ * readable across `app` and `api.app`). They can disagree: one carries the
+ * signed-in user, the other a stale `{ user: null }` left behind by a partial
+ * clear. A naive single-value read (`useCookie`, or `document.cookie.find`)
+ * may pick the stale twin and wrongly report the user as logged out — which
+ * makes SSR auth guards bounce a perfectly valid session to the login page.
+ *
+ * This scans ALL matching entries and prefers the one that actually carries a
+ * `user`; only when none do does it return the (user-less) fallback state.
+ *
+ * SECURITY NOTE: preferring the user-bearing twin is intentional and required —
+ * preferring the `{ user: null }` twin is exactly what caused the random logout.
+ * `lt-auth-state` is a NON-authoritative client convenience cache for the app
+ * shell, NOT the session identifier (that is the httpOnly session cookie, e.g.
+ * `iam.session_token`). A forged/injected user-bearing cookie therefore yields
+ * at most UI spoofing ("looks logged in") — every real API/server call still
+ * authenticates against the httpOnly session and 401s. This trust boundary is
+ * unchanged by the duplicate-tolerant read; it only decides which twin wins.
+ */
+export function resolveLtAuthState(cookieString: string, stateCookieName?: string): LtAuthState | null {
+  const name = stateCookieName || getLtAuthCookieNames().state;
+  const prefix = `${name}=`;
+  let fallback: LtAuthState | null = null;
+  for (const entry of (cookieString || '').split('; ')) {
+    if (!entry.startsWith(prefix)) continue;
+    try {
+      const state = JSON.parse(decodeURIComponent(entry.slice(prefix.length))) as LtAuthState;
+      if (state?.user) {
+        return state;
+      }
+      if (state) {
+        fallback = state;
+      }
+    } catch {
+      // Skip malformed cookie entries
+    }
+  }
+  return fallback;
 }
 
 // =============================================================================
@@ -194,19 +298,9 @@ export function buildLtApiUrl(path: string): string {
 export function getLtAuthMode(): LtAuthMode {
   if (import.meta.server) return 'cookie';
 
-  try {
-    const { state: stateCookieName } = getLtAuthCookieNames();
-    const cookie = document.cookie.split('; ').find((row) => row.startsWith(`${stateCookieName}=`));
-    if (cookie) {
-      const parts = cookie.split('=');
-      const value = parts.length > 1 ? decodeURIComponent(parts.slice(1).join('=')) : '';
-      const state = JSON.parse(value);
-      return state?.authMode || 'cookie';
-    }
-  } catch {
-    // Ignore parse errors
-  }
-  return 'cookie';
+  // Duplicate-tolerant read (prefers the user-bearing cookie when a stale twin
+  // exists) so the auth mode is not read off a `{ user: null }` shadow.
+  return resolveLtAuthState(document.cookie)?.authMode || 'cookie';
 }
 
 /**
@@ -217,15 +311,18 @@ export function getLtJwtToken(): string | null {
 
   try {
     const { token: tokenCookieName } = getLtAuthCookieNames();
-    const cookie = document.cookie.split('; ').find((row) => row.startsWith(`${tokenCookieName}=`));
-    if (cookie) {
-      const parts = cookie.split('=');
-      const value = parts.length > 1 ? decodeURIComponent(parts.slice(1).join('=')) : '';
+    const cookiePrefix = `${tokenCookieName}=`;
+    // Duplicate-tolerant: when host-only + domain-scoped twins coexist, prefer
+    // the first NON-EMPTY token instead of whatever `.find()` happens to return
+    // (which could be an empty/cleared twin) — mirrors resolveLtAuthState.
+    for (const row of document.cookie.split('; ')) {
+      if (!row.startsWith(cookiePrefix)) continue;
+      const raw = decodeURIComponent(row.slice(cookiePrefix.length));
       // Handle JSON-encoded string (useCookie stores as JSON)
-      if (value.startsWith('"') && value.endsWith('"')) {
-        return JSON.parse(value);
+      const value = raw.startsWith('"') && raw.endsWith('"') ? (JSON.parse(raw) as string) : raw;
+      if (value) {
+        return value;
       }
-      return value || null;
     }
   } catch {
     // Ignore parse errors
@@ -270,13 +367,27 @@ export function clearLtAuthCookies(): void {
 
   const { state: stateCookieName, token: tokenCookieName } = getLtAuthCookieNames();
   const secure = globalThis.location?.protocol === 'https:' ? '; secure' : '';
+  // Domain-scoped twin attribute. A backend SAML callback may set the
+  // auth-state cookie with `Domain=<appHost>` so it is shared across `app` and
+  // `api.app`. The browser stores that as a SEPARATE cookie slot from the
+  // host-only one `useCookie`/`setUser` write — clearing only host-only leaves
+  // the domain-scoped twin behind, which then shadows a fresh login and was the
+  // root cause of the "random session loss" loop. So we expire BOTH slots.
+  const host = globalThis.location?.hostname;
+  const domainAttr = host ? `; domain=${host}` : '';
 
-  // Hard-delete the auth-state cookie: max-age=0 with the same attributes used
-  // by setUser() so the browser actually drops it instead of leaving a stub.
+  // Hard-delete the auth-state cookie on BOTH slots: max-age=0 with the same
+  // attributes used by setUser() so the browser actually drops it.
   document.cookie = `${stateCookieName}=; path=/; max-age=0; samesite=lax${secure}`;
+  if (domainAttr) {
+    document.cookie = `${stateCookieName}=; path=/; max-age=0; samesite=lax${secure}${domainAttr}`;
+  }
 
-  // JWT token cookie — mirror setLtJwtToken's clear branch.
+  // JWT token cookie — mirror setLtJwtToken's clear branch (both slots).
   document.cookie = `${tokenCookieName}=; path=/; max-age=0; samesite=lax${secure}`;
+  if (domainAttr) {
+    document.cookie = `${tokenCookieName}=; path=/; max-age=0; samesite=lax${secure}${domainAttr}`;
+  }
 
   // Best-effort: clear Better-Auth client-side session cookies. These are
   // usually httpOnly (set by the API) and unreachable from JS, but covering
@@ -284,10 +395,12 @@ export function clearLtAuthCookies(): void {
   // disables httpOnly for local debugging.
   const sessionCookieNames = ['better-auth.session_token', 'better-auth.session', '__Secure-better-auth.session_token', 'session_token', 'session'];
   for (const name of sessionCookieNames) {
-    document.cookie = `${name}=; path=/; max-age=0`;
-    document.cookie = `${name}=; path=/api; max-age=0`;
-    document.cookie = `${name}=; path=/api/iam; max-age=0`;
-    document.cookie = `${name}=; path=/iam; max-age=0`;
+    for (const path of ['/', '/api', '/api/iam', '/iam']) {
+      document.cookie = `${name}=; path=${path}; max-age=0`;
+      if (domainAttr) {
+        document.cookie = `${name}=; path=${path}; max-age=0${domainAttr}`;
+      }
+    }
   }
 }
 
@@ -299,14 +412,10 @@ export function setLtAuthMode(mode: LtAuthMode): void {
 
   try {
     const { state: stateCookieName } = getLtAuthCookieNames();
-    const cookie = document.cookie.split('; ').find((row) => row.startsWith(`${stateCookieName}=`));
-
-    let state = { user: null, authMode: mode };
-    if (cookie) {
-      const parts = cookie.split('=');
-      const value = parts.length > 1 ? decodeURIComponent(parts.slice(1).join('=')) : '';
-      state = { ...JSON.parse(value), authMode: mode };
-    }
+    // Duplicate-tolerant read so we merge `authMode` INTO the user-bearing twin
+    // instead of a stale `{ user: null }` shadow (which would drop the user).
+    const existing = resolveLtAuthState(document.cookie, stateCookieName);
+    const state = { ...(existing ?? { user: null }), authMode: mode };
 
     const maxAge = 60 * 60 * 24 * 7; // 7 days
     const secure = globalThis.location?.protocol === 'https:' ? '; secure' : '';
@@ -373,19 +482,9 @@ export async function attemptLtJwtSwitch(basePath: string = '/iam'): Promise<boo
 export function isLtAuthenticated(): boolean {
   if (import.meta.server) return false;
 
-  try {
-    const { state: stateCookieName } = getLtAuthCookieNames();
-    const cookie = document.cookie.split('; ').find((row) => row.startsWith(`${stateCookieName}=`));
-    if (cookie) {
-      const parts = cookie.split('=');
-      const value = parts.length > 1 ? decodeURIComponent(parts.slice(1).join('=')) : '';
-      const state = JSON.parse(value);
-      return !!state?.user;
-    }
-  } catch {
-    // Ignore parse errors
-  }
-  return false;
+  // Duplicate-tolerant read: true when ANY auth-state cookie carries a user,
+  // so a stale `{ user: null }` twin can't mask a valid session.
+  return !!resolveLtAuthState(document.cookie)?.user;
 }
 
 /**

@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-06-03
+
+### Fixed
+
+- **Random logout / "session loss" via SSR cookie write.** The auth composable wrote a default `{ user: null }` `lt-auth-state` cookie during SSR. With a backend-set, domain-scoped auth-state cookie (e.g. a SAML callback using `Domain=<appHost>`), this host-only `{ user: null }` twin shadowed the real session, so SSR auth guards intermittently bounced perfectly valid sessions to the login page. SSR no longer emits a clearing cookie: `setUser` only persists a user-bearing state on the server, `clearUser` is client-only, and the composable resolves auth state from the raw request `Cookie` header instead.
+- **Duplicate-tolerant auth-state read** (`resolveLtAuthState`): when a host-only and a domain-scoped `lt-auth-state` cookie disagree, the user-bearing one now wins instead of a stale `{ user: null }`. `getLtAuthMode`, `isLtAuthenticated`, `getLtJwtToken` and `setLtAuthMode` all use this read.
+- `clearLtAuthCookies` now expires BOTH the host-only and the domain-scoped cookie slot, so no "logged out" twin lingers after logout.
+
+### Added
+
+- **Opt-in per-project cookie namespace** via `cookiePrefix` (`NUXT_PUBLIC_COOKIE_PREFIX` → `runtimeConfig.public.cookiePrefix`). When set, the auth cookies become `<prefix>-auth-state` / `<prefix>-jwt-token`, so several lenne.tech apps can run on a shared host (e.g. `localhost`, where cookies collide by host — not port) without reading each other's session ("ghost" user). Unset → the legacy `lt-auth-state` / `lt-jwt-token` names (**fully backward compatible** — no project's cookie name changes on upgrade). Mirror the value on the backend via the `COOKIE_PREFIX` env (`@lenne.tech/nest-server` matching release) so both sides agree on the name. The prefix is sanitised to valid cookie-name characters. NOTE: `storagePrefix` deliberately does **not** influence cookie names (it is a localStorage-namespacing concern; coupling it would silently rename cookies on upgrade).
+
+### Tests
+
+- Added `resolveLtAuthState` twin-resolution tests (prefer user-bearing, malformed, fallback, custom name), `cookiePrefix` resolution + sanitisation tests, and a `useRequestHeaders` test stub.
+
 ## [1.7.1] - 2026-05-31
 
 ### Fixed

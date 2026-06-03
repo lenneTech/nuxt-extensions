@@ -12,9 +12,9 @@
 
 import type { LtAuthMode, LtAuthState, LtPasskeyAuthResult, LtPasskeyRegisterResult, LtUser, UseLtAuthReturn } from '../../types';
 
-import { useNuxtApp, useCookie, useState, ref, computed, watch } from '#imports';
+import { useNuxtApp, useCookie, useState, useRequestHeaders, ref, computed, watch } from '#imports';
 import { ltArrayBufferToBase64Url, ltBase64UrlToUint8Array } from '../../utils/crypto';
-import { clearLtAuthCookies, getLtApiBase, getLtAuthCookieNames } from '../../lib/auth-state';
+import { clearLtAuthCookies, getLtApiBase, getLtAuthCookieNames, resolveLtAuthState } from '../../lib/auth-state';
 import { useLtAuthClient } from '../use-lt-auth-client';
 
 /**
@@ -72,31 +72,28 @@ export function useLtAuth(): UseLtAuthReturn {
     sameSite: 'lax',
   });
 
-  // On client, sync from browser cookie to ensure we have the latest value
-  // This prevents hydration mismatch where useCookie may return stale/null value
+  // On client, sync from the browser cookies to ensure we have the latest
+  // value. Uses a duplicate-tolerant resolve so a stale `{ user: null }` twin
+  // (host-only vs. domain-scoped) can never shadow the real, user-bearing
+  // cookie and trigger a hydration mismatch / false "logged out" state.
   if (import.meta.client) {
     try {
-      const cookieStr = document.cookie.split('; ').find((row) => row.startsWith(`${stateCookieName}=`));
-      if (cookieStr) {
-        const parts = cookieStr.split('=');
-        const value = parts.length > 1 ? decodeURIComponent(parts.slice(1).join('=')) : '';
-        if (value) {
-          const parsed = JSON.parse(value);
-          // Only update if the browser cookie has a user but useCookie doesn't
-          if (parsed?.user && !authState.value?.user) {
-            authState.value = parsed;
-          }
-        }
+      const resolved = resolveLtAuthState(document.cookie, stateCookieName);
+      // Only adopt when the browser carries a user but useCookie didn't pick it.
+      if (resolved?.user && !authState.value?.user) {
+        authState.value = resolved;
       }
     } catch {
       // Ignore parse errors
     }
   }
 
-  // Initialize with default only on server if cookie doesn't exist
-  if (import.meta.server && (authState.value === null || authState.value === undefined)) {
-    authState.value = { user: null, authMode: 'cookie' };
-  }
+  // SSR: capture the raw request Cookie header ONCE so the resolved state below
+  // can inspect every `lt-auth-state` cookie. We must NOT write a default
+  // `{ user: null }` cookie here (the previous behaviour) — assigning to the
+  // `useCookie` ref on the server emits a host-only Set-Cookie that actively
+  // manufactures the stale twin which then shadows the real session.
+  const ssrCookieHeader = import.meta.server ? useRequestHeaders(['cookie']).cookie || '' : '';
 
   // JWT token storage (used when cookies are not available)
   const jwtToken = useCookie<string | null>(tokenCookieName, {
@@ -107,12 +104,23 @@ export function useLtAuth(): UseLtAuthReturn {
   // Loading state
   const isLoading = ref<boolean>(false);
 
+  // Authoritative, duplicate-tolerant view of the auth state. Prefers the
+  // cookie that actually carries a user when host-only + domain-scoped twins
+  // disagree — on the client from `document.cookie`, on the server from the raw
+  // request Cookie header (`useCookie` collapses duplicates to a single value).
+  // Touching `authState.value` keeps it reactive to client login/logout writes.
+  const resolvedAuthState = computed<LtAuthState | null>(() => {
+    const refVal = authState.value;
+    const cookieString = import.meta.client ? document.cookie : ssrCookieHeader;
+    return resolveLtAuthState(cookieString, stateCookieName) ?? refVal ?? null;
+  });
+
   // Auth mode: 'cookie' (default) or 'jwt' (fallback)
-  const authMode = computed(() => authState.value?.authMode || 'cookie');
+  const authMode = computed(() => resolvedAuthState.value?.authMode || 'cookie');
   const isJwtMode = computed(() => authMode.value === 'jwt');
 
   // Computed properties based on stored state
-  const user = computed<LtUser | null>(() => authState.value?.user ?? null);
+  const user = computed<LtUser | null>(() => resolvedAuthState.value?.user ?? null);
   const isAuthenticated = computed<boolean>(() => !!user.value);
   const isAdmin = computed<boolean>(() => user.value?.role === 'admin');
   const is2FAEnabled = computed<boolean>(() => user.value?.twoFactorEnabled ?? false);
@@ -127,9 +135,20 @@ export function useLtAuth(): UseLtAuthReturn {
    */
   function setUser(userData: LtUser | null, mode: LtAuthMode = 'cookie'): void {
     const newState = { user: userData, authMode: mode };
-    authState.value = newState;
 
-    // Manually write to browser cookie for immediate SSR compatibility
+    // Cookie-backed state write rules:
+    //  - On the CLIENT: always update (login/logout/2FA happen here).
+    //  - On the SERVER: only when there IS a user. Assigning a `{ user: null }`
+    //    state to a `useCookie` ref during SSR emits a host-only Set-Cookie that
+    //    clobbers the real (e.g. SAML-set, domain-scoped) session cookie — the
+    //    SSR-write class of bug behind the "random logout". A user-bearing SSR
+    //    write is harmless and keeps server-rendered auth state consistent when
+    //    a project resolves the user during SSR (e.g. validateSession()).
+    if (import.meta.client || userData) {
+      authState.value = newState;
+    }
+
+    // Manual browser cookie write for immediate same-tick consistency (client only).
     if (import.meta.client) {
       const maxAge = 60 * 60 * 24 * 7; // 7 days
       const secure = globalThis.location?.protocol === 'https:' ? '; secure' : '';
@@ -148,15 +167,18 @@ export function useLtAuth(): UseLtAuthReturn {
    * underlying cookies are removed entirely.
    */
   function clearUser(): void {
-    const clearedState = { user: null, authMode: 'cookie' as const };
-    authState.value = clearedState;
-    jwtToken.value = null;
-
-    // Hard-delete the cookies in the browser (no payload, max-age=0).
-    // Centralised in `clearLtAuthCookies` so the helper-based call sites
-    // (e.g. session-expired interceptors) and the composable agree on the
-    // exact attributes the browser needs to actually evict the cookies.
+    // CLIENT-only: mutating the `useCookie` refs (authState / jwtToken) on the
+    // server would emit a `{ user: null }` Set-Cookie that actively manufactures
+    // the stale "logged out" twin — the SSR-write class of bug. Logout is a
+    // client action; SSR auth state is derived from the request Cookie header.
     if (import.meta.client) {
+      authState.value = { user: null, authMode: 'cookie' as const };
+      jwtToken.value = null;
+
+      // Hard-delete the cookies in the browser (no payload, max-age=0).
+      // Centralised in `clearLtAuthCookies` so the helper-based call sites
+      // (e.g. session-expired interceptors) and the composable agree on the
+      // exact attributes the browser needs to actually evict the cookies.
       clearLtAuthCookies();
     }
   }

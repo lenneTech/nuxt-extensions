@@ -45,6 +45,36 @@ export function useRuntimeConfig(): StubRuntimeConfig {
   return runtimeConfig;
 }
 
+// Mutable store for the SSR request-headers stub so tests can simulate the
+// server-side raw `Cookie` header read (use-lt-auth.ts `resolvedAuthState`).
+let requestHeaders: Record<string, string> = {};
+
+export function setStubRequestHeaders(next: Record<string, string>): void {
+  requestHeaders = next;
+}
+
+export function resetStubRequestHeaders(): void {
+  requestHeaders = {};
+}
+
+/**
+ * Minimal `useRequestHeaders` stub. Production code calls this (server-only) to
+ * read the raw `Cookie` header for duplicate-tolerant SSR auth resolution.
+ * Returns only the requested keys, mirroring Nuxt's signature.
+ */
+export function useRequestHeaders(keys?: string[]): Record<string, string> {
+  if (!keys) {
+    return { ...requestHeaders };
+  }
+  const picked: Record<string, string> = {};
+  for (const key of keys) {
+    if (requestHeaders[key] !== undefined) {
+      picked[key] = requestHeaders[key];
+    }
+  }
+  return picked;
+}
+
 /**
  * Minimal `useCookie` stub. Returns a cached reactive ref keyed by name so
  * repeated calls within the same composable hand back the same handle. The

@@ -108,6 +108,18 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
       (rc.public as any).apiUrl = '';
     }
 
+    // Declare the public `cookiePrefix` key so `NUXT_PUBLIC_COOKIE_PREFIX` is
+    // picked up at runtime for EVERY project without each one re-declaring it.
+    // This is the dedicated, OPT-IN override for the auth cookie namespace (see
+    // resolveLtCookiePrefix), letting a project run fully autonomously on a
+    // shared host. Empty default keeps the legacy `lt-auth-state` /
+    // `lt-jwt-token` names (fully backward compatible — `storagePrefix` does NOT
+    // affect cookie names). MUST mirror the backend `COOKIE_PREFIX` env so both
+    // sides agree.
+    if (!(rc.public as any).cookiePrefix) {
+      (rc.public as any).cookiePrefix = '';
+    }
+
     // Add runtime config
     nuxt.options.runtimeConfig.public.ltExtensions = {
       ai: {

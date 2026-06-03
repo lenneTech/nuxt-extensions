@@ -77,6 +77,117 @@ describe('auth cookie name configuration', () => {
     });
   });
 
+  describe('resolveLtCookiePrefix (opt-in cookiePrefix only)', () => {
+    it('returns "" (default) for empty / missing config', async () => {
+      const { resolveLtCookiePrefix } = await import('../src/runtime/lib/auth-state');
+      expect(resolveLtCookiePrefix(undefined)).toBe('');
+      expect(resolveLtCookiePrefix(null)).toBe('');
+      expect(resolveLtCookiePrefix({})).toBe('');
+      expect(resolveLtCookiePrefix({ cookiePrefix: '' })).toBe('');
+    });
+
+    it('returns the configured cookiePrefix', async () => {
+      const { resolveLtCookiePrefix } = await import('../src/runtime/lib/auth-state');
+      expect(resolveLtCookiePrefix({ cookiePrefix: 'acme' })).toBe('acme');
+    });
+
+    it('IGNORES storagePrefix entirely (backward-compatible — no silent rename)', async () => {
+      const { resolveLtCookiePrefix } = await import('../src/runtime/lib/auth-state');
+      // The whole point: a localStorage namespacing prefix must NOT change cookies.
+      expect(resolveLtCookiePrefix({ storagePrefix: 'myapp-prod' })).toBe('');
+      expect(resolveLtCookiePrefix({ cookiePrefix: 'acme', storagePrefix: 'myapp-prod' })).toBe('acme');
+    });
+
+    it('trims surrounding whitespace', async () => {
+      const { resolveLtCookiePrefix } = await import('../src/runtime/lib/auth-state');
+      expect(resolveLtCookiePrefix({ cookiePrefix: '  acme  ' })).toBe('acme');
+      expect(resolveLtCookiePrefix({ cookiePrefix: '   ' })).toBe('');
+    });
+
+    it('sanitises illegal cookie-name characters (space, ;, =, etc.)', async () => {
+      const { resolveLtCookiePrefix } = await import('../src/runtime/lib/auth-state');
+      expect(resolveLtCookiePrefix({ cookiePrefix: 'ac me' })).toBe('acme');
+      expect(resolveLtCookiePrefix({ cookiePrefix: 'a;b=c' })).toBe('abc');
+      expect(resolveLtCookiePrefix({ cookiePrefix: 'my.app_1-2' })).toBe('my.app_1-2');
+      expect(resolveLtCookiePrefix({ cookiePrefix: '€€€' })).toBe('');
+    });
+
+    it('ignores non-string values defensively', async () => {
+      const { resolveLtCookiePrefix } = await import('../src/runtime/lib/auth-state');
+      expect(resolveLtCookiePrefix({ cookiePrefix: 123 as unknown as string })).toBe('');
+      expect(resolveLtCookiePrefix({ cookiePrefix: {} as unknown as string })).toBe('');
+    });
+  });
+
+  describe('getLtAuthCookieNames (cookiePrefix derivation)', () => {
+    it('derives <cookiePrefix>-auth-state / -jwt-token', async () => {
+      const { getLtAuthCookieNames } = await import('../src/runtime/lib/auth-state');
+      setStubRuntimeConfig({ public: { cookiePrefix: 'acme' } });
+      expect(getLtAuthCookieNames()).toEqual({ state: 'acme-auth-state', token: 'acme-jwt-token' });
+    });
+
+    it('keeps legacy defaults when only storagePrefix is set (no silent rename on upgrade)', async () => {
+      const { getLtAuthCookieNames } = await import('../src/runtime/lib/auth-state');
+      setStubRuntimeConfig({ public: { storagePrefix: 'myapp-prod' } });
+      expect(getLtAuthCookieNames()).toEqual({ state: 'lt-auth-state', token: 'lt-jwt-token' });
+    });
+
+    it('explicit cookieNames win over cookiePrefix', async () => {
+      const { getLtAuthCookieNames } = await import('../src/runtime/lib/auth-state');
+      setStubRuntimeConfig({
+        public: {
+          cookiePrefix: 'acme',
+          ltExtensions: { auth: { cookieNames: { state: 'exact-state', token: 'exact-token' } } },
+        },
+      });
+      expect(getLtAuthCookieNames()).toEqual({ state: 'exact-state', token: 'exact-token' });
+    });
+  });
+
+  describe('resolveLtAuthState (duplicate-tolerant twin resolution)', () => {
+    it('returns null for empty / no-match cookie strings', async () => {
+      const { resolveLtAuthState } = await import('../src/runtime/lib/auth-state');
+      expect(resolveLtAuthState('')).toBeNull();
+      expect(resolveLtAuthState('other=1; foo=bar')).toBeNull();
+    });
+
+    it('reads a single user-bearing cookie', async () => {
+      const { resolveLtAuthState } = await import('../src/runtime/lib/auth-state');
+      const v = encodeURIComponent(JSON.stringify({ authMode: 'cookie', user: { id: '1' } }));
+      expect(resolveLtAuthState(`lt-auth-state=${v}`)?.user).toEqual({ id: '1' });
+    });
+
+    it('PREFERS the user-bearing twin over a stale { user: null } twin (any order)', async () => {
+      const { resolveLtAuthState } = await import('../src/runtime/lib/auth-state');
+      const userC = encodeURIComponent(JSON.stringify({ authMode: 'cookie', user: { id: '7' } }));
+      const nullC = encodeURIComponent(JSON.stringify({ authMode: 'cookie', user: null }));
+      expect(resolveLtAuthState(`lt-auth-state=${nullC}; lt-auth-state=${userC}`)?.user).toEqual({ id: '7' });
+      expect(resolveLtAuthState(`lt-auth-state=${userC}; lt-auth-state=${nullC}`)?.user).toEqual({ id: '7' });
+    });
+
+    it('falls back to the { user: null } state when no twin carries a user', async () => {
+      const { resolveLtAuthState } = await import('../src/runtime/lib/auth-state');
+      const nullC = encodeURIComponent(JSON.stringify({ authMode: 'cookie', user: null }));
+      const state = resolveLtAuthState(`lt-auth-state=${nullC}`);
+      expect(state).not.toBeNull();
+      expect(state?.user).toBeNull();
+    });
+
+    it('skips malformed entries and still finds a valid user-bearing twin', async () => {
+      const { resolveLtAuthState } = await import('../src/runtime/lib/auth-state');
+      const userC = encodeURIComponent(JSON.stringify({ authMode: 'cookie', user: { id: '9' } }));
+      expect(resolveLtAuthState(`lt-auth-state=%7Bnot-json; lt-auth-state=${userC}`)?.user).toEqual({ id: '9' });
+    });
+
+    it('honours an explicit cookie name argument', async () => {
+      const { resolveLtAuthState } = await import('../src/runtime/lib/auth-state');
+      const v = encodeURIComponent(JSON.stringify({ authMode: 'cookie', user: { id: '1' } }));
+      // Default name absent; custom name present.
+      expect(resolveLtAuthState(`acme-auth-state=${v}`, 'acme-auth-state')?.user).toEqual({ id: '1' });
+      expect(resolveLtAuthState(`acme-auth-state=${v}`, 'lt-auth-state')).toBeNull();
+    });
+  });
+
   describe('auth-state helpers honour configured names', () => {
     it('isLtAuthenticated reads the default cookie when no config is set', async () => {
       const { isLtAuthenticated } = await import('../src/runtime/lib/auth-state');
