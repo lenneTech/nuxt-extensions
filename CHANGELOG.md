@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.1] - 2026-07-10
+
+### Fixed
+
+- **Restored `buildLtApiUrl` documentation.** A previously inserted comment block had been placed between `buildLtApiUrl`'s JSDoc and the function, orphaning the entire API doc (resolution strategy, deployment table, `@param`). The doc is re-attached and the function now carries its full JSDoc again.
+- **Corrected the "no API URL configured" warning.** The message is now scope-specific: the client variant names the app-origin/404 consequence and asks only for `NUXT_PUBLIC_API_URL`; the SSR variant explains that relative paths never reach the backend and asks for `NUXT_API_URL` / `NUXT_PUBLIC_API_URL`. A browser is never told to set the server-only `NUXT_API_URL` (enforced by test). Each warning fires at most once per process/page load instead of on every render.
+
+### Added
+
+- **`lt-config-check` plugin.** Validates the resolved API URL once at app init (per SSR request, deduplicated) instead of relying on whichever code path builds the first URL. Shares a one-shot warning key with `buildLtApiUrl`, so a misconfigured app reports the problem exactly once. Auto-registered — no configuration.
+
+### Changed
+
+- **Extracted a pure `resolveLtApiBaseUrl()`** from `buildLtApiUrl`, and consolidated the two ad-hoc "warn once" flags (`_proxyFallbackWarned` and the missing-URL warnings) into a single shared `warnOnce()` helper backed by a bounded key set. Behaviour is unchanged; the URL builder is now side-effect-free and testable. New internal exports (`resolveLtApiBaseUrl`, `warnMissingLtApiUrl`, `resetLtWarnOnceState`, `LtApiUrlResolution`) are plumbing only — absent from the package barrels and auto-imports, marked `INTERNAL`.
+- Corrected stale documentation that promised an implicit `http://localhost:3000` API fallback (README URL-resolution section, `LtAuthModuleOptions.baseURL` / `LtAuthClientConfig.baseURL` JSDoc). There is no such fallback — an unset URL keeps API paths relative to the app origin.
+
+### Tests
+
+- **Test infra:** the vitest `import.meta` shim previously hard-substituted `import.meta.server` to `false`, making every SSR branch unreachable from unit tests. It now reads `globalThis.__ltTestRenderScope` (new `test/stubs/render-scope.ts` helper), so SSR branches are testable; unset defaults to the client scope, preserving all existing tests.
+- Added `test/api-url-warnings.test.ts` covering warn-once semantics, client/server scope separation, the reset hook, server fallback chain, proxy mode + explicit opt-out, trailing-slash stripping, swallow-on-error contracts, and the `lt-config-check` plugin wiring.
+
 ## [1.8.0] - 2026-06-03
 
 ### Fixed

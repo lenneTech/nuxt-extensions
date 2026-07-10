@@ -23,6 +23,12 @@ interface StubRuntimeConfig {
 
 let runtimeConfig: StubRuntimeConfig = { public: {} };
 
+// When set, `useRuntimeConfig()` throws — lets tests exercise the documented
+// "swallow errors" contracts (buildLtApiUrl catch, the lt-config-check plugin
+// catch, getLtAuthCookieNames catch) that are otherwise unreachable because the
+// stub never fails. Reset alongside the config.
+let runtimeConfigError: Error | null = null;
+
 // Per-test isolated stores. Reset via the helpers below.
 const cookieRefs = new Map<string, Ref<unknown>>();
 const stateRefs = new Map<string, Ref<unknown>>();
@@ -33,6 +39,12 @@ export function setStubRuntimeConfig(next: StubRuntimeConfig): void {
 
 export function resetStubRuntimeConfig(): void {
   runtimeConfig = { public: {} };
+  runtimeConfigError = null;
+}
+
+/** Make the next `useRuntimeConfig()` calls throw, simulating a missing Nuxt context. */
+export function setStubRuntimeConfigThrows(error: Error = new Error('no runtime config')): void {
+  runtimeConfigError = error;
 }
 
 /** Reset the in-memory cookie / state ref stores between tests. */
@@ -42,7 +54,20 @@ export function resetStubReactiveStores(): void {
 }
 
 export function useRuntimeConfig(): StubRuntimeConfig {
+  if (runtimeConfigError) {
+    throw runtimeConfigError;
+  }
   return runtimeConfig;
+}
+
+/**
+ * Minimal `defineNuxtPlugin` stub — a pass-through that returns the setup
+ * function unchanged, so a test can import a plugin's default export and invoke
+ * it directly (the real Nuxt wrapper adds lifecycle metadata the unit test does
+ * not need). Mirrors how `#imports` resolves `defineNuxtPlugin` in production.
+ */
+export function defineNuxtPlugin<T extends (...args: any[]) => any>(setup: T): T {
+  return setup;
 }
 
 // Mutable store for the SSR request-headers stub so tests can simulate the

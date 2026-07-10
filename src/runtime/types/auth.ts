@@ -45,7 +45,7 @@ export interface LtAuthState {
  * All options have sensible defaults for nest-server compatibility
  */
 export interface LtAuthClientConfig {
-  /** API base URL (default: from env or http://localhost:3000) */
+  /** API base URL (default: `''` — empty means requests use the current app origin; production passes an explicit URL from `NUXT_PUBLIC_API_URL`. No implicit `localhost` fallback) */
   baseURL?: string;
   /** Auth API base path (default: '/iam' - must match nest-server betterAuth.basePath) */
   basePath?: string;

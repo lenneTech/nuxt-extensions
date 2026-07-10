@@ -223,6 +223,11 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
       });
     }
 
+    // Validate the resolved API URL once at app init rather than on every
+    // buildLtApiUrl() call. Warnings are one-shot and shared with buildLtApiUrl,
+    // so a misconfigured app reports it exactly once per process / page load.
+    addPlugin(resolve('./runtime/plugins/lt-config-check'));
+
     // Add auth interceptor plugin if enabled
     if (resolvedOptions.auth?.enabled && resolvedOptions.auth?.interceptor?.enabled) {
       addPlugin(resolve('./runtime/plugins/auth-interceptor.client'));

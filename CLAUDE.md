@@ -12,7 +12,7 @@ src/
 │   ├── components/        # Auto-imported components
 │   ├── lib/               # Library exports (auth-client, auth-state, ai)
 │   ├── middleware/        # Route middleware (system setup)
-│   ├── plugins/           # Nuxt plugins (auth interceptor, error translation)
+│   ├── plugins/           # Nuxt plugins (auth interceptor, error translation, config check)
 │   ├── server/            # Nitro server routes (auth proxy)
 │   ├── testing/           # Playwright test helpers
 │   ├── types/             # TypeScript type definitions

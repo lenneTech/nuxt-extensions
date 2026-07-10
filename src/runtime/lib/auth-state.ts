@@ -148,10 +148,43 @@ export function resolveLtAuthState(cookieString: string, stateCookieName?: strin
 }
 
 // =============================================================================
-// API Proxy Detection
+// One-shot Warnings
 // =============================================================================
 
-let _proxyFallbackWarned = false;
+/**
+ * Keys of the warnings this module instance has already emitted.
+ *
+ * The conditions behind these warnings (missing API URL, implicit dev proxy) are
+ * read from `runtimeConfig` and are therefore constant for the lifetime of the
+ * module instance — repeating a warning per call carries no new information and
+ * drowns surrounding output. One module instance means once per page load in the
+ * client bundle, once per process in the server bundle.
+ */
+const warnedKeys = new Set<string>();
+
+/** Emit `message` the first time `key` is seen; ignore every later call. */
+function warnOnce(key: string, message: string): void {
+  if (warnedKeys.has(key)) {
+    return;
+  }
+  warnedKeys.add(key);
+  console.warn(message);
+}
+
+/**
+ * Clear the one-shot warning state.
+ *
+ * INTERNAL — test-only. Module-scope state survives every test in a file that
+ * does not call `vi.resetModules()`, which would make assertions on these
+ * warnings depend on test order. Production code must never call this.
+ */
+export function resetLtWarnOnceState(): void {
+  warnedKeys.clear();
+}
+
+// =============================================================================
+// API Proxy Detection
+// =============================================================================
 
 /**
  * Determines if HTTP requests should use the Nuxt Vite dev proxy.
@@ -204,14 +237,12 @@ export function isLocalDevApiProxy(): boolean {
     // Fallback: activate proxy under `nuxt dev` with a warning
     const buildId = (runtimeConfig as Record<string, unknown>)?.app && ((runtimeConfig as Record<string, unknown>).app as Record<string, unknown>)?.buildId;
     if (buildId === 'dev') {
-      if (!_proxyFallbackWarned) {
-        _proxyFallbackWarned = true;
-        console.warn(
-          '\n⚠️  [LtExtensions] API proxy activated implicitly because nuxt dev was detected.\n' +
-            '    To make this explicit, add NUXT_PUBLIC_API_PROXY=true to your .env file.\n' +
-            '    If you do NOT want the proxy, set NUXT_PUBLIC_API_PROXY=false.\n',
-        );
-      }
+      warnOnce(
+        'api-proxy-fallback',
+        '\n⚠️  [LtExtensions] API proxy activated implicitly because nuxt dev was detected.\n' +
+          '    To make this explicit, add NUXT_PUBLIC_API_PROXY=true to your .env file.\n' +
+          '    If you do NOT want the proxy, set NUXT_PUBLIC_API_PROXY=false.\n',
+      );
       return true;
     }
 
@@ -224,6 +255,90 @@ export function isLocalDevApiProxy(): boolean {
 // =============================================================================
 // API URL Builder
 // =============================================================================
+
+/**
+ * The warning emitted when no API URL is configured, per render scope.
+ *
+ * Keyed by scope rather than passed in by the caller: the wording and the env
+ * var to set follow from the scope alone, so a lookup makes a caller/message
+ * mismatch (telling a browser to set the server-only `NUXT_API_URL`) impossible.
+ */
+const MISSING_API_URL_WARNING: Record<'client' | 'server', string> = {
+  client:
+    '[LtExtensions] No API URL configured. Set NUXT_PUBLIC_API_URL. ' +
+    'API paths stay relative and resolve against the app origin, so auth and setup calls ' +
+    '404 unless the app is served behind a same-origin reverse proxy.',
+  server:
+    '[LtExtensions] No API URL configured for SSR. Set NUXT_API_URL or NUXT_PUBLIC_API_URL. ' +
+    'API paths stay relative, so server-side requests never reach the backend: $fetch ' +
+    'resolves them against Nitro (404) and global fetch rejects them as an invalid URL.',
+};
+
+/** Strip any trailing slashes so `${baseUrl}${path}` never produces a double slash. */
+function stripTrailingSlashes(url: string): string {
+  return url.replace(/\/+$/, '');
+}
+
+/**
+ * Outcome of resolving the API base URL for the current render scope.
+ *
+ * INTERNAL — plumbing for {@link buildLtApiUrl} and the `lt-config-check` plugin.
+ * Not part of the public API (absent from the package barrels and auto-imports);
+ * reachable only via a deep path import. Shape may change without a major bump.
+ */
+export interface LtApiUrlResolution {
+  /** Base URL to prefix onto API paths. `'/api'` in proxy mode, `''` when unresolved. */
+  baseUrl: string;
+  /** `true` when no API URL is configured for {@link scope}. */
+  missing: boolean;
+  /** `true` when the Vite dev proxy prefix is in use (see {@link isLocalDevApiProxy}). */
+  proxy: boolean;
+  /** The render scope the resolution was performed for. */
+  scope: 'client' | 'server';
+}
+
+/**
+ * Resolve the API base URL for the current render scope.
+ *
+ * INTERNAL — plumbing shared by {@link buildLtApiUrl} and the `lt-config-check`
+ * plugin; not part of the public API (absent from the barrels and auto-imports).
+ *
+ * Pure: it reads `runtimeConfig` and reports what it found, but never logs and
+ * never mutates. The `missing` flag lets callers decide how to surface the
+ * misconfiguration — {@link buildLtApiUrl} warns lazily, the `lt-config-check`
+ * plugin warns eagerly at app init. Both funnel through the same one-shot key,
+ * so the user sees exactly one warning either way.
+ *
+ * Throws when called outside a Nuxt runtime-config context; callers catch.
+ */
+export function resolveLtApiBaseUrl(): LtApiUrlResolution {
+  const runtimeConfig = useRuntimeConfig();
+  const publicUrl = (runtimeConfig.public as Record<string, string>).apiUrl || '';
+  const authBaseURL = (runtimeConfig.public as Record<string, any>)?.ltExtensions?.auth?.baseURL || '';
+
+  if (import.meta.server) {
+    const apiUrl = (runtimeConfig as Record<string, string>).apiUrl || publicUrl || authBaseURL;
+    return { baseUrl: stripTrailingSlashes(apiUrl), missing: !apiUrl, proxy: false, scope: 'server' };
+  }
+
+  if (isLocalDevApiProxy()) {
+    return { baseUrl: '/api', missing: false, proxy: true, scope: 'client' };
+  }
+
+  const apiUrl = publicUrl || authBaseURL;
+  return { baseUrl: stripTrailingSlashes(apiUrl), missing: !apiUrl, proxy: false, scope: 'client' };
+}
+
+/**
+ * Warn — at most once per module instance — that no API URL is configured.
+ *
+ * INTERNAL — shared by {@link buildLtApiUrl} and the `lt-config-check` plugin so
+ * an eager boot-time check and a lazy first-URL check never double-report. Not
+ * part of the public API (absent from the barrels and auto-imports).
+ */
+export function warnMissingLtApiUrl(scope: 'client' | 'server'): void {
+  warnOnce(`missing-api-url:${scope}`, MISSING_API_URL_WARNING[scope]);
+}
 
 /**
  * Build a full API URL for a given path, handling SSR, proxy, and direct modes.
@@ -258,31 +373,18 @@ export function isLocalDevApiProxy(): boolean {
  *
  * Trailing slashes on the base URL are automatically stripped.
  *
+ * A missing API URL is reported at most once per module instance — the condition
+ * is constant for the process, so repeating it per call only drowns other output.
+ *
  * @param path - The API path (e.g., `/system-setup/status`, `/i18n/errors/de`)
  */
 export function buildLtApiUrl(path: string): string {
   try {
-    const runtimeConfig = useRuntimeConfig();
-    const publicUrl = (runtimeConfig.public as Record<string, string>).apiUrl || '';
-    const authBaseURL = (runtimeConfig.public as Record<string, any>)?.ltExtensions?.auth?.baseURL || '';
-
-    if (import.meta.server) {
-      const apiUrl = (runtimeConfig as Record<string, string>).apiUrl || publicUrl || authBaseURL;
-      if (!apiUrl) {
-        console.warn('[LtExtensions] No API URL configured. Set NUXT_API_URL or NUXT_PUBLIC_API_URL.');
-      }
-      return `${(apiUrl || '').replace(/\/+$/, '')}${path}`;
+    const { baseUrl, missing, scope } = resolveLtApiBaseUrl();
+    if (missing) {
+      warnMissingLtApiUrl(scope);
     }
-
-    if (isLocalDevApiProxy()) {
-      return `/api${path}`;
-    }
-
-    const apiUrl = publicUrl || authBaseURL;
-    if (!apiUrl) {
-      console.warn('[LtExtensions] No API URL configured. Set NUXT_PUBLIC_API_URL.');
-    }
-    return `${(apiUrl || '').replace(/\/+$/, '')}${path}`;
+    return `${baseUrl}${path}`;
   } catch {
     return path;
   }

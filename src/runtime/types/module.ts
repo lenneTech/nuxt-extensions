@@ -62,7 +62,7 @@ export interface LtAuthCookieNamesOptions {
 export interface LtAuthModuleOptions {
   /** Auth API base path (default: '/iam' - must match nest-server betterAuth.basePath) */
   basePath?: string;
-  /** API base URL (default: from env or http://localhost:3000) */
+  /** API base URL (default: `''` — resolved at runtime from `NUXT_PUBLIC_API_URL` / `NUXT_API_URL`; no implicit `localhost` fallback, so an unset URL keeps API paths relative to the app origin) */
   baseURL?: string;
   /** Override the cookie names used for auth state and JWT storage */
   cookieNames?: LtAuthCookieNamesOptions;

@@ -55,13 +55,15 @@ npm install tus-js-client
 All environment variables are resolved **at runtime** (not build time). This means you can build a Docker image once and deploy it to different environments by changing env vars — no rebuild needed.
 
 **SSR fallback chain:**
-`NUXT_API_URL` → `NUXT_PUBLIC_API_URL` → `auth.baseURL` (from nuxt.config.ts) → `http://localhost:3000`
+`NUXT_API_URL` → `NUXT_PUBLIC_API_URL` → `auth.baseURL` (from nuxt.config.ts) → *(unset)*
 
 **Client fallback chain (no proxy):**
-`NUXT_PUBLIC_API_URL` → `auth.baseURL` (from nuxt.config.ts) → `http://localhost:3000`
+`NUXT_PUBLIC_API_URL` → `auth.baseURL` (from nuxt.config.ts) → *(unset)*
 
 **Client with proxy (`NUXT_PUBLIC_API_PROXY=true`):**
 All requests go to `/api/{path}` — the Vite dev proxy forwards them to the backend.
+
+> **No implicit `localhost` default.** If none of the sources above is set, there is **no** built-in fallback URL: API paths stay relative (e.g. `/iam/token`) and resolve against the app origin, so auth and setup calls 404 unless the app is served behind a same-origin reverse proxy. The module logs a one-time warning (`[LtExtensions] No API URL configured…`) at app init and on the first API call. Always set `NUXT_PUBLIC_API_URL` (and optionally `NUXT_API_URL` for SSR).
 
 > **Security:** `NUXT_API_URL` is never exposed to the client bundle. It stays in `runtimeConfig.apiUrl` (server only). This is important when using internal network addresses like `http://api.svc.cluster.local`.
 
