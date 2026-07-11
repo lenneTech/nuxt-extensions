@@ -152,7 +152,20 @@ export function useLtAuth(): UseLtAuthReturn {
     if (import.meta.client) {
       const maxAge = 60 * 60 * 24 * 7; // 7 days
       const secure = globalThis.location?.protocol === 'https:' ? '; secure' : '';
-      document.cookie = `${stateCookieName}=${encodeURIComponent(JSON.stringify(newState))}; path=/; max-age=${maxAge}; samesite=lax${secure}`;
+      const encoded = encodeURIComponent(JSON.stringify(newState));
+      // Browsers cap a single cookie at ~4096 bytes (name + value + attributes).
+      // An oversized `lt-auth-state` is silently rejected on write, so the next
+      // reload reads no cookie and the user appears logged out — the very
+      // "logout-on-reload" class the SSR-write rules above guard against. Since
+      // the session-user merge now keeps nest-server-only fields across reloads,
+      // a project stuffing large preference blobs onto the user object can push
+      // the cookie over the limit; warn in dev so it is noticed before it bites.
+      if (import.meta.dev && encoded.length > 3500) {
+        console.warn(
+          `[lt-auth] lt-auth-state cookie is ${encoded.length} bytes (encoded), approaching the ~4KB browser limit — an oversized cookie is dropped on write and reads as a logout on reload. Keep the cached user lean: move large preference data off the user object.`,
+        );
+      }
+      document.cookie = `${stateCookieName}=${encoded}; path=/; max-age=${maxAge}; samesite=lax${secure}`;
     }
   }
 
@@ -278,6 +291,50 @@ export function useLtAuth(): UseLtAuthReturn {
   }
 
   /**
+   * Authorization-relevant keys the Better-Auth session owns and is the source of
+   * truth for. The merge below must never keep a stale cached value for one of
+   * these: if the session omits it (e.g. a backend-side role removal or a fresh
+   * ban), keeping the old value would be fail-open and mask a downgrade. So any
+   * AUTHZ key absent from the session user is dropped from the merge result
+   * (fail-closed). A project that adds its OWN nest-server-only authorization
+   * field MUST either register it as a Better-Auth additionalField (so
+   * get-session returns it) or add it here — otherwise it could persist stale in
+   * the client cache. See the module CLAUDE.md "Authentication Cookie Rules".
+   */
+  const AUTHZ_KEYS = ['banExpires', 'banReason', 'banned', 'emailVerified', 'role', 'twoFactorEnabled'] as const satisfies readonly (keyof LtUser)[];
+
+  /**
+   * Merge a Better-Auth session user (partial) onto the cached user of the SAME
+   * identity. Better-Auth's get-session returns only the fields Better-Auth owns
+   * (id/email/name + registered additionalFields), NOT nest-server-only user
+   * fields (e.g. custom preference fields). Overwriting the cached user with the
+   * session user therefore drops those fields on every session re-validation
+   * (app init / hard reload); merging keeps them.
+   *
+   * Guarded by a truthy, matching id: a different / absent / id-less cached
+   * identity (including two id-less objects) falls back to the session user
+   * verbatim, so one user's fields never leak onto another.
+   *
+   * Authorization keys ({@link AUTHZ_KEYS}) always reflect the session — any such
+   * key the session omits is dropped rather than kept, so a backend downgrade is
+   * never masked by a stale cached value. Reads the duplicate-tolerant
+   * `resolvedAuthState` (consistent with `user`/`isAdmin`), never a raw cookie twin.
+   */
+  function mergeSessionUser(sessionUser: LtUser): LtUser {
+    const cached = resolvedAuthState.value?.user;
+    if (!cached?.id || !sessionUser?.id || cached.id !== sessionUser.id) {
+      return sessionUser;
+    }
+    const merged = { ...cached, ...sessionUser } as Record<string, unknown>;
+    for (const key of AUTHZ_KEYS) {
+      if (!(key in sessionUser)) {
+        delete merged[key];
+      }
+    }
+    return merged as unknown as LtUser;
+  }
+
+  /**
    * Validate session with backend (called on app init)
    * If session is invalid, clear the stored state
    */
@@ -302,9 +359,10 @@ export function useLtAuth(): UseLtAuthReturn {
         });
       }
 
-      // If session has user data, update our state
+      // If session has user data, update our state. Merge onto the cached user
+      // so a re-validation never drops nest-server-only fields (see mergeSessionUser).
       if (session.value.data?.user) {
-        setUser(session.value.data.user as LtUser, 'cookie');
+        setUser(mergeSessionUser(session.value.data.user as LtUser), 'cookie');
         // Pre-fetch JWT for fallback
         switchToJwtMode().catch(() => {});
         return true;
@@ -535,8 +593,11 @@ export function useLtAuth(): UseLtAuthReturn {
           if (sessionResponse.ok) {
             const sessionData = await sessionResponse.json();
             if (sessionData?.user) {
-              result.user = sessionData.user;
-              setUser(sessionData.user as LtUser, 'cookie');
+              // Merge onto the cached user so this passkey get-session fallback
+              // never drops nest-server-only fields either (see mergeSessionUser).
+              const mergedUser = mergeSessionUser(sessionData.user as LtUser);
+              result.user = mergedUser;
+              setUser(mergedUser, 'cookie');
               switchToJwtMode().catch(() => {});
             }
           }

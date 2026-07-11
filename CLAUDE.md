@@ -133,6 +133,13 @@ The `useLtAuth()` composable manages the `lt-auth-state` cookie for authenticati
 3. If `useLtAuth()` can't find a valid user in the cookie on the server, it initializes with `{user: null}` — this is intentional and correct
 4. The `iam.session_token` httpOnly cookie (set by Better Auth) is the actual session identifier — `lt-auth-state` is a convenience cache for the client-side middleware
 
+### Session User Merge (nest-server-only fields):
+On session re-validation (`validateSession()` at app init / hard reload, and the passkey get-session fallback), `useLtAuth()` **merges** the Better-Auth session user onto the cached user of the SAME identity via the private `mergeSessionUser()`, instead of overwriting it. Consequences you must know:
+
+- **nest-server-only fields persist across reloads.** Better-Auth's get-session returns only Better-Auth-owned fields (id/email/name + registered additionalFields). Fields it does not own (e.g. custom preferences like `leadTableColumns`) previously vanished on every reload; they now survive. If you built a workaround that re-fetched such fields after each reload, you can retire it.
+- **Authorization fields are fail-closed.** `role`, `banned`, `banExpires`, `banReason`, `emailVerified`, `twoFactorEnabled` always reflect the session — any of these the session omits is dropped from the merge (never kept stale), so a backend downgrade is reflected client-side. If your project adds its OWN authorization-relevant user field, either register it as a Better-Auth additionalField (so get-session returns it) or add it to the `AUTHZ_KEYS` list in `use-lt-auth.ts` — otherwise it could persist stale in the client cache.
+- **Keep the cached user lean.** `lt-auth-state` is a non-httpOnly cookie sent on every same-site request and capped at ~4 KB by browsers. Because the merge keeps preference fields across reloads, large blobs on the user object can push the cookie over the limit — the browser then silently rejects the write and the next reload reads as a logout. `setUser` emits a dev-mode warning above ~3.5 KB; move large preference data off the user object and fetch it from an authenticated API.
+
 ### Custom Auth Middleware Pattern:
 ```typescript
 // CORRECT — read-only check, no cookie mutation

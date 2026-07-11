@@ -5,7 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.8.1] - 2026-07-10
+## [1.8.3] - 2026-07-11
+
+### Fixed
+
+- **Session re-validation no longer drops nest-server-only user fields.** `useLtAuth().validateSession()` (app init / hard reload) and the passkey get-session fallback overwrote the cached user with Better-Auth's get-session payload, which only carries Better-Auth-owned fields (id/email/name + registered additionalFields). Any nest-server-only field (e.g. custom preferences like `leadTableColumns`) was therefore wiped on every reload. Both call sites now route the session user through an id-guarded `mergeSessionUser()` that merges onto the cached user of the SAME identity, so those fields survive. A different / absent / id-less cached identity falls back to the session user verbatim, so one user's fields never leak onto another.
+
+### Changed
+
+- **Authorization fields stay fail-closed across the merge.** `role`, `banned`, `banExpires`, `banReason`, `emailVerified` and `twoFactorEnabled` always reflect the session: any of these the session omits is dropped from the merge result rather than kept, so a backend-side downgrade/revocation is never masked by a stale cached value. A project that adds its own nest-server-only authorization field must register it as a Better-Auth additionalField (so get-session returns it) or add it to the internal `AUTHZ_KEYS` list.
+- **`setUser` warns (dev only) when the `lt-auth-state` cookie approaches the ~4 KB browser limit.** Because the merge now keeps nest-server-only fields across reloads, a project storing large preference blobs on the user object could push the cookie over the per-cookie limit, at which point the browser silently rejects the write and the next reload reads as a logout. A dev-mode `console.warn` above ~3.5 KB encoded surfaces this early. Keep the cached user lean — move large preference data off the user object and fetch it from an authenticated API.
+
+### Tests
+
+- Added `test/merge-session-user.test.ts`: the merge invariant through the public `validateSession()` (same-id merge, different-id no-leak, no-cache verbatim), the fail-closed AUTHZ-key behaviour (drop-on-omit + session-overwrite), the both-ids-absent guard, the pending-session wait branch, the empty-session branches, and the passkey get-session fallback call site.
+
+## [1.8.2] - 2026-07-10
 
 ### Fixed
 
