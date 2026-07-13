@@ -2,9 +2,16 @@
  * Auth Interceptor Plugin
  *
  * This plugin intercepts all API responses and handles session expiration.
- * When a 401 (Unauthorized) response is received, it automatically:
+ * When a 401 (Unauthorized) response is received, it verifies against the
+ * session endpoint that the session is genuinely dead and then automatically:
  * 1. Clears the user session state
  * 2. Redirects to the login page
+ *
+ * The verification step exists because a 401 from a domain endpoint is not
+ * proof of an expired session: backends may mislabel permission errors
+ * (authenticated user, missing rights — semantically 403) as 401. Logging out
+ * on those would kick a logged-in user out of the app for a mere missing
+ * right. Only a dead session may clear state.
  *
  * Note: This is a client-only plugin (.client.ts) since auth state
  * management only makes sense in the browser context.
@@ -13,6 +20,7 @@
 import type { NuxtApp } from '#app';
 
 import { useLtAuth } from '../composables/auth/use-lt-auth';
+import { getLtApiBase } from '../lib/auth-state';
 
 export default (nuxtApp: NuxtApp): void => {
   // Only run on client side
@@ -82,8 +90,36 @@ export default (nuxtApp: NuxtApp): void => {
   }
 
   /**
+   * Probe the session endpoint to decide whether the session is genuinely dead.
+   *
+   * Returns `true` when the session is still alive, `false` when the backend
+   * confirms it is gone, and `null` when the probe could not be completed
+   * (e.g. network error / API unreachable — no verdict).
+   *
+   * Recursion-safe: the session URL matches {@link isAuthEndpoint}, so a 401
+   * from the probe itself never re-enters {@link handleUnauthorized} (and
+   * `isHandling401` is set while the probe runs).
+   */
+  async function isSessionStillAlive(): Promise<boolean | null> {
+    try {
+      const { fetchWithAuth } = getAuth();
+      const response = await fetchWithAuth(`${getLtApiBase()}/get-session`, { method: 'GET' });
+      if (!response.ok) {
+        // The session endpoint itself rejects us → genuinely unauthenticated
+        return false;
+      }
+      // Better Auth returns 200 with a null body when there is no session
+      const data = (await response.json().catch(() => null)) as { session?: unknown; user?: unknown } | null;
+      return Boolean(data && (data.user || data.session));
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Handle 401 Unauthorized responses
-   * Clears user state and redirects to login page
+   * Verifies the session is genuinely dead, then clears user state and
+   * redirects to the login page
    */
   async function handleUnauthorized(requestUrl?: string): Promise<void> {
     // Prevent multiple simultaneous 401 handling
@@ -107,6 +143,20 @@ export default (nuxtApp: NuxtApp): void => {
       // Only handle if user was authenticated (prevents redirect loops)
       const { clearUser, isAuthenticated } = getAuth();
       if (isAuthenticated.value) {
+        // A 401 from a domain endpoint is not proof of an expired session:
+        // backends may mislabel permission errors as 401 instead of 403. Only
+        // log out when the session endpoint confirms the session is dead — an
+        // unverifiable probe (API unreachable) must not log the user out either.
+        const sessionAlive = await isSessionStillAlive();
+        if (sessionAlive !== false) {
+          console.debug(
+            sessionAlive
+              ? `[LtAuth Interceptor] 401 from ${requestUrl ?? 'unknown URL'} but session is still valid — treating it as a permission error, not logging out`
+              : '[LtAuth Interceptor] 401 received but session state could not be verified — not logging out',
+          );
+          return;
+        }
+
         console.debug('[LtAuth Interceptor] Session expired, logging out...');
 
         // Clear user state
