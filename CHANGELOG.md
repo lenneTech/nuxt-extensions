@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.4] - 2026-07-13
+
+### Fixed
+
+- **A 401 no longer triggers a false logout for mislabeled permission errors.** The auth interceptor cleared the session and redirected to login on every 401. But a 401 from a domain endpoint is not proof of an expired session: backends may mislabel permission errors (authenticated user, missing right — semantically 403) as 401, which kicked a logged-in user out of the app over a mere missing right. `handleUnauthorized()` now verifies against `/get-session` before logging out: session alive → treat as a permission error, no logout; session dead → clear state + redirect (real expiry); probe undecided (API unreachable) → keep the user logged in (unreachable ≠ logged out). The probe is recursion-safe via the existing `isHandling401` guard, and an unverifiable probe never logs the user out — so the change is fail-safe (worst case: a dead session is logged out one request late).
+
+### Tests
+
+- Added `test/auth-interceptor.test.ts`: covers all four 401 verdicts (session alive / empty session / session endpoint rejects / probe unreachable), plus the auth-endpoint skip and the unauthenticated no-op.
+
 ## [1.8.3] - 2026-07-11
 
 ### Fixed
