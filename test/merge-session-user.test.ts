@@ -197,6 +197,70 @@ describe('mergeSessionUser keeps authorization keys fail-closed (AUTHZ_KEYS)', (
     expect(user.leadTableColumns).toEqual(['x']);
   });
 
+  it('drops a stale `roles` array the session omits (fail-closed → admin UI closes)', async () => {
+    const { useLtAuth } = await import('../src/runtime/composables/auth/use-lt-auth');
+    const auth = useLtAuth();
+
+    // Cached nest-server user with admin rights + a nest-server-only field.
+    auth.setUser({
+      id: 'u1',
+      email: 'a@example.com',
+      roles: ['admin'],
+      leadTableColumns: ['x'],
+    } as never);
+
+    // Backend revoked admin and no longer returns `roles` at all. Keeping the
+    // cached value would be fail-open: the admin UI would stay visible.
+    mockSession = { data: { user: { id: 'u1', email: 'a@example.com' } }, isPending: false };
+
+    const ok = await auth.validateSession();
+    expect(ok).toBe(true);
+
+    const user = auth.user.value as unknown as Record<string, unknown>;
+    expect(user.roles).toBeUndefined();
+    expect(auth.isAdmin.value).toBe(false);
+    // … while a non-authz nest-server-only field still survives the merge.
+    expect(user.leadTableColumns).toEqual(['x']);
+  });
+
+  it('lets the session downgrade `roles` when it is present (admin → user)', async () => {
+    const { useLtAuth } = await import('../src/runtime/composables/auth/use-lt-auth');
+    const auth = useLtAuth();
+
+    auth.setUser({ id: 'u1', email: 'a@example.com', roles: ['admin'] } as never);
+    // The realistic nest-server downgrade: get-session still returns `roles`,
+    // just without 'admin' in it (worst case an empty array — its defaultValue).
+    mockSession = {
+      data: { user: { id: 'u1', email: 'a@example.com', roles: ['user'] } },
+      isPending: false,
+    };
+
+    const ok = await auth.validateSession();
+    expect(ok).toBe(true);
+
+    const user = auth.user.value as unknown as Record<string, unknown>;
+    expect(user.roles).toEqual(['user']);
+    expect(auth.isAdmin.value).toBe(false);
+  });
+
+  it('keeps `roles` when the session still grants admin (no spurious drop on re-validation)', async () => {
+    const { useLtAuth } = await import('../src/runtime/composables/auth/use-lt-auth');
+    const auth = useLtAuth();
+
+    auth.setUser({ id: 'u1', email: 'a@example.com', roles: ['admin'] } as never);
+    mockSession = {
+      data: { user: { id: 'u1', email: 'a@example.com', roles: ['admin'] } },
+      isPending: false,
+    };
+
+    const ok = await auth.validateSession();
+    expect(ok).toBe(true);
+
+    // The reload path must NOT cost an admin their admin UI.
+    expect(auth.isAdmin.value).toBe(true);
+    expect((auth.user.value as unknown as Record<string, unknown>).roles).toEqual(['admin']);
+  });
+
   it('lets the session overwrite an authorization field when it is present', async () => {
     const { useLtAuth } = await import('../src/runtime/composables/auth/use-lt-auth');
     const auth = useLtAuth();

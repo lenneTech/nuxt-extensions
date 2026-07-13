@@ -17,7 +17,15 @@ export interface LtUser {
   id: string;
   image?: string;
   name?: string;
+  /** Single-role shape (Better-Auth admin plugin). See also {@link LtUser.roles}. */
   role?: string;
+  /**
+   * Multi-role shape. `@lenne.tech/nest-server` registers `roles` as a core
+   * Better-Auth additionalField (`type: 'string[]'`), so its users carry
+   * `roles: ['admin']` and usually NO singular `role`. Authorization-relevant:
+   * `isAdmin` accepts either shape, and `roles` is fail-closed on session merge.
+   */
+  roles?: string[];
   twoFactorEnabled?: boolean;
 }
 

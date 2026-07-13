@@ -122,7 +122,22 @@ export function useLtAuth(): UseLtAuthReturn {
   // Computed properties based on stored state
   const user = computed<LtUser | null>(() => resolvedAuthState.value?.user ?? null);
   const isAuthenticated = computed<boolean>(() => !!user.value);
-  const isAdmin = computed<boolean>(() => user.value?.role === 'admin');
+  // Admin detection accepts BOTH user shapes:
+  //  - `role: 'admin'`      — Better-Auth's admin plugin (single role).
+  //  - `roles: ['admin']`   — `@lenne.tech/nest-server`, which registers `roles`
+  //                           as a core Better-Auth additionalField (`string[]`).
+  //                           Its users carry NO singular `role`, so a `role`-only
+  //                           check is permanently false against a nest-server
+  //                           backend and the whole admin UI silently disappears.
+  // `Array.isArray` guards a malformed `roles` in the (client-writable) auth-state
+  // cookie: a non-array value must yield `false`, never throw inside the computed.
+  const isAdmin = computed<boolean>(() => {
+    const current = user.value;
+    if (!current) {
+      return false;
+    }
+    return current.role === 'admin' || (Array.isArray(current.roles) && current.roles.includes('admin'));
+  });
   const is2FAEnabled = computed<boolean>(() => user.value?.twoFactorEnabled ?? false);
 
   // SSR-safe shared features state (useState is isolated per request on server, shared on client)
@@ -300,8 +315,18 @@ export function useLtAuth(): UseLtAuthReturn {
    * field MUST either register it as a Better-Auth additionalField (so
    * get-session returns it) or add it here — otherwise it could persist stale in
    * the client cache. See the module CLAUDE.md "Authentication Cookie Rules".
+   *
+   * `roles` belongs here for the same reason `role` does: `isAdmin` reads it, so a
+   * stale cached `roles: ['admin']` would keep the admin UI alive after the backend
+   * revoked admin — the exact fail-open this list exists to prevent. Fail-closing it
+   * costs nothing for backends that never send `roles`: the key is only dropped when
+   * the CACHE has it and the session omits it, so a `roles`-less backend (whose cache
+   * never carries `roles`) is a no-op. And nest-server — the reason `roles` is
+   * supported at all — registers it as a CORE additionalField (`type: 'string[]'`,
+   * `defaultValue: []`), so its get-session always returns `roles`; the worst case is
+   * an honest `[]` (= not an admin), never a spurious drop.
    */
-  const AUTHZ_KEYS = ['banExpires', 'banReason', 'banned', 'emailVerified', 'role', 'twoFactorEnabled'] as const satisfies readonly (keyof LtUser)[];
+  const AUTHZ_KEYS = ['banExpires', 'banReason', 'banned', 'emailVerified', 'role', 'roles', 'twoFactorEnabled'] as const satisfies readonly (keyof LtUser)[];
 
   /**
    * Merge a Better-Auth session user (partial) onto the cached user of the SAME
