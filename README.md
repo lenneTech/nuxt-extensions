@@ -166,6 +166,7 @@ export default defineNuxtConfig({
 const {
   user,
   isAuthenticated,
+  isAdmin,
   isLoading,
   signIn,
   signOut,
@@ -196,6 +197,42 @@ async function handlePasskeyLogin() {
     Welcome, {{ user?.name }}!
     <button @click="signOut()">Logout</button>
   </div>
+</template>
+```
+
+#### Admin detection (`role` vs `roles`)
+
+`isAdmin` accepts **both** user shapes, so the same frontend works against either backend:
+
+| Backend | User shape | `isAdmin` is `true` when |
+|---------|------------|-------------------------|
+| `@lenne.tech/nest-server` | `roles: ['admin']` — core Better-Auth additionalField (`type: 'string[]'`), no singular `role` | `roles` contains `'admin'` |
+| Better-Auth admin plugin | `role: 'admin'` — single role | `role === 'admin'` |
+
+```vue
+<script setup>
+const { isAdmin } = useLtAuth();
+</script>
+
+<template>
+  <NuxtLink v-if="isAdmin" to="/admin">Admin</NuxtLink>
+</template>
+```
+
+> **`isAdmin` is a UX gate, not an authorization boundary.** It reads the client-side `lt-auth-state` cookie cache, which is not httpOnly and therefore user-writable. Use it to decide what to *render*; always enforce admin rights server-side (`@Restricted(RoleEnum.ADMIN)` in nest-server).
+>
+> The `auth.enableAdmin` option toggles the Better-Auth **admin client plugin** (user-management calls such as `admin.listUsers()`). It does **not** control `isAdmin` — role detection works regardless of that flag.
+
+For roles other than admin, use `hasRole(role)` / `hasAnyRole(...roles)`. They apply the exact same both-shapes union and `Array.isArray` guard as `isAdmin` (which is itself just `hasRole('admin')`), so you never need the unguarded `user.value?.roles?.includes(...)`:
+
+```vue
+<script setup>
+const { hasRole, hasAnyRole } = useLtAuth();
+</script>
+
+<template>
+  <button v-if="hasRole('editor')">Edit</button>
+  <NuxtLink v-if="hasAnyRole('admin', 'editor')" to="/manage">Manage</NuxtLink>
 </template>
 ```
 

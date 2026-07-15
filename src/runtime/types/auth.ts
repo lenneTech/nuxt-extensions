@@ -20,10 +20,17 @@ export interface LtUser {
   /** Single-role shape (Better-Auth admin plugin). See also {@link LtUser.roles}. */
   role?: string;
   /**
-   * Multi-role shape. `@lenne.tech/nest-server` registers `roles` as a core
-   * Better-Auth additionalField (`type: 'string[]'`), so its users carry
-   * `roles: ['admin']` and usually NO singular `role`. Authorization-relevant:
-   * `isAdmin` accepts either shape, and `roles` is fail-closed on session merge.
+   * Multi-role shape, and the canonical home for this fact: `@lenne.tech/nest-server`
+   * registers `roles` as a core Better-Auth additionalField (`type: 'string[]'`,
+   * `defaultValue: []`), so its users carry `roles: ['admin']` and usually NO
+   * singular `role`.
+   *
+   * NOT a source of authorization truth: this lives in the non-httpOnly
+   * `lt-auth-state` cookie and is therefore client-writable. It is kept
+   * fail-closed on session merge (see `AUTHZ_KEYS` in `use-lt-auth.ts`) so a
+   * backend downgrade is never masked by a stale value — that is a *staleness*
+   * guarantee, not a security guarantee. `isAdmin` reads it for UI gating;
+   * authorization is enforced server-side (`@Restricted(RoleEnum.ADMIN)`).
    */
   roles?: string[];
   twoFactorEnabled?: boolean;
@@ -123,7 +130,50 @@ export interface UseLtAuthReturn {
   user: ComputedRef<LtUser | null>;
 
   // User properties
+  /**
+   * Returns `true` when the current user has ANY of the given roles (union).
+   * Same shape-tolerance and UX-gate-only caveats as {@link UseLtAuthReturn.hasRole}.
+   *
+   * @example
+   * // <NuxtLink v-if="hasAnyRole('admin', 'editor')" to="/manage">Manage</NuxtLink>
+   */
+  hasAnyRole: (...roles: string[]) => boolean;
+  /**
+   * Returns `true` when the current user has `role` in EITHER supported shape:
+   * `role === role` (Better-Auth admin plugin) or `roles` containing it
+   * (`@lenne.tech/nest-server`; see {@link LtUser.roles}). A malformed non-array
+   * `roles` degrades to `false` — never throws, never fail-opens via
+   * `String.prototype.includes` substring matching. Reads `user` live, so call it
+   * from a template or `computed` for reactivity.
+   *
+   * Prefer this over the raw `user.value?.roles?.includes(x)`, which is unguarded
+   * against the string-`roles` substring-confusion this method closes.
+   *
+   * UX gate only — the `lt-auth-state` cache is client-writable; enforce rights
+   * server-side.
+   *
+   * @example
+   * // <button v-if="hasRole('editor')">Edit</button>
+   * @see {@link LtUser.role}
+   * @see {@link LtUser.roles}
+   */
+  hasRole: (role: string) => boolean;
   is2FAEnabled: ComputedRef<boolean>;
+  /**
+   * `true` when the current user is an admin in EITHER supported shape:
+   * `role === 'admin'` (Better-Auth admin plugin) or `roles` containing `'admin'`
+   * (`@lenne.tech/nest-server`; see {@link LtUser.roles}). Equivalent to
+   * `hasRole('admin')`. A malformed non-array `roles` degrades to `false` (never
+   * throws, never fail-opens). Independent of the `enableAdmin` module option,
+   * which only toggles the Better-Auth admin *client plugin*.
+   *
+   * UX gate only: the `lt-auth-state` cache it reads is client-writable, so treat
+   * this as "what to render", never as the gate itself. Enforce admin rights
+   * server-side.
+   *
+   * @see {@link UseLtAuthReturn.hasRole}
+   * @see {@link LtUser.roles}
+   */
   isAdmin: ComputedRef<boolean>;
 
   // Feature detection

@@ -17,24 +17,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { clearAllCookies, readCookieValue } from './stubs/cookies';
 import { resetStubReactiveStores, resetStubRuntimeConfig, setStubRuntimeConfig } from './stubs/imports';
-
-/**
- * Read the value of a single cookie out of `document.cookie`.
- * Returns `undefined` when the cookie is absent and `''` when only an expired
- * stub remains (happy-dom keeps the empty form; real browsers drop it).
- */
-function readCookieValue(name: string): string | undefined {
-  for (const part of document.cookie.split('; ')) {
-    if (!part) continue;
-    const eq = part.indexOf('=');
-    const key = eq === -1 ? part : part.slice(0, eq);
-    if (key === name) {
-      return eq === -1 ? '' : part.slice(eq + 1);
-    }
-  }
-  return undefined;
-}
 
 // Stub the Better-Auth client so we can instantiate `useLtAuth()` without
 // pulling in the real client + its peer-deps. Only the surface read by the
@@ -64,15 +48,6 @@ function setCookieNamesConfig(state?: string, token?: string): void {
       },
     },
   });
-}
-
-function clearAllCookies(): void {
-  for (const part of document.cookie.split(';')) {
-    const name = part.split('=')[0]?.trim();
-    if (name) {
-      document.cookie = `${name}=; path=/; max-age=0`;
-    }
-  }
 }
 
 beforeEach(() => {
@@ -137,7 +112,7 @@ describe('useLtAuth().clearUser()', () => {
     const { useLtAuth } = await import('../src/runtime/composables/auth/use-lt-auth');
     const { clearUser, setUser } = useLtAuth();
 
-    setUser({ id: 'u1', email: 't@example.com', name: 'Test' } as never);
+    setUser({ id: 'u1', email: 't@example.com', name: 'Test' });
     expect(readCookieValue('lt-auth-state')).toBeTruthy();
 
     clearUser();
@@ -152,7 +127,7 @@ describe('useLtAuth().clearUser()', () => {
     const { useLtAuth } = await import('../src/runtime/composables/auth/use-lt-auth');
     const { clearUser, setUser } = useLtAuth();
 
-    setUser({ id: 'u2', email: 't@example.com', name: 'Test' } as never);
+    setUser({ id: 'u2', email: 't@example.com', name: 'Test' });
     expect(readCookieValue('my-state')).toBeTruthy();
 
     clearUser();
@@ -170,7 +145,7 @@ describe('useLtAuth().clearUser()', () => {
     const { useLtAuth } = await import('../src/runtime/composables/auth/use-lt-auth');
     const auth = useLtAuth();
 
-    auth.setUser({ id: 'u3', email: 't@example.com', name: 'Test' } as never);
+    auth.setUser({ id: 'u3', email: 't@example.com', name: 'Test' });
     expect(auth.user.value).toMatchObject({ id: 'u3' });
     expect(auth.isAuthenticated.value).toBe(true);
 

@@ -18,6 +18,14 @@ import { clearLtAuthCookies, getLtApiBase, getLtAuthCookieNames, resolveLtAuthSt
 import { useLtAuthClient } from '../use-lt-auth-client';
 
 /**
+ * Keys of `T` whose property is OPTIONAL — i.e. safe to `delete`. Constrains
+ * `AUTHZ_KEYS` so a REQUIRED key (`id` / `email`) can never be listed: the merge's
+ * `delete merged[key]` would otherwise strip a required field and break the
+ * id-guard on the next session re-validation.
+ */
+type LtUserOptionalKeys<T> = { [K in keyof T]-?: object extends Pick<T, K> ? K : never }[keyof T];
+
+/**
  * Helper function for i18n with German fallback
  *
  * Two-stage fallback strategy:
@@ -122,22 +130,35 @@ export function useLtAuth(): UseLtAuthReturn {
   // Computed properties based on stored state
   const user = computed<LtUser | null>(() => resolvedAuthState.value?.user ?? null);
   const isAuthenticated = computed<boolean>(() => !!user.value);
-  // Admin detection accepts BOTH user shapes:
-  //  - `role: 'admin'`      — Better-Auth's admin plugin (single role).
-  //  - `roles: ['admin']`   — `@lenne.tech/nest-server`, which registers `roles`
-  //                           as a core Better-Auth additionalField (`string[]`).
-  //                           Its users carry NO singular `role`, so a `role`-only
-  //                           check is permanently false against a nest-server
-  //                           backend and the whole admin UI silently disappears.
-  // `Array.isArray` guards a malformed `roles` in the (client-writable) auth-state
-  // cookie: a non-array value must yield `false`, never throw inside the computed.
-  const isAdmin = computed<boolean>(() => {
+  // Role detection accepts BOTH user shapes (a union — either one granting the role
+  // is sufficient):
+  //  - `role: 'admin'`    — Better-Auth's admin plugin (single role).
+  //  - `roles: ['admin']` — `@lenne.tech/nest-server` (see `LtUser.roles` for why
+  //                         its users carry `roles` and no singular `role`; a
+  //                         `role`-only check was permanently false against it, so
+  //                         the whole admin UI silently disappeared).
+  // `Array.isArray` guards a malformed `roles` from the client-writable auth-state
+  // cookie in TWO ways: a non-array (`roles: 42`) must not throw, AND a bare string
+  // (`roles: 'superadmin'`) must not fail open via `String.prototype.includes`
+  // substring-matching the wanted role. Both degrade to `false`.
+  // UI gate only — NOT an authorization boundary: the cookie is user-editable, so
+  // enforce rights server-side (see `LtUser.roles`).
+  function hasRole(role: string): boolean {
     const current = user.value;
     if (!current) {
       return false;
     }
-    return current.role === 'admin' || (Array.isArray(current.roles) && current.roles.includes('admin'));
-  });
+    return current.role === role || (Array.isArray(current.roles) && current.roles.includes(role));
+  }
+
+  // True when the user has ANY of the given roles. Publishing this (and `hasRole`)
+  // keeps consumers off the raw, unguarded `user.value?.roles?.includes(x)` shape —
+  // the exact substring-confusion the guard above exists to prevent.
+  function hasAnyRole(...roles: string[]): boolean {
+    return roles.some((role) => hasRole(role));
+  }
+
+  const isAdmin = computed<boolean>(() => hasRole('admin'));
   const is2FAEnabled = computed<boolean>(() => user.value?.twoFactorEnabled ?? false);
 
   // SSR-safe shared features state (useState is isolated per request on server, shared on client)
@@ -321,12 +342,12 @@ export function useLtAuth(): UseLtAuthReturn {
    * revoked admin — the exact fail-open this list exists to prevent. Fail-closing it
    * costs nothing for backends that never send `roles`: the key is only dropped when
    * the CACHE has it and the session omits it, so a `roles`-less backend (whose cache
-   * never carries `roles`) is a no-op. And nest-server — the reason `roles` is
-   * supported at all — registers it as a CORE additionalField (`type: 'string[]'`,
-   * `defaultValue: []`), so its get-session always returns `roles`; the worst case is
-   * an honest `[]` (= not an admin), never a spurious drop.
+   * never carries `roles`) is a no-op. And nest-server registers `roles` with
+   * `defaultValue: []` (see `LtUser.roles`), so its get-session returns `roles` for
+   * any user created under it; the worst case is an honest `[]` (= not an admin),
+   * never a spurious drop.
    */
-  const AUTHZ_KEYS = ['banExpires', 'banReason', 'banned', 'emailVerified', 'role', 'roles', 'twoFactorEnabled'] as const satisfies readonly (keyof LtUser)[];
+  const AUTHZ_KEYS = ['banExpires', 'banReason', 'banned', 'emailVerified', 'role', 'roles', 'twoFactorEnabled'] as const satisfies readonly LtUserOptionalKeys<LtUser>[];
 
   /**
    * Merge a Better-Auth session user (partial) onto the cached user of the SAME
@@ -360,8 +381,17 @@ export function useLtAuth(): UseLtAuthReturn {
   }
 
   /**
-   * Validate session with backend (called on app init)
-   * If session is invalid, clear the stored state
+   * Validate session with backend (called on app init).
+   *
+   * If get-session returns a user, it is merged onto the cached user (see
+   * `mergeSessionUser`) so authorization keys are re-derived from the session. If
+   * get-session returns NO user but a cached `lt-auth-state` user exists (e.g. just
+   * after a 2FA step the session endpoint hasn't caught up on), this deliberately
+   * trusts the client-side cache and returns `true` WITHOUT re-validating
+   * authorization — that branch never runs `mergeSessionUser`, so `AUTHZ_KEYS`
+   * cannot fail-close it. Intentional and self-healing (the next authenticated
+   * request 401s a dead session), but it is exactly why `isAdmin` must remain a UI
+   * gate: authorization is the backend's job, not this cache's.
    */
   async function validateSession(): Promise<boolean> {
     try {
@@ -802,6 +832,8 @@ export function useLtAuth(): UseLtAuthReturn {
     user,
 
     // User properties
+    hasAnyRole,
+    hasRole,
     is2FAEnabled,
     isAdmin,
 

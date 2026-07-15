@@ -19,7 +19,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, reactive } from 'vue';
 
+import { clearAllCookies, readAuthStateUser } from './stubs/cookies';
 import { resetStubReactiveStores, resetStubRuntimeConfig } from './stubs/imports';
+import { testUser } from './stubs/users';
 
 /**
  * Mutable Better-Auth session, swapped per test. Shape mirrors what the
@@ -44,29 +46,6 @@ vi.mock('../src/runtime/composables/use-lt-auth-client', () => ({
   }),
 }));
 
-/** Read the live auth-state user straight out of `document.cookie`. */
-function readUserFromCookie(): Record<string, unknown> | null {
-  for (const part of document.cookie.split('; ')) {
-    if (!part.startsWith('lt-auth-state=')) continue;
-    try {
-      const state = JSON.parse(decodeURIComponent(part.slice('lt-auth-state='.length)));
-      if (state?.user) return state.user;
-    } catch {
-      // skip malformed
-    }
-  }
-  return null;
-}
-
-function clearAllCookies(): void {
-  for (const part of document.cookie.split(';')) {
-    const name = part.split('=')[0]?.trim();
-    if (name) {
-      document.cookie = `${name}=; path=/; max-age=0`;
-    }
-  }
-}
-
 beforeEach(() => {
   resetStubRuntimeConfig();
   resetStubReactiveStores();
@@ -90,12 +69,12 @@ describe('validateSession() merges the session user (mergeSessionUser invariant)
     const auth = useLtAuth();
 
     // Cached user: full nest-server user (Better-Auth fields + a nest-server-only field).
-    auth.setUser({
+    auth.setUser(testUser({
       id: 'u1',
       email: 'old@example.com',
       name: 'Old Name',
       leadTableColumns: ['name', 'email', 'status'],
-    } as never);
+    }));
 
     // Better-Auth get-session returns ONLY Better-Auth fields (no leadTableColumns),
     // with updated email/name.
@@ -116,7 +95,7 @@ describe('validateSession() merges the session user (mergeSessionUser invariant)
     expect(user.name).toBe('New Name');
 
     // The persisted cookie carries the merged shape too (what a reload would read).
-    expect(readUserFromCookie()).toMatchObject({
+    expect(readAuthStateUser()).toMatchObject({
       email: 'new@example.com',
       id: 'u1',
       leadTableColumns: ['name', 'email', 'status'],
@@ -128,12 +107,12 @@ describe('validateSession() merges the session user (mergeSessionUser invariant)
     const auth = useLtAuth();
 
     // Cached user is a DIFFERENT identity carrying a private field.
-    auth.setUser({
+    auth.setUser(testUser({
       id: 'u1',
       email: 'first@example.com',
       name: 'First User',
       leadTableColumns: ['secret-column'],
-    } as never);
+    }));
 
     // Session resolves a different user (e.g. account switch).
     mockSession = {
@@ -176,12 +155,12 @@ describe('mergeSessionUser keeps authorization keys fail-closed (AUTHZ_KEYS)', (
     const auth = useLtAuth();
 
     // Cached user carries an authz field (role) AND a nest-server-only field.
-    auth.setUser({
+    auth.setUser(testUser({
       id: 'u1',
       email: 'a@example.com',
       role: 'admin',
       leadTableColumns: ['x'],
-    } as never);
+    }));
 
     // Backend downgraded the user: get-session no longer returns `role`.
     mockSession = { data: { user: { id: 'u1', email: 'a@example.com' } }, isPending: false };
@@ -202,12 +181,12 @@ describe('mergeSessionUser keeps authorization keys fail-closed (AUTHZ_KEYS)', (
     const auth = useLtAuth();
 
     // Cached nest-server user with admin rights + a nest-server-only field.
-    auth.setUser({
+    auth.setUser(testUser({
       id: 'u1',
       email: 'a@example.com',
       roles: ['admin'],
       leadTableColumns: ['x'],
-    } as never);
+    }));
 
     // Backend revoked admin and no longer returns `roles` at all. Keeping the
     // cached value would be fail-open: the admin UI would stay visible.
@@ -227,7 +206,9 @@ describe('mergeSessionUser keeps authorization keys fail-closed (AUTHZ_KEYS)', (
     const { useLtAuth } = await import('../src/runtime/composables/auth/use-lt-auth');
     const auth = useLtAuth();
 
-    auth.setUser({ id: 'u1', email: 'a@example.com', roles: ['admin'] } as never);
+    // No `as never`: `roles?: string[]` is now a real LtUser field, so this payload
+    // is type-valid and vue-tsc verifies it against the contract this fix introduced.
+    auth.setUser({ id: 'u1', email: 'a@example.com', roles: ['admin'] });
     // The realistic nest-server downgrade: get-session still returns `roles`,
     // just without 'admin' in it (worst case an empty array — its defaultValue).
     mockSession = {
@@ -243,11 +224,37 @@ describe('mergeSessionUser keeps authorization keys fail-closed (AUTHZ_KEYS)', (
     expect(auth.isAdmin.value).toBe(false);
   });
 
+  it('lets the session strip ALL roles with an empty array (nest-server defaultValue: [])', async () => {
+    const { useLtAuth } = await import('../src/runtime/composables/auth/use-lt-auth');
+    const auth = useLtAuth();
+
+    auth.setUser({ id: 'u1', email: 'a@example.com', roles: ['admin'] });
+
+    // The FULL-demotion shape a nest-server backend actually sends: `roles` is a core
+    // additionalField with `defaultValue: []`, so a user stripped of every role comes
+    // back as `roles: []` — PRESENT, but empty. Distinct from the "session omits
+    // `roles`" case above: the key IS in the session, so the AUTHZ drop loop never
+    // fires and the spread alone must overwrite the cached `['admin']` with `[]`. An
+    // "empty means absent" merge (`sessionUser.roles?.length ? … : cached.roles`) would
+    // pass every other test in this file and silently keep admin — fail-open.
+    mockSession = {
+      data: { user: { id: 'u1', email: 'a@example.com', roles: [] } },
+      isPending: false,
+    };
+
+    const ok = await auth.validateSession();
+    expect(ok).toBe(true);
+
+    const user = auth.user.value as unknown as Record<string, unknown>;
+    expect(user.roles).toEqual([]);
+    expect(auth.isAdmin.value).toBe(false);
+  });
+
   it('keeps `roles` when the session still grants admin (no spurious drop on re-validation)', async () => {
     const { useLtAuth } = await import('../src/runtime/composables/auth/use-lt-auth');
     const auth = useLtAuth();
 
-    auth.setUser({ id: 'u1', email: 'a@example.com', roles: ['admin'] } as never);
+    auth.setUser({ id: 'u1', email: 'a@example.com', roles: ['admin'] });
     mockSession = {
       data: { user: { id: 'u1', email: 'a@example.com', roles: ['admin'] } },
       isPending: false,
@@ -261,11 +268,32 @@ describe('mergeSessionUser keeps authorization keys fail-closed (AUTHZ_KEYS)', (
     expect((auth.user.value as unknown as Record<string, unknown>).roles).toEqual(['admin']);
   });
 
+  it('keeps `role: "admin"` on re-validation (the Better-Auth admin-plugin twin)', async () => {
+    const { useLtAuth } = await import('../src/runtime/composables/auth/use-lt-auth');
+    const auth = useLtAuth();
+
+    // The `roles` re-validation test above has a `role`-shape twin that never existed:
+    // the other authz test (`overwrite ... when present`, below) only asserts the
+    // DOWNGRADE. This pins PRESERVATION for the Better-Auth admin-plugin consumer base —
+    // a reload must not cost a `role: 'admin'` user their admin UI either.
+    auth.setUser({ id: 'u1', email: 'a@example.com', role: 'admin' });
+    mockSession = {
+      data: { user: { id: 'u1', email: 'a@example.com', role: 'admin' } },
+      isPending: false,
+    };
+
+    const ok = await auth.validateSession();
+    expect(ok).toBe(true);
+
+    expect(auth.isAdmin.value).toBe(true);
+    expect((auth.user.value as unknown as Record<string, unknown>).role).toBe('admin');
+  });
+
   it('lets the session overwrite an authorization field when it is present', async () => {
     const { useLtAuth } = await import('../src/runtime/composables/auth/use-lt-auth');
     const auth = useLtAuth();
 
-    auth.setUser({ id: 'u1', email: 'a@example.com', role: 'admin' } as never);
+    auth.setUser({ id: 'u1', email: 'a@example.com', role: 'admin' });
     mockSession = {
       data: { user: { id: 'u1', email: 'a@example.com', role: 'user' } },
       isPending: false,
@@ -286,7 +314,7 @@ describe('mergeSessionUser id guard hardening (both ids absent)', () => {
     const auth = useLtAuth();
 
     // Malformed cached identity with NO id, carrying a private field.
-    auth.setUser({ email: 'first@example.com', leadTableColumns: ['secret'] } as never);
+    auth.setUser(testUser({ email: 'first@example.com', leadTableColumns: ['secret'] }));
 
     // Session user ALSO lacks an id (undefined === undefined must NOT merge).
     mockSession = { data: { user: { email: 'second@example.com' } }, isPending: false };
@@ -306,12 +334,12 @@ describe('validateSession() pending + empty-session branches', () => {
     const { useLtAuth } = await import('../src/runtime/composables/auth/use-lt-auth');
     const auth = useLtAuth();
 
-    auth.setUser({
+    auth.setUser(testUser({
       id: 'u1',
       email: 'old@example.com',
       name: 'Old',
       leadTableColumns: ['a'],
-    } as never);
+    }));
 
     // Reactive session so the composable's `watch(() => session.value.isPending)`
     // in the wait branch actually fires when we flip isPending below.
@@ -336,7 +364,7 @@ describe('validateSession() pending + empty-session branches', () => {
     const { useLtAuth } = await import('../src/runtime/composables/auth/use-lt-auth');
     const auth = useLtAuth();
 
-    auth.setUser({ id: 'u1', email: 'a@example.com', name: 'A' } as never);
+    auth.setUser({ id: 'u1', email: 'a@example.com', name: 'A' });
     mockSession = { data: null, isPending: false };
 
     const ok = await auth.validateSession();
@@ -362,12 +390,12 @@ describe('authenticateWithPasskey() routes the get-session fallback through merg
     const auth = useLtAuth();
 
     // Cached full nest-server user (SAME identity the get-session will resolve).
-    auth.setUser({
+    auth.setUser(testUser({
       id: 'u1',
       email: 'old@example.com',
       name: 'Old',
       leadTableColumns: ['name', 'email'],
-    } as never);
+    }));
 
     // Stub the WebAuthn credential the browser would hand back.
     const fakeCredential = {

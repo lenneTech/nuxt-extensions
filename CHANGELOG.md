@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-07-15
+
+### Fixed
+
+- **`isAdmin` was permanently `false` against a nest-server backend.** The computed only checked Better-Auth's singular `role: 'admin'` (the admin-plugin shape). But `@lenne.tech/nest-server` registers `roles` as a *core* Better-Auth additionalField (`type: 'string[]'`, `defaultValue: []`) and issues users with `roles: ['admin']` and **no** singular `role` — so against a nest-server backend `isAdmin` was false for every user, real admins included, and the entire admin UI silently disappeared: no error, no warning, a `v-if="isAdmin"` block simply never rendered. `isAdmin` now accepts BOTH shapes: `role === 'admin'` OR `roles` containing `'admin'`. The `roles` read is `Array.isArray`-guarded, because the `lt-auth-state` cookie it reads is client-writable — a malformed value must degrade to `false` rather than throw inside the computed (`roles: 42`) or fail open via `String.prototype.includes` (a bare string `roles: 'superadmin'` would otherwise substring-match `'admin'`).
+
+### Added
+
+- **`LtUser.roles?: string[]`** — the multi-role shape, alongside the existing single-role `LtUser.role?: string`. Purely additive: `role` is untouched, so a Better-Auth admin-plugin backend behaves exactly as before.
+- **`useLtAuth().hasRole(role)` / `.hasAnyRole(...roles)`** — guarded role checks that accept BOTH user shapes (Better-Auth `role` and nest-server `roles`), so consuming projects no longer hand-roll the unguarded `user.value?.roles?.includes(x)` — which is open to the same string-`roles` substring-confusion the guard prevents (`roles: 'superadmin'` must not grant `'admin'`). `isAdmin` is now defined as `hasRole('admin')`, so the union + `Array.isArray` guard live in exactly one place.
+
+### Changed
+
+- **`roles` is fail-closed on session merge.** `'roles'` joins the internal `AUTHZ_KEYS` (`banExpires`, `banReason`, `banned`, `emailVerified`, `role`, `roles`, `twoFactorEnabled`), so a cached `roles` array the session omits is dropped from the merge instead of kept — a backend-side admin revocation closes the admin UI on the next session re-validation rather than being masked by a stale array. This costs nothing for backends that never send `roles`: a key is only dropped when the cache carries it and the session omits it, so a `roles`-less backend is a no-op. And nest-server's `defaultValue: []` means its get-session returns `roles` for any user created under it, so the worst case is an honest `[]` (= not an admin), never a spurious drop.
+- **Consumer-visible: a nest-server-backed app will now show admin UI where it previously showed none.** This is the fix, not a regression — those users always *were* admins (the backend authorized them as such; only the client-side check was blind), and frontend `isAdmin` gating was never the authorization boundary. If your project papered over the bug with its own `user.roles?.includes('admin')` check, that workaround is now redundant and can be retired. `isAdmin` remains a UX gate only — always enforce admin rights server-side.
+
+### Tests
+
+- Added `test/is-admin.test.ts`: both shapes (`roles: ['admin']` with no singular `role`, `'admin'` among several roles, `role: 'admin'` unchanged), the negatives (non-admin `roles`, empty `roles` array = nest-server's `defaultValue`, non-admin `role`, no user, neither field present), the malformed non-array `roles` guard and its fail-open twin (a bare string `roles`), case-sensitivity, runtime reactivity (promote/demote/logout), the `role`/`roles` union semantics, and the SSR scope (state resolved from the request `Cookie` header).
+- Extended `test/merge-session-user.test.ts`: `roles` is dropped when the session omits it (fail-closed → admin UI closes), downgraded when the session sends a lesser array, emptied when the session sends `roles: []` (nest-server's full-demotion shape), kept when the session still grants admin (no spurious drop on re-validation), and the `role`-shape preservation twin for Better-Auth-admin-plugin consumers.
+
 ## [1.8.4] - 2026-07-13
 
 ### Fixed

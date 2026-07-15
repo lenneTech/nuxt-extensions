@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 
+import { clearAllCookies } from './stubs/cookies';
 import { resetStubRuntimeConfig, setStubRuntimeConfig, setStubRuntimeConfigThrows } from './stubs/imports';
 import { resetTestRenderScope, setTestRenderScope } from './stubs/render-scope';
 
@@ -7,16 +8,6 @@ let warnSpy: MockInstance<(...args: unknown[]) => void>;
 
 async function loadAuthState() {
   return import('../src/runtime/lib/auth-state');
-}
-
-/** Expire every cookie so the SSR-scope tests below cannot leak into one another. */
-function clearAllCookies(): void {
-  for (const part of document.cookie.split(';')) {
-    const name = part.split('=')[0]?.trim();
-    if (name) {
-      document.cookie = `${name}=; path=/; max-age=0`;
-    }
-  }
 }
 
 beforeEach(async () => {

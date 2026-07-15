@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { clearAllCookies } from './stubs/cookies';
 import { resetStubRuntimeConfig, setStubRuntimeConfig } from './stubs/imports';
 
 function setCookieNamesConfig(state?: string, token?: string): void {
@@ -15,15 +16,6 @@ function setCookieNamesConfig(state?: string, token?: string): void {
       },
     },
   });
-}
-
-function clearAllCookies(): void {
-  for (const part of document.cookie.split(';')) {
-    const name = part.split('=')[0]?.trim();
-    if (name) {
-      document.cookie = `${name}=; path=/; max-age=0`;
-    }
-  }
 }
 
 beforeEach(() => {
