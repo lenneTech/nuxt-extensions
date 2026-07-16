@@ -9,17 +9,3 @@ autoInstallPeers: true
 allowBuilds:
   '@parcel/watcher': true
   'esbuild': true
-
-# Security overrides (transitive deps forced onto patched versions).
-overrides:
-  'brace-expansion@>=5.0.0 <5.0.6': '5.0.6'
-  'devalue@>=5.6.3 <=5.8.0': '5.8.1'
-  'kysely@>=0.26.0 <0.28.17': '0.28.17'
-  'ws@>=8.0.0 <8.20.1': '8.21.0'
-  'shell-quote@<1.8.4': '1.8.4'
-  'nuxt@<4.4.7': '4.4.7'
-  'vite@>=7.0.0 <7.3.5': '7.3.5'
-  'tar@<7.5.16': '7.5.16'
-  'launch-editor@<2.14.1': '2.14.1'
-  'esbuild@<0.28.1': '0.28.1'
-  '@babel/core@<7.29.6': '7.29.6'

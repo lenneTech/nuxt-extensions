@@ -1,6 +1,6 @@
 {
   "name": "@lenne.tech/nuxt-extensions",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "description": "Reusable Nuxt 4 composables, components, and Better-Auth integration for lenne.tech projects",
   "repository": {
     "type": "git",
@@ -12,7 +12,6 @@
   },
   "author": "lenne.Tech <info@lenne.tech> (https://lenne.tech)",
   "license": "MIT",
-  "packageManager": "pnpm@11.13.0",
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -52,9 +51,9 @@
     "prepack": "node scripts/sync-module-version.mjs && nuxt-module-build build",
     "c": "pnpm run check",
     "check": "node scripts/check.mjs",
-    "check:raw": "pnpm audit && pnpm run format:check && pnpm run lint && pnpm run dev:prepare && pnpm test:types && pnpm test && pnpm run build",
-    "check:fix": "pnpm install && pnpm audit --fix && pnpm run format && pnpm run lint:fix && pnpm test:types && pnpm test && pnpm run build",
-    "check:naf": "pnpm install && pnpm run format && pnpm run lint:fix && pnpm test:types && pnpm test && pnpm run build",
+    "check:raw": "pnpm install --frozen-lockfile && pnpm audit && pnpm run format:check && pnpm run lint && pnpm run version:check && pnpm run dev:prepare && pnpm test:types && pnpm test && pnpm run build && pnpm run check:manifest",
+    "check:fix": "pnpm install && pnpm audit --fix && pnpm run format && pnpm run lint:fix && pnpm run version:sync && pnpm test:types && pnpm test && pnpm run build && pnpm run check:manifest",
+    "check:naf": "pnpm install && pnpm run format && pnpm run lint:fix && pnpm run version:sync && pnpm test:types && pnpm test && pnpm run build && pnpm run check:manifest",
     "cf": "pnpm run check:fix",
     "cnaf": "pnpm run check:naf",
     "dev": "pnpm dev:prepare && nuxt dev playground",
@@ -65,20 +64,24 @@
     "lint:fix": "oxlint --fix --fix-suggestions src/",
     "format": "oxfmt --write src/",
     "format:check": "oxfmt --check src/",
+    "version:sync": "node scripts/sync-module-version.mjs",
+    "version:check": "node scripts/sync-module-version.mjs --check",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "test:coverage": "vitest run --coverage",
     "test:types": "vue-tsc --noEmit && cd playground && vue-tsc --noEmit",
-    "release": "pnpm format:check && pnpm lint && pnpm test:types && pnpm test && pnpm prepack"
+    "release": "pnpm format:check && pnpm lint && pnpm run version:check && pnpm test:types && pnpm test && pnpm run check:consumer && pnpm prepack",
+    "check:consumer": "node scripts/check-consumer-build.mjs",
+    "check:manifest": "node scripts/check-package-manifest.mjs"
   },
   "dependencies": {
-    "@nuxt/kit": "4.4.6"
+    "@nuxt/kit": "^4.0.0"
   },
   "peerDependencies": {
     "@better-auth/passkey": ">=1.0.0",
     "@playwright/test": ">=1.0.0",
     "better-auth": ">=1.0.0",
-    "nuxt": ">=3.0.0",
+    "nuxt": "^4.0.0",
     "tus-js-client": ">=4.0.0"
   },
   "peerDependenciesMeta": {
@@ -96,22 +99,21 @@
     }
   },
   "devDependencies": {
-    "@better-auth/passkey": "1.6.13",
-    "@nuxt/devtools": "3.2.4",
+    "@better-auth/passkey": "1.6.23",
     "@nuxt/module-builder": "1.0.2",
-    "@nuxt/schema": "4.4.6",
-    "@playwright/test": "1.60.0",
-    "@types/node": "25.9.1",
-    "@vitest/coverage-v8": "4.1.7",
-    "better-auth": "1.6.13",
-    "happy-dom": "20.9.0",
-    "nuxt": "4.4.6",
-    "oxfmt": "0.52.0",
-    "oxlint": "1.67.0",
+    "@nuxt/schema": "4.4.8",
+    "@playwright/test": "1.61.1",
+    "@types/node": "26.1.1",
+    "@vitest/coverage-v8": "4.1.10",
+    "better-auth": "1.6.23",
+    "happy-dom": "20.10.6",
+    "nuxt": "4.4.8",
+    "oxfmt": "0.59.0",
+    "oxlint": "1.74.0",
     "tus-js-client": "4.3.1",
     "typescript": "5.9.3",
-    "vitest": "4.1.7",
-    "vue-tsc": "3.3.3"
+    "vitest": "4.1.10",
+    "vue-tsc": "3.3.7"
   },
   "keywords": [
     "nuxt",
@@ -127,6 +129,7 @@
     "lenne-tech"
   ],
   "engines": {
-    "node": ">= 22"
+    "node": ">= 22",
+    "pnpm": "^11.0.0"
   }
 }

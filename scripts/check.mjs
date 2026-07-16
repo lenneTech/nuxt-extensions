@@ -76,6 +76,8 @@ function classify(cmd) {
     return { fatal: true, kind: "build", label: "build" };
   if (c.includes("check-server-start") || c.includes("server-start"))
     return { fatal: true, kind: "server", label: "server-start" };
+  if (c.includes("version:check") || c.includes("version:sync") || c.includes("sync-module-version"))
+    return { fatal: true, kind: "version", label: "version-sync" };
   return { fatal: true, kind: "other", label: cmd.length > 32 ? `${cmd.slice(0, 29)}…` : cmd };
 }
 
@@ -94,6 +96,12 @@ function toFixCommand(kind, cmd) {
     if (/\brun\s+lint\b/.test(cmd)) return cmd.replace(/\brun\s+lint\b/, "run lint:fix");
     if (/\boxlint\b/.test(cmd)) return cmd.replace(/\boxlint\b/, "oxlint --fix --fix-suggestions");
     return cmd;
+  }
+  // A version drift between package.json and the module's `meta.version` export
+  // is mechanically fixable, so repair it like format/lint instead of only failing.
+  if (kind === "version") {
+    if (/\bversion:check\b/.test(cmd)) return cmd.replace(/\bversion:check\b/, "version:sync");
+    return cmd.replace(/\s--check\b/, "");
   }
   return cmd;
 }

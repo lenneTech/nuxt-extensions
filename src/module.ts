@@ -5,13 +5,13 @@
  * for lenne.tech projects.
  */
 
-import { addComponent, addImports, addPlugin, addRouteMiddleware, createResolver, defineNuxtModule } from '@nuxt/kit';
+import { addComponent, addImports, addPlugin, addRouteMiddleware, createResolver, defineNuxtModule, tryResolveModule } from '@nuxt/kit';
 
 import type { LtExtensionsModuleOptions } from './runtime/types';
 
 // Module meta
 export const name = '@lenne.tech/nuxt-extensions';
-export const version = '1.5.2';
+export const version = '1.10.0';
 export const configKey = 'ltExtensions';
 
 // Default cookie names — re-exported from auth-state so consumers can read
@@ -84,6 +84,28 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
       tus: { ...defaultOptions.tus, ...options.tus },
     };
 
+    // `@better-auth/passkey` is an OPTIONAL peer, but `auth-client.ts` imports
+    // `passkeyClient` at the top level — so the bundler must resolve the
+    // specifier even when a project never enables passkeys. Alias it onto a
+    // no-op stub when the package is absent, otherwise the build fails with an
+    // unresolved-optional-peer error instead of honouring the optionality.
+    const passkeyAvailable = !!(await tryResolveModule('@better-auth/passkey/client', new URL(import.meta.url)));
+    if (!passkeyAvailable) {
+      const passkeyStub = resolve('./runtime/lib/passkey-stub');
+      nuxt.options.alias['@better-auth/passkey/client'] = passkeyStub;
+      nuxt.options.nitro ??= {};
+      nuxt.options.nitro.alias = { ...nuxt.options.nitro.alias, '@better-auth/passkey/client': passkeyStub };
+    }
+
+    // Passkeys need the package, no matter what the project asked for.
+    const enablePasskey = (resolvedOptions.auth?.enablePasskey ?? true) && passkeyAvailable;
+    if ((resolvedOptions.auth?.enablePasskey ?? true) && !passkeyAvailable) {
+      console.warn(
+        `[${name}] Passkey support disabled: the optional peer dependency "@better-auth/passkey" is not installed. ` +
+          'Install it to use passkeys, or set `ltExtensions.auth.enablePasskey = false` to silence this warning.',
+      );
+    }
+
     // Declare runtimeConfig keys with empty defaults so Nuxt can override them at runtime.
     //
     // WHY no process.env reads here?
@@ -135,7 +157,7 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
         },
         enabled: resolvedOptions.auth?.enabled ?? true,
         enableAdmin: resolvedOptions.auth?.enableAdmin ?? true,
-        enablePasskey: resolvedOptions.auth?.enablePasskey ?? true,
+        enablePasskey,
         enableTwoFactor: resolvedOptions.auth?.enableTwoFactor ?? true,
         interceptor: {
           enabled: resolvedOptions.auth?.interceptor?.enabled ?? true,
