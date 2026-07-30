@@ -9,3 +9,51 @@ autoInstallPeers: true
 allowBuilds:
   '@parcel/watcher': true
   'esbuild': true
+
+# ----------------------------------------------------------------------------------
+# Security overrides: force vulnerable transitive deps onto patched versions.
+#
+# WARNING — these do NOT reach consumers of the published package. `overrides:` is
+# honoured only for the ROOT project of an install, so a downstream project gets ITS
+# OWN overrides, not these. A green `pnpm audit` here says nothing about a consumer's
+# tree; the load-bearing entries are mirrored in nuxt-base-starter and lt-monorepo.
+#
+# Every target is a FIXED version, never an unbounded range — an open range silently
+# drags a dependency across majors. Re-check on every maintenance run and drop what
+# upstream has since requested on its own.
+# ----------------------------------------------------------------------------------
+overrides:
+  # brace-expansion DoS — two advisories: GHSA-3jxr-9vmj-r5cp (exponential-time expansion
+  # of consecutive non-expanding {} groups) and GHSA-mh99-v99m-4gvg (unbounded expansion
+  # length -> OOM, patched ONLY in 5.0.8). One entry per affected major, each a patch bump
+  # INSIDE that major — a wider range would force a dependency across two majors.
+  'brace-expansion@>=2.0.0 <2.1.2': '2.1.2'
+  'brace-expansion@>=5.0.0 <5.0.8': '5.0.8'
+  # The real lever for GHSA-mh99-v99m-4gvg: only brace-expansion 5.0.8 carries the fix, and
+  # forcing it onto a minimatch@3 consumer throws "expand is not a function" (5.x exports a
+  # namespace object, not a callable). minimatch 10.2.6 REQUESTS ^5.0.8, so lifting every
+  # 5.x/9.x consumer onto it removes the vulnerable 2.x line from the tree legitimately.
+  # Safe: 9 and 10 share the same non-callable CJS export shape.
+  'minimatch@>=5.0.0 <10.2.6': '10.2.6'
+  # tar — five advisories in one line (GHSA-23hp-3jrh-7fpw critical: decompression/parse DoS via
+  # unlimited input; GHSA-8x88-c5mf-7j5w, GHSA-w8wr-v893-vjvp, GHSA-gvwx-54wh-qm9j,
+  # GHSA-r292-9mhp-454m). The highest patch floor across them is 7.5.21.
+  'tar@<7.5.21': '7.5.22'
+  # shell-quote quadratic-complexity DoS in parse() (GHSA-395f-4hp3-45gv, HIGH / CWE-407,
+  # patched >=1.9.0 — 1.8.5 never existed on the registry: versions jump 1.8.4 -> 1.9.0 -> 1.10.0,
+  # so `<1.9.0` is the accurate lower bound and behaves identically to the vulnerable set `<=1.8.4`).
+  'shell-quote@<1.9.0': '1.10.0'
+  # svgo — the removeScripts plugin left some executable scripts intact (GHSA-2p49-hgcm-8545).
+  'svgo@>=4.0.0 <4.0.2': '4.0.2'
+  # postcss path traversal in previous-source-map auto-loading via sourceMappingURL, leaking
+  # arbitrary .map files (GHSA-r28c-9q8g-f849, patched >=8.5.18).
+  'postcss@<8.5.18': '8.5.24'
+
+# No `minimumReleaseAge` gate is set in THIS repo, so the exclude list below is inert here. It is
+# mirrored — together with the overrides — into nuxt-base-starter / lt-monorepo, where an age gate
+# IS enforced and would otherwise block the two freshest security fixes. Keep this list in sync with
+# THEIR threshold: at a >=7d gate, tar@7.5.22 (~6d) and brace-expansion@5.0.8 (~7d) must be excluded
+# there too; at <=5d only the two freshest below (minimatch@10.2.6 ~3d, postcss@8.5.24 ~2d) need it.
+minimumReleaseAgeExclude:
+  - minimatch@10.2.6
+  - postcss@8.5.24
