@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.2] - 2026-08-12
+
+### Fixed
+
+- **A session that had genuinely expired no longer looks like an empty page.** Two independent bugs in the 401 path lined up so that neither a dead session nor a mere permission error produced the right outcome. Both were found in a consuming project, where the symptom was a hub that said "no tool unlocked for this clinic" to anyone whose session had run out — people called their clinic management when all they needed was to sign in again.
+  - **The session probe ran without the session cookie.** `fetchWithAuth` omits cookies in JWT mode, and every successful login pre-fetches a JWT (`switchToJwtMode()` flips `authMode` to `'jwt'`), so the interceptor's `/get-session` probe was effectively always bearer-only. Better Auth resolves that endpoint from the session COOKIE alone and answers `200` with a `null` body when it sees none — byte for byte what a signed-out visitor gets. The probe therefore read *every* authenticated JWT-mode session as dead, and the first mislabelled 401 (a permission error the backend returned as 401 instead of 403) ended the session. Measured against a live backend: with cookie → full session, bearer-only → `200 null`. `/get-session` is now in `PATHS_REQUIRING_COOKIES`.
+  - **A 401 the interceptor ignored swallowed the 401s behind it.** `isHandling401` was claimed BEFORE the `isAuthenticated` check and always released on a 1 s timer, so a no-op — most importantly the first API call of a page load, which can land before the auth plugin has restored the user from the cookie — blocked the guard for a full second. That is exactly the window the rest of the page's requests arrive in, and among them the ones that would have proven the session dead. The guard is now claimed only while a logout is actually running and released immediately otherwise.
+
+- **A rate limit or a backend hiccup no longer signs anyone out.** `isSessionStillAlive()` treated every non-2xx probe response as "session dead", which folded 429 (Better Auth's rate limiter), 403, and 500/502/503/504 (deploy, gateway restart, cold start) in with a real 401. Only `401`/`403` is a verdict about the session now; anything else non-ok returns "no verdict" and never logs out. Releasing the guard immediately (above) made hitting one of those measurably likelier, so the two changes belong together.
+
+- **A stale JWT no longer leaves the client looping.** In JWT mode the failing request authenticates with the bearer, but the probe's verdict comes from the session cookie — so an expired JWT alongside a live cookie session read as "session alive" and no logout followed. Nothing repaired the bearer either (`refreshJwtToken()` has no internal call site, and `fetchWithAuth` only switches modes on a 401 in *cookie* mode), so the client settled into request → 401 → probe → "alive" → request → 401 … while the UI still showed the user as signed in. A live cookie verdict in JWT mode now mints a fresh token.
+
+- **`import.meta.env.VITE_API_URL` can no longer reach Better Auth as a boolean.** The env object carries a loose index signature — Vite's own keys include booleans — so the `||` fallback chain widened to `string | true`. Nuxt 4.5's stricter types surfaced this; the value is now taken only when it really is a string.
+
+### Changed
+
+- **A positive session verdict is reused for one second.** Releasing the guard immediately means sequential 401s each probe on their own: a page firing several requests the user lacks rights for cost one `/get-session` call per request, and a polled forbidden endpoint doubled its request rate indefinitely (measured: 12 sequential 401s → 12 probes, where the old blanket 1 s hold cost one). Only the `true` verdict is cached — `false` leads straight to logout and `null` must never be cached, because suppressing re-probes after a network blip is precisely the swallowing the guard change removes. The worst case is bounded: a session dying inside the window is noticed up to a second late, never missed.
+- **`isAuthEndpoint()` lists the session routes Better Auth actually exposes.** A generic `'/session'` entry stood there and had never matched anything: the routes are `get-session`, `list-sessions`, `revoke-session`, … — in each of them the character before `session` is `-`, not `/`, so the `includes` test was always false. `/get-session` in particular matters, because it is the probe's own URL: exempting it restores the second recursion layer the `isSessionStillAlive()` JSDoc had been claiming (and not having) since 1.8.4.
+- Dependency maintenance to clear `pnpm audit`: `nuxt` and `@nuxt/schema` 4.4.8 → 4.5.2 (six advisories, incl. SSR RCE via island props, a payload-cache leak across users, and an auth-gate bypass on mixed-case route rules; the bump also pulls `@nuxt/devtools` onto `^3.4.1`, closing a critical unauthenticated-RPC command execution on the developer's host). `brace-expansion`'s 5.x override floor moved 5.0.8 → 5.0.9 for GHSA-rgw5-rvv9-x895, and a `nanoid@<3.3.17 → 3.3.18` override was added.
+
+### Tests
+
+- `test/auth-fetch-cookies.test.ts` — the credentials decision per mode and path: `/get-session` gets the cookie in JWT mode, ordinary endpoints do not, passkey/2FA keep theirs, and cookie mode sends cookies throughout.
+- `test/auth-interceptor.test.ts` — the guard now covers what it must and nothing more (a 401 before hydration does not swallow the next one, no-verdict and permission-error probes are re-evaluated, parallel 401s still collapse to one logout), plus the new verdict rules: 429/502/503 never log out, a positive verdict is reused across a burst, and a live cookie session in JWT mode mints a fresh bearer. The logout test now asserts the redirect target and its encoding, not just that `clearUser` ran.
+- A second suite drives a 401 through the real wrapped `globalThis.fetch` rather than the provided handler — the two fetch wrappers decide whether the handler is reached at all and had no coverage.
+
+## [1.11.1] - 2026-07-30
+
+### Changed
+
+- Security overrides pinning `brace-expansion`, `minimatch`, `tar`, `shell-quote`, `svgo` and `postcss` onto patched versions to clear `pnpm audit` advisories (DoS, path traversal). The overrides apply to this repo's own install only — `overrides:` is honoured for the root project of an install, so a consumer gets its own — and are mirrored into `nuxt-base-starter` and `lt-monorepo`, where they do reach a consumer tree.
+
+## [1.11.0] - 2026-07-18
+
+### Changed
+
+- **The `check` Steps report is grouped per project.** The list after "Check PASSED" interleaved workspace, api and app steps in completion order, which parallel groups made hard to scan. Steps are now partitioned per project — workspace-level steps under a `monorepo` header, then one block per member, each in chain order.
+
+### Fixed
+
+- **`check.mjs` is back at parity with the rest of its family.** The wrapper is one maintained code family across `lt-monorepo`, `nest-server-starter`, `nuxt-base-template`, `nest-server` and this repo, and this copy had fallen behind on two discovery fixes: `realChain()` silently dropped a workspace member whose `check` is itself this wrapper, and root-only steps were not being resolved.
+
 ## [1.10.0] - 2026-07-16
 
 ### Fixed
@@ -60,7 +102,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **A 401 no longer triggers a false logout for mislabeled permission errors.** The auth interceptor cleared the session and redirected to login on every 401. But a 401 from a domain endpoint is not proof of an expired session: backends may mislabel permission errors (authenticated user, missing right — semantically 403) as 401, which kicked a logged-in user out of the app over a mere missing right. `handleUnauthorized()` now verifies against `/get-session` before logging out: session alive → treat as a permission error, no logout; session dead → clear state + redirect (real expiry); probe undecided (API unreachable) → keep the user logged in (unreachable ≠ logged out). The probe is recursion-safe via the existing `isHandling401` guard, and an unverifiable probe never logs the user out — so the change is fail-safe (worst case: a dead session is logged out one request late).
+- **A 401 no longer triggers a false logout for mislabeled permission errors.** The auth interceptor cleared the session and redirected to login on every 401. But a 401 from a domain endpoint is not proof of an expired session: backends may mislabel permission errors (authenticated user, missing right — semantically 403) as 401, which kicked a logged-in user out of the app over a mere missing right. `handleUnauthorized()` now verifies against `/get-session` before logging out: session alive → treat as a permission error, no logout; session dead → clear state + redirect (real expiry); probe undecided (API unreachable) → keep the user logged in (unreachable ≠ logged out). The probe is recursion-safe via the existing `isHandling401` guard, and an unverifiable probe never logs the user out.
+
+  > **Correction (1.11.2):** the sentence that stood here — "so the change is fail-safe (worst case: a dead session is logged out one request late)" — was wrong, and stayed wrong for three releases. In JWT mode the failure ran the other way: the probe was sent without the session cookie, so it read *every* session as dead and the first mislabelled 401 ended it. The claim also credited a second recursion layer that did not exist (`isAuthEndpoint` never matched the probe URL). Both are fixed in 1.11.2; this note stays so the entry is not read at face value.
 
 ### Tests
 

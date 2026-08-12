@@ -23,12 +23,14 @@ allowBuilds:
 # upstream has since requested on its own.
 # ----------------------------------------------------------------------------------
 overrides:
-  # brace-expansion DoS — two advisories: GHSA-3jxr-9vmj-r5cp (exponential-time expansion
-  # of consecutive non-expanding {} groups) and GHSA-mh99-v99m-4gvg (unbounded expansion
-  # length -> OOM, patched ONLY in 5.0.8). One entry per affected major, each a patch bump
+  # brace-expansion DoS — three advisories: GHSA-3jxr-9vmj-r5cp (exponential-time expansion
+  # of consecutive non-expanding {} groups), GHSA-mh99-v99m-4gvg (unbounded expansion
+  # length -> OOM, patched in 5.0.8) and GHSA-rgw5-rvv9-x895 (unbounded intermediate
+  # arrays, bypassing the CVE-2026-14257 mitigation — patched only in 5.0.9, which is why
+  # the 5.x floor moved up from 5.0.8). One entry per affected major, each a patch bump
   # INSIDE that major — a wider range would force a dependency across two majors.
   'brace-expansion@>=2.0.0 <2.1.2': '2.1.2'
-  'brace-expansion@>=5.0.0 <5.0.8': '5.0.8'
+  'brace-expansion@>=5.0.0 <5.0.9': '5.0.9'
   # The real lever for GHSA-mh99-v99m-4gvg: only brace-expansion 5.0.8 carries the fix, and
   # forcing it onto a minimatch@3 consumer throws "expand is not a function" (5.x exports a
   # namespace object, not a callable). minimatch 10.2.6 REQUESTS ^5.0.8, so lifting every
@@ -48,6 +50,10 @@ overrides:
   # postcss path traversal in previous-source-map auto-loading via sourceMappingURL, leaking
   # arbitrary .map files (GHSA-r28c-9q8g-f849, patched >=8.5.18).
   'postcss@<8.5.18': '8.5.24'
+  # nanoid — custom generators loop indefinitely when size is 0 (GHSA-qmxm-cq3q-gh8v, HIGH,
+  # patched >=3.3.17). Only the 3.x line is in this tree (via postcss); 3.3.18 is the current
+  # `legacy` dist-tag, so this stays inside the major the consumers ask for.
+  'nanoid@<3.3.17': '3.3.18'
 
 # No `minimumReleaseAge` gate is set in THIS repo, so the exclude list below is inert here. It is
 # mirrored — together with the overrides — into nuxt-base-starter / lt-monorepo, where an age gate

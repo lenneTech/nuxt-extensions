@@ -269,13 +269,30 @@ export function useLtAuth(): UseLtAuthReturn {
 
   /**
    * Paths that require cookies even in JWT mode.
-   * Better-Auth's Passkey and 2FA operations need the session cookie
-   * for challenge/verification token handling.
+   *
+   * Better-Auth's Passkey and 2FA operations need the session cookie for
+   * challenge/verification token handling.
+   *
+   * `/get-session` belongs here for a different reason: it reads the session
+   * COOKIE and nothing else. The JWT handed out by `/token` is not a session
+   * token, so a bearer-only request does not fail loudly — Better Auth answers
+   * `200` with a `null` body, exactly as it would for a signed-out visitor.
+   * Callers that probe this endpoint to find out whether a session is still
+   * alive (the auth interceptor does, before logging anyone out) would read
+   * that as "session is dead" for every authenticated user in JWT mode, and a
+   * single 401 from a mere permission error would end the session. That was
+   * effectively every user: each successful login pre-fetches a JWT, and
+   * `switchToJwtMode()` flips `authMode` to `'jwt'` when it succeeds.
+   *
+   * Note the sibling wrapper `createLtAuthFetch` (lib/auth-state.ts) never had
+   * this bug — it sends `credentials: 'include'` unconditionally. Any new entry
+   * here is only needed because THIS wrapper opts out of cookies by default.
    */
-  const PATHS_REQUIRING_COOKIES = ['/passkey/', '/two-factor/', '/2fa/'];
+  const PATHS_REQUIRING_COOKIES = ['/passkey/', '/two-factor/', '/2fa/', '/get-session'];
 
   /**
-   * Check if a URL requires cookies (for Passkey/2FA operations)
+   * Check if a URL needs the session cookie even in JWT mode
+   * (Passkey/2FA challenge handling, and the cookie-resolved session endpoint).
    */
   function urlRequiresCookies(url: string): boolean {
     return PATHS_REQUIRING_COOKIES.some((path) => url.includes(path));
@@ -285,8 +302,9 @@ export function useLtAuth(): UseLtAuthReturn {
    * Authenticated fetch wrapper
    * Uses cookies by default, falls back to JWT if cookies fail
    *
-   * In JWT mode, cookies are only sent for Passkey/2FA operations
-   * that require the session cookie for challenge handling.
+   * In JWT mode, cookies are only sent for the paths listed in
+   * {@link PATHS_REQUIRING_COOKIES} — the ones the backend resolves from the
+   * session cookie rather than from the bearer token.
    */
   async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
     const headers = new Headers(options.headers);

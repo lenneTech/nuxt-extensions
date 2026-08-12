@@ -43,7 +43,14 @@ export default (nuxtApp: NuxtApp): void => {
   const loginPath = runtimeConfig.loginPath || '/auth/login';
   const configuredPublicPaths = runtimeConfig.interceptor?.publicPaths || [];
 
-  // Track if we're already handling a 401 to prevent multiple redirects
+  // Guard against a burst of parallel 401s producing several redirects.
+  //
+  // It is deliberately claimed as LATE as possible and released as EARLY as
+  // possible: it must cover the logout + navigation, and nothing else. A 401
+  // the interceptor decided not to act on (auth endpoint, public route, user
+  // not hydrated yet, session probe without a verdict) must leave the window
+  // open — otherwise that no-op swallows the 401s arriving right behind it,
+  // and a genuinely expired session goes unnoticed until the next navigation.
   let isHandling401 = false;
 
   // Default paths that should not trigger auto-logout on 401
@@ -74,7 +81,17 @@ export default (nuxtApp: NuxtApp): void => {
       '/forgot-password',
       '/reset-password',
       '/verify-email',
-      '/session',
+      // Better Auth's session routes, spelled out. A generic '/session' entry
+      // used to stand here and never matched anything: the routes are
+      // `get-session`, `list-sessions`, `revoke-session`, … — in every one of
+      // them the character before `session` is `-`, not `/`, so `url.includes`
+      // returned false. `/get-session` matters most: it is the URL the session
+      // probe below calls, and exempting it is what keeps a 401 from the probe
+      // out of this handler.
+      '/get-session',
+      '/list-sessions',
+      '/revoke-session',
+      '/revoke-other-sessions',
       '/token',
       // Passkey endpoints - handled by authFetch with JWT fallback
       '/passkey/',
@@ -90,30 +107,93 @@ export default (nuxtApp: NuxtApp): void => {
   }
 
   /**
+   * How long a positive ("session is alive") verdict stays reusable.
+   *
+   * Releasing the guard immediately on the no-logout path (see the `finally`
+   * below) means sequential 401s each probe on their own: a page firing N
+   * requests the user lacks rights for costs N probes, where the old blanket
+   * 1s guard hold cost one. Caching the *positive* verdict restores that saving
+   * without giving the bug back, because ONLY `true` is ever cached:
+   *
+   * - `false` leads straight to logout + navigation — caching it is pointless.
+   * - `null` (no verdict) must NEVER be cached. Suppressing re-probes after a
+   *   network blip is precisely the swallowing this whole change removes.
+   *
+   * The worst case for a cached `true` is bounded and small: a session dying
+   * inside the window is noticed up to one TTL late, never missed — unlike the
+   * old guard, which could drop the verdict permanently.
+   */
+  const ALIVE_VERDICT_TTL_MS = 1000;
+  let aliveVerdictValidUntil = 0;
+
+  /**
    * Probe the session endpoint to decide whether the session is genuinely dead.
    *
    * Returns `true` when the session is still alive, `false` when the backend
-   * confirms it is gone, and `null` when the probe could not be completed
-   * (e.g. network error / API unreachable — no verdict).
+   * confirms it is gone, and `null` when no verdict could be reached (network
+   * error, rate limit, backend error).
    *
-   * Recursion-safe: the session URL matches {@link isAuthEndpoint}, so a 401
-   * from the probe itself never re-enters {@link handleUnauthorized} (and
-   * `isHandling401` is set while the probe runs).
+   * Recursion-safe on two layers: `isHandling401` is claimed for the whole
+   * duration of the probe — the re-entrant call from the fetch wrapper runs
+   * while this frame is still suspended — AND the probe URL is listed in
+   * {@link isAuthEndpoint}. Keep both: the guard is the only thing standing
+   * between a 401-ing session endpoint and an unbounded probe loop.
    */
   async function isSessionStillAlive(): Promise<boolean | null> {
     try {
-      const { fetchWithAuth } = getAuth();
+      const { fetchWithAuth, isJwtMode, switchToJwtMode } = getAuth();
       const response = await fetchWithAuth(`${getLtApiBase()}/get-session`, { method: 'GET' });
-      if (!response.ok) {
-        // The session endpoint itself rejects us → genuinely unauthenticated
+
+      // Only an authentication rejection is a verdict about the session. A 429
+      // (rate limit), 5xx (deploy, gateway restart, cold start) or any other
+      // non-ok status says nothing about whether the user is still signed in —
+      // reading those as "dead" logs people out over a transient hiccup, and
+      // the immediate guard release above makes hitting one measurably likelier.
+      if (response.status === 401 || response.status === 403) {
         return false;
       }
-      // Better Auth returns 200 with a null body when there is no session
+      if (!response.ok) {
+        return null;
+      }
+
+      // Better Auth returns 200 with a null body when there is no session.
+      // NOTE: this is also what a cookie-less request gets, which is why
+      // `/get-session` must keep sending cookies (PATHS_REQUIRING_COOKIES).
+      // The two cases are indistinguishable from here — the session cookie is
+      // httpOnly — so an empty body has to count as "dead", or a genuinely
+      // expired session would never log anyone out.
       const data = (await response.json().catch(() => null)) as { session?: unknown; user?: unknown } | null;
-      return Boolean(data && (data.user || data.session));
+      const alive = Boolean(data && (data.user || data.session));
+
+      // In JWT mode the 401 came from the bearer, but this verdict came from
+      // the session COOKIE. A live cookie session therefore does not mean the
+      // caller is fine — it means the bearer is stale. Without minting a fresh
+      // one, every following request 401s again and the probe keeps answering
+      // "alive": a loop with the UI still showing the user as signed in.
+      if (alive && isJwtMode.value) {
+        await switchToJwtMode().catch(() => false);
+      }
+
+      return alive;
     } catch {
       return null;
     }
+  }
+
+  /**
+   * {@link isSessionStillAlive} with the positive verdict memoised.
+   * See {@link ALIVE_VERDICT_TTL_MS} for why only `true` is cached.
+   */
+  async function probeSessionAlive(): Promise<boolean | null> {
+    if (Date.now() < aliveVerdictValidUntil) {
+      return true;
+    }
+
+    const verdict = await isSessionStillAlive();
+    if (verdict === true) {
+      aliveVerdictValidUntil = Date.now() + ALIVE_VERDICT_TTL_MS;
+    }
+    return verdict;
   }
 
   /**
@@ -137,44 +217,60 @@ export default (nuxtApp: NuxtApp): void => {
       return;
     }
 
+    // Only handle if user was authenticated (prevents redirect loops).
+    //
+    // Checked BEFORE the guard is claimed: at app start the first API call can
+    // land before the auth plugin has restored the user from the cookie. That
+    // 401 is a no-op here — and must stay one, so the requests right behind it
+    // are still evaluated once the user IS hydrated.
+    const { clearUser, isAuthenticated } = getAuth();
+    if (!isAuthenticated.value) {
+      return;
+    }
+
     isHandling401 = true;
+    let loggingOut = false;
 
     try {
-      // Only handle if user was authenticated (prevents redirect loops)
-      const { clearUser, isAuthenticated } = getAuth();
-      if (isAuthenticated.value) {
-        // A 401 from a domain endpoint is not proof of an expired session:
-        // backends may mislabel permission errors as 401 instead of 403. Only
-        // log out when the session endpoint confirms the session is dead — an
-        // unverifiable probe (API unreachable) must not log the user out either.
-        const sessionAlive = await isSessionStillAlive();
-        if (sessionAlive !== false) {
-          console.debug(
-            sessionAlive
-              ? `[LtAuth Interceptor] 401 from ${requestUrl ?? 'unknown URL'} but session is still valid — treating it as a permission error, not logging out`
-              : '[LtAuth Interceptor] 401 received but session state could not be verified — not logging out',
-          );
-          return;
-        }
-
-        console.debug('[LtAuth Interceptor] Session expired, logging out...');
-
-        // Clear user state
-        clearUser();
-
-        // Redirect to login page with return URL
-        const router = nuxtApp.$router as { currentRoute?: { value?: { fullPath?: string } } } | undefined;
-        const currentPath = router?.currentRoute?.value?.fullPath;
-        const redirectQuery = currentPath && currentPath !== loginPath ? `?redirect=${encodeURIComponent(currentPath)}` : '';
-
-        // Use window.location for redirect to avoid Nuxt router issues
-        window.location.href = loginPath + redirectQuery;
+      // A 401 from a domain endpoint is not proof of an expired session:
+      // backends may mislabel permission errors as 401 instead of 403. Only
+      // log out when the session endpoint confirms the session is dead — an
+      // unverifiable probe (API unreachable) must not log the user out either.
+      const sessionAlive = await probeSessionAlive();
+      if (sessionAlive !== false) {
+        console.debug(
+          sessionAlive
+            ? `[LtAuth Interceptor] 401 from ${requestUrl ?? 'unknown URL'} but session is still valid — treating it as a permission error, not logging out`
+            : '[LtAuth Interceptor] 401 received but session state could not be verified — not logging out',
+        );
+        return;
       }
+
+      console.debug('[LtAuth Interceptor] Session expired, logging out...');
+      loggingOut = true;
+
+      // Clear user state
+      clearUser();
+
+      // Redirect to login page with return URL
+      const router = nuxtApp.$router as { currentRoute?: { value?: { fullPath?: string } } } | undefined;
+      const currentPath = router?.currentRoute?.value?.fullPath;
+      const redirectQuery = currentPath && currentPath !== loginPath ? `?redirect=${encodeURIComponent(currentPath)}` : '';
+
+      // Use window.location for redirect to avoid Nuxt router issues
+      window.location.href = loginPath + redirectQuery;
     } finally {
-      // Reset flag after a short delay to allow navigation to complete
-      setTimeout(() => {
+      if (loggingOut) {
+        // Hold the guard until the navigation has had a chance to complete, so
+        // parallel 401s from the same page load cannot redirect a second time.
+        setTimeout(() => {
+          isHandling401 = false;
+        }, 1000);
+      } else {
+        // No logout happened (permission error, or no verdict from the probe).
+        // Release immediately — the next 401 deserves its own verdict.
         isHandling401 = false;
-      }, 1000);
+      }
     }
   }
 

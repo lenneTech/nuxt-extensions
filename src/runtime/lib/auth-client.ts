@@ -170,7 +170,13 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
   // runtimeConfig.public.apiUrl (set via NUXT_PUBLIC_API_URL env var).
   // This fallback only applies when createLtAuthClient() is called directly
   // without config — e.g., from the catch block of useLtAuthClient().
-  const defaultBaseURL = useProxy ? '' : import.meta.env?.VITE_API_URL || process.env.API_URL || '';
+  // `import.meta.env` carries a loose index signature (Vite's own keys include
+  // booleans like DEV/PROD/SSR), so reading VITE_API_URL off it yields a value
+  // TypeScript cannot narrow to a string — an `||` chain over it widens to
+  // `string | true`. Take the value only when it really is a string, so a
+  // mis-set env var can never reach Better Auth's `baseURL` as a boolean.
+  const envApiUrl = typeof import.meta.env?.VITE_API_URL === 'string' ? import.meta.env.VITE_API_URL : undefined;
+  const defaultBaseURL = useProxy ? '' : envApiUrl || process.env.API_URL || '';
   const defaultBasePath = useProxy ? '/api/iam' : '/iam';
 
   const {
