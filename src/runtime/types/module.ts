@@ -138,12 +138,67 @@ export interface LtExtensionsModuleOptions {
   auth?: LtAuthModuleOptions;
   /** Error translation configuration */
   errorTranslation?: LtErrorTranslationModuleOptions;
+  /** Form label association repair configuration */
+  formLabelAssociation?: LtFormLabelAssociationOptions;
   /** i18n configuration */
   i18n?: LtI18nModuleOptions;
   /** Pre-hydration input preservation configuration */
   preHydrationInput?: LtPreHydrationInputOptions;
   /** TUS upload module configuration */
   tus?: LtTusModuleOptions;
+}
+
+/**
+ * Repair of `<label for>` associations broken by an SSR/client `useId()` divergence.
+ *
+ * Nuxt UI's `FormField` derives the label's `for` and the control's `id` from ONE `useId()`
+ * call, so they cannot disagree — unless `useId()` itself returns different values on server
+ * and client, which it does whenever the two walk a different number of async boundaries.
+ * The label then keeps the server value while the control adopts the client one.
+ *
+ * The control loses its programmatic label. Without a placeholder it has no accessible name
+ * at all and a screen reader announces "edit text, blank"; with one, the placeholder becomes
+ * the name instead, so the visible label is no longer part of it and speech input stops
+ * working. Either way clicking the label focuses nothing — which on a checkbox or radio is
+ * the primary hit target, not a convenience.
+ *
+ * Vue >= 3.5.39 did not cause this, it exposed it: vuejs/core#9083 force-patches an element's
+ * dynamic props during hydration, and the control's `id` is one while the label's `for` —
+ * passed through reka-ui's `Label` component and `$attrs` — is not.
+ *
+ * The repair refuses to guess: it only fires when the field contains exactly one eligible
+ * control, so a radio or checkbox group is skipped rather than having every caption bound to
+ * its first option.
+ *
+ * @example
+ * ```ts
+ * export default defineNuxtConfig({
+ *   ltExtensions: {
+ *     formLabelAssociation: { enabled: false },
+ *   },
+ * });
+ * ```
+ */
+export interface LtFormLabelAssociationOptions {
+  /**
+   * Enable the repair. Defaults to `true`.
+   *
+   * Turn it off only with a reason. Two real ones: an application that assigns `for` itself
+   * and depends on those exact values, or a test suite asserting on literal `for` / `id`
+   * strings rather than on the accessible name. The alternative is a form whose fields carry
+   * no programmatic label.
+   */
+  enabled?: boolean;
+
+  /**
+   * How long after mount to keep repairing, in milliseconds. Defaults to `1500`; `0` sweeps
+   * once and stops.
+   *
+   * Most fields are repaired in the first pass. The window exists for server-rendered
+   * subtrees whose hydration is deferred — `hydrate-on-visible`, an unresolved `<Suspense>`,
+   * an island — which carry the same divergence but hydrate after `app:mounted`.
+   */
+  maxRepairMs?: number;
 }
 
 /**
@@ -236,6 +291,10 @@ export interface LtExtensionsPublicRuntimeConfig {
     errorTranslation: {
       enabled: boolean;
       defaultLocale: string;
+    };
+    formLabelAssociation: {
+      enabled: boolean;
+      maxRepairMs: number;
     };
     preHydrationInput: {
       enabled: boolean;

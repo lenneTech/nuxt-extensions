@@ -76,6 +76,10 @@ export default defineNuxtConfig({
       enabled: true,
       basePath: '/ai',               // Must match the nest-server AI controller
     },
+    formLabelAssociation: {
+      enabled: true,                 // repair <label for> broken by an SSR/client useId() divergence
+      maxRepairMs: 1500,             // how long to keep repairing deferred subtrees
+    },
     preHydrationInput: {
       enabled: true,                 // keep text typed before hydration instead of losing it
       maxRestoreMs: 1500,            // how long to keep repairing deferred subtrees
@@ -174,6 +178,32 @@ export default defineNuxtRouteMiddleware((to) => {
   return navigateTo('/auth/login');
 });
 ```
+
+## Form Label Repair
+
+**The defect:** Nuxt UI's `FormField` derives the label's `for` and the control's `id` from one
+`useId()` call. When `useId()` diverges between server and client, the control's `id` is
+force-patched on hydration (vuejs/core#9083) while the label's `for` — a prop on reka-ui's
+`Label` component — is not. The label keeps the stale value and the association breaks.
+
+**What this module adds:** `runtime/plugins/form-label-association.client.ts` re-points
+dangling Nuxt UI field labels at the control in their own field, at `app:mounted` and for a
+bounded window afterwards (`maxRepairMs`, default 1500 ms).
+
+**What this means when you debug a consuming project:**
+
+- **A `for` attribute that changes after mount is this plugin, not a bug.** It logs a
+  `console.warn` in development naming how many labels it repaired.
+- **It refuses to guess.** The repair only fires when the field holds exactly one eligible
+  control. Radio and checkbox groups, hidden form-value proxies, `aria-hidden`/`disabled`
+  controls and button-only fields are skipped on purpose — binding a group caption to its
+  first option would submit a value the user never chose.
+- **Only Nuxt UI's own field labels are touched** (`label[data-slot="label"][for]`). Labels
+  your application wrote are never rewritten.
+- **Do not "fix" a skipped group by loosening the rule.** Inert beats wrong here; the correct
+  fix for a group is an SSR-stable id at the source.
+- This is a **stopgap** for a framework-level divergence. Opt out with
+  `ltExtensions.formLabelAssociation.enabled: false`.
 
 ## Pre-Hydration Input Preservation
 

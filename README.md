@@ -42,6 +42,7 @@ npm install tus-js-client
 - **i18n Support** - English and German translations (works without i18n too)
 - **Auto-imports** - All composables and components are auto-imported
 - **Pre-hydration input preservation** - text typed before hydration is kept, not erased
+- **Form label repair** - restores `<label for>` associations that hydration breaks
 
 ## Environment Variables
 
@@ -156,6 +157,77 @@ export default defineNuxtConfig({
   },
 });
 ```
+
+## Form Label Repair
+
+Restores `<label for>` associations that hydration breaks. Active by default.
+
+### The problem
+
+Nuxt UI's `FormField` derives the label's `for` and the control's `id` from a single
+`useId()` call, so they cannot disagree — unless `useId()` itself returns different values on
+server and client, which happens when the two walk a different number of async boundaries.
+
+Measured against `@nuxt/ui` 4.11.x:
+
+| | label `for` | control `id` |
+|---|---|---|
+| SSR payload | `v-0-4-2` | `v-0-4-2` |
+| after hydration | `v-0-4-2` | `v-0-1-2` |
+
+Vue 3.5.39 did not cause this, it exposed it
+([vuejs/core#9083](https://github.com/vuejs/core/pull/9083) force-patches an element's
+dynamic props on hydration). The control's `id` is such a prop; the label's `for`, passed
+through reka-ui's `Label` component, is not — so only the label keeps the stale value.
+
+### What it costs when it breaks
+
+The control loses its programmatic label. Without a placeholder it has no accessible name at
+all and a screen reader announces "edit text, blank"; **with** a placeholder that becomes the
+name instead, so the visible label is no longer part of it and speech input stops working.
+Clicking the label focuses nothing either — which on a checkbox or radio is the primary hit
+target, not a convenience. Tests using `getByRole('textbox', { name })` stop finding fields.
+
+### What the repair does
+
+After mount, and for a bounded window afterwards, every Nuxt UI field label whose target does
+not resolve is re-pointed at the control in its own field.
+
+**It refuses to guess.** A repair that fires where it should not is worse than the defect: a
+dangling label is inert and visible, a mis-pointed one is confidently wrong and silent, and
+on a radio or checkbox a click on the caption would change a value the user never chose. So
+the repair only fires when the field contains exactly **one** eligible control. Skipped
+deliberately:
+
+| Case | Why |
+|------|-----|
+| Radio / checkbox groups | One field root, many controls — binding every caption to the first option would submit a value nobody picked |
+| Hidden form-value proxies, `aria-hidden`, `disabled` | Not the user's control; pointing at one restores neither the name nor the click |
+| Fields whose only visible control is a `button` | Nothing safe to point at |
+| Labels your application wrote | Only Nuxt UI's own field labels (`data-slot="label"`) are touched |
+
+`for` is repaired rather than `aria-labelledby` added, because `for` carries **both** the
+accessible name and click-to-focus.
+
+**This is a repair, not a cure.** The real fix is for the id not to diverge; this exists
+because the divergence sits in the framework stack rather than in any one application.
+
+### Opting out
+
+```ts
+export default defineNuxtConfig({
+  ltExtensions: {
+    formLabelAssociation: {
+      enabled: false,
+      // or keep it on and only change how long deferred subtrees are waited for:
+      // maxRepairMs: 3000,
+    },
+  },
+});
+```
+
+Two real reasons to: your application assigns `for` itself and depends on those exact values,
+or your tests assert on literal `for` / `id` strings rather than on the accessible name.
 
 ## Pre-Hydration Input Preservation
 

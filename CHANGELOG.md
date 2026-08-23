@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.0] - 2026-08-23
+
+### Added
+
+- **`<label for>` associations broken by hydration are repaired.** Nuxt UI's `FormField` derives the label's `for` and the control's `id` from a single `useId()` call, so they cannot disagree — unless `useId()` itself returns different values on server and client, which it does whenever the two walk a different number of async boundaries. Measured against `@nuxt/ui` 4.11.x: the SSR payload has both at `v-0-4-2`; after hydration the label still says `v-0-4-2` and the control says `v-0-1-2`.
+
+  Vue 3.5.39 did not cause this, it exposed it ([vuejs/core#9083](https://github.com/vuejs/core/pull/9083) force-patches an element's dynamic props during hydration). The asymmetry is a component boundary: the control's `id` is a compiled element binding and is force-patched; the label's `for` is a prop on reka-ui's `Label` and arrives through `$attrs`, which is not in that set.
+
+  The cost is not cosmetic. Without a placeholder the control has no accessible name at all — a screen reader announces "edit text, blank". **With** a placeholder it gets the placeholder as its name instead, so the visible label is no longer part of it and speech input stops working. Clicking the label focuses nothing either, and on a checkbox or radio the label is the primary hit target rather than a convenience. Tests addressing fields the way assistive technology does (`getByRole('textbox', { name })`) stop finding them.
+
+  `runtime/plugins/form-label-association.client.ts` re-points dangling Nuxt UI field labels at the control in their own field, at `app:mounted` and for a bounded window afterwards. New options: `ltExtensions.formLabelAssociation.enabled` (default `true`) and `maxRepairMs` (default `1500`, for server-rendered subtrees whose hydration is deferred behind `hydrate-on-visible` or an unresolved `<Suspense>`).
+
+  **This is a stopgap.** The right fix is for the id not to diverge; this exists because the divergence sits in the framework stack rather than in any one application.
+
+### Notes on the approach
+
+- **The repair refuses to guess, and that rule is the load-bearing part.** It only fires when the field holds exactly one eligible control. A dangling label is inert and visible; a mis-pointed one is confidently wrong and silent — and on a radio or checkbox a click on the caption would change a value the user never chose. Verified against `@nuxt/ui` 4.11.0: `RadioGroup` renders one `data-slot="root"` with N item labels whose ids all derive from the group's `useId()`, and `CheckboxGroup` does the same through its child `Checkbox` components. Both are therefore skipped rather than having every caption bound to the first option.
+- Hidden form-value proxies, `aria-hidden` and `disabled` controls are excluded. Reka-based components render a hidden native control beside the visible one; pointing a label at it restores neither the accessible name nor click-to-focus — and because the association would then *resolve*, the healthy-check would suppress any correct repair from then on.
+- Only Nuxt UI's own field labels are touched (`label[data-slot="label"][for]`). Scanning every `label[for]` would rewrite application-authored labels that merely sit inside some component root.
+- "Already resolves" is not treated as "healthy" on its own. Server and client ids come from the same generator space on the same page, so a stale server id can resolve to a *different* field's control; an association that resolves outside its own field is repaired rather than left naming the wrong control forever.
+- **`for` is repaired rather than `aria-labelledby` added**, because `for` carries both the accessible name and click-to-focus.
+- The repair announces itself with a `console.warn` in development. A silent repair masks the defect, removes the pressure to fix it upstream, and leaves the next developer looking at a `for` attribute nobody in the codebase wrote.
+
+### Tests
+
+- `test/form-label-association.test.ts` — 19 cases against DOM fixtures, so they run without `@nuxt/ui`. Beyond the happy path they pin every way the repair must NOT fire: radio and checkbox groups, hidden/`aria-hidden`/`disabled` controls, button-only fields, application-authored labels, and an association that already resolves inside its own field. Plus the cases it must handle: `<textarea>` and `<select>`, an id collision that resolves to another field, an element-scoped root, idempotence, and an eleven-field page.
+
 ## [1.12.0] - 2026-08-23
 
 ### Added

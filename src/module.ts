@@ -11,7 +11,7 @@ import type { LtExtensionsModuleOptions } from './runtime/types';
 
 // Module meta
 export const name = '@lenne.tech/nuxt-extensions';
-export const version = '1.12.0';
+export const version = '1.13.0';
 export const configKey = 'ltExtensions';
 
 // Default cookie names — re-exported from auth-state so consumers can read
@@ -51,6 +51,9 @@ const defaultOptions: LtExtensionsModuleOptions = {
     enabled: true,
     defaultLocale: 'de',
   },
+  formLabelAssociation: {
+    enabled: true,
+  },
   i18n: {
     autoMerge: true,
   },
@@ -83,6 +86,7 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
         systemSetup: { ...defaultOptions.auth!.systemSetup, ...options.auth?.systemSetup },
       },
       errorTranslation: { ...defaultOptions.errorTranslation, ...options.errorTranslation },
+      formLabelAssociation: { ...defaultOptions.formLabelAssociation, ...options.formLabelAssociation },
       i18n: { ...defaultOptions.i18n, ...options.i18n },
       preHydrationInput: { ...defaultOptions.preHydrationInput, ...options.preHydrationInput },
       tus: { ...defaultOptions.tus, ...options.tus },
@@ -177,6 +181,10 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
       errorTranslation: {
         enabled: resolvedOptions.errorTranslation?.enabled ?? true,
         defaultLocale: resolvedOptions.errorTranslation?.defaultLocale || 'de',
+      },
+      formLabelAssociation: {
+        enabled: resolvedOptions.formLabelAssociation?.enabled ?? true,
+        maxRepairMs: resolvedOptions.formLabelAssociation?.maxRepairMs ?? 1500,
       },
       preHydrationInput: {
         enabled: resolvedOptions.preHydrationInput?.enabled ?? true,
@@ -300,6 +308,16 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
     // upstream issue that will make it removable.
     if (resolvedOptions.preHydrationInput.enabled !== false) {
       addPlugin(resolve('./runtime/plugins/pre-hydration-input.client'));
+    }
+
+    // A control whose `<label for>` no longer resolves loses its programmatic label: no
+    // accessible name at all without a placeholder, the placeholder as a WRONG name with
+    // one, and a caption that is dead to the mouse either way. The ids diverge between SSR
+    // and client because the control's `id` is force-patched on hydration while the label's
+    // `for` — a prop on reka-ui's Label component — is not. See the plugin header for the
+    // measurement, the upstream reference, and why the repair refuses to guess.
+    if (resolvedOptions.formLabelAssociation.enabled !== false) {
+      addPlugin(resolve('./runtime/plugins/form-label-association.client'));
     }
 
     // Transpile runtime directory and tus-js-client (ESM compatibility)

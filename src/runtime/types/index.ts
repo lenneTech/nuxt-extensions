@@ -16,6 +16,7 @@ export type {
   LtErrorTranslationModuleOptions,
   LtExtensionsModuleOptions,
   LtExtensionsPublicRuntimeConfig,
+  LtFormLabelAssociationOptions,
   LtI18nModuleOptions,
   LtPreHydrationInputOptions,
   LtSystemSetupModuleOptions,
