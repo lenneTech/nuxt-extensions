@@ -125,3 +125,73 @@ describe('@better-auth/passkey stub', () => {
     expect(readFileSync(resolve(SRC, 'module.ts'), 'utf8')).toMatch(/const enablePasskey = .*&& passkeyAvailable/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Stub-vs-real contract
+//
+// Everything above asserts the stub in ISOLATION. That is exactly the gap
+// `upstream-dom-contract.test.ts` was written to close for reka-ui/@nuxt/ui, and
+// exactly the lesson CLAUDE.md records: the 1.13.0 defect shipped because a fixture
+// was invented rather than observed. The stub was an invented fixture of a package
+// that is a devDependency and therefore observable in-process.
+//
+// It matters because `src/module.ts` installs the alias into `nuxt.options.alias` AND
+// `nuxt.options.nitro.alias` — rewriting the specifier for the WHOLE consumer app, not
+// just for our `auth-client.ts`. Any name the real package exports and the stub does
+// not becomes an unresolved-export build failure in a consumer:
+//
+//   "PASSKEY_ERROR_CODES" is not exported by …/passkey-stub
+//
+// which is the same class of error the stub exists to prevent, merely relocated.
+// ---------------------------------------------------------------------------
+describe('passkey stub mirrors the real package', () => {
+  it('exports every name the real @better-auth/passkey/client exports', async () => {
+    const real = await import('@better-auth/passkey/client');
+    const stub = await import('../src/runtime/lib/passkey-stub');
+
+    const realNames = Object.keys(real).sort();
+    expect(realNames.length, 'expected the real package to export something').toBeGreaterThan(0);
+
+    for (const name of realNames) {
+      expect(Object.keys(stub), `stub is missing "${name}", which the aliased specifier promises`).toContain(name);
+    }
+  });
+
+  it('keeps the same export kinds as the real package', async () => {
+    const real = (await import('@better-auth/passkey/client')) as Record<string, unknown>;
+    const stub = (await import('../src/runtime/lib/passkey-stub')) as unknown as Record<string, unknown>;
+
+    for (const name of Object.keys(real)) {
+      expect(typeof stub[name], `stub export "${name}" should be a ${typeof real[name]}`).toBe(typeof real[name]);
+    }
+  });
+
+  it('covers every error code the real package defines', async () => {
+    const real = await import('@better-auth/passkey/client');
+    const stub = await import('../src/runtime/lib/passkey-stub');
+
+    for (const code of Object.keys(real.PASSKEY_ERROR_CODES)) {
+      expect(Object.keys(stub.PASSKEY_ERROR_CODES), `error code "${code}" is missing from the stub`).toContain(code);
+    }
+  });
+
+  it('does NOT claim the real plugin id', async () => {
+    // The one place the stub must deliberately DIFFER: claiming `'passkey'` would make
+    // Better-Auth expose passkey actions that cannot possibly work.
+    const real = await import('@better-auth/passkey/client');
+    const stub = await import('../src/runtime/lib/passkey-stub');
+
+    expect(stub.passkeyClient().id).not.toBe(real.passkeyClient().id);
+    expect(stub.passkeyClient().id).toBe('lt-passkey-unavailable');
+  });
+
+  it('rejects rather than silently succeeding when an action is called', async () => {
+    // A passkey ceremony that resolves without the package would leave the caller
+    // believing a credential exists.
+    const stub = await import('../src/runtime/lib/passkey-stub');
+    const actions = stub.getPasskeyActions();
+
+    await expect(actions.signInPasskey()).rejects.toThrow(/not installed/);
+    await expect(actions.addPasskey()).rejects.toThrow(/not installed/);
+  });
+});

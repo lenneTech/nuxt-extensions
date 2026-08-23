@@ -5,6 +5,143 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.0] - 2026-08-23
+
+> **Release order matters for this one.** Ship `@lenne.tech/nest-server@11.37.0` first, or in the
+> same wave. Publishing this release on its own recreates the exact split it exists to close —
+> see "Do not release this alone" below.
+
+### Breaking
+
+- **The `better-auth` peer range is narrowed to one minor line.** It was `>=1.0.0` for both
+  `better-auth` and `@better-auth/passkey`; it is now `>=1.7.1 <1.8.0`.
+
+  **What breaks:** a project resolving `better-auth` below 1.7.1 now fails to install. `npm` errors
+  with `ERESOLVE`, `pnpm` errors under its strict-peers default. This is intentional — that install
+  was already broken at runtime, it just failed later and less clearly. See **Migration** below.
+
+  The version digit stays a MINOR deliberately. In this package the MAJOR tracks the **Nuxt** major
+  the module targets — `1.x` is Nuxt 4 — so it moves when, and only when, Nuxt moves. Everything of
+  our own ships in a minor, breaking changes included. The `### Breaking` heading is what carries
+  the warning instead, so nobody reads the version number as a promise it does not make.
+
+  **Why 1.7.1 and not 1.7.0:** `@better-auth/passkey@1.7.1` peer-requires `better-auth: ^1.7.1`, so
+  a floor of `1.7.0` would bless a pair that cannot install cleanly. `test/peer-dependency-ranges.test.ts`
+  now asserts this rather than leaving it to a reviewer to notice.
+
+  **Why an upper bound and not `^1.7.0`:** better-auth breaks in **minor** releases. 1.7 removed the
+  `./plugins/oidc-provider` and `./plugins/mcp/client` subpath exports and changed the 2FA response
+  shape. This module never imported either subpath — they are cited as evidence of upstream's
+  release policy, not as something that hit us — but they are why a caret would re-open the hole at
+  1.8.
+
+  **What actually requires 1.7, precisely:** not this package's own source. Nothing in `src/` reads
+  a 1.7-only field; `auth-client.ts` forwards the `twoFactor.enable` result to callers untouched.
+  The requirement is at the **protocol** level: better-auth 1.7 gives `twoFactor.enable` a
+  discriminated result carrying `method` (`{ method: "otp" }` or `{ method: "totp", totpURI,
+  backupCodes }`), which 1.6.26 never sends. This module is the client half of that protocol and
+  re-exports the shape to consumers, whose 2FA UI reads the discriminant. So a 1.7 client against a
+  1.6 server produces a response the application cannot interpret.
+
+  Second reason, independent of the first: the old range admitted versions carrying published
+  advisories on surfaces this module wraps — including a 2FA bypass (GHSA-xg6x-h9c9-2m83, `<1.4.9`)
+  and passkey deletion via IDOR (GHSA-4vcf-q4xf-f48m, `<1.4.0`). `>=1.0.0` declared those
+  acceptable. The new range excludes every known 1.x advisory.
+
+  **Why it matters beyond this package:** better-auth is one protocol with two ends. This module
+  is the client end and `@lenne.tech/nest-server` is the server end, and until now the two
+  declared it differently — nest-server pinned it as a hard dependency (1.6.26), so a fullstack
+  project could move the app to 1.7.1 and the api could not follow. Every 2FA activation in every
+  fullstack project failed, with a generic client error and nothing unusual in the server log.
+  Both repos' checks were green throughout: each was internally consistent, and only the assembled
+  workspace ever had both halves.
+
+  nest-server 11.37.0 makes its side a peer with the **same** range (it additionally peers
+  `@better-auth/core`, which this package does not import and therefore does not declare — do not
+  copy that one into an app). From here the two must be raised together, in one release.
+
+  **Do not release this alone.** Publishing 1.15.0 while nest-server is still 11.36.5 does not fail
+  loudly: `lt-monorepo` sets `autoInstallPeers: true`, and `projects/api` and `projects/app` are
+  separate workspace packages, so the api quietly keeps 1.6.26 while the app resolves 1.7.x. That is
+  the silent split described above, reproduced — not prevented.
+
+  **Migration**
+
+  1. Raise `@lenne.tech/nest-server` to `11.37.0` and follow its migration guide. It carries a
+     **data** migration (`account.issuer`) that no build will warn you about.
+  2. Pin both packages, workspace-wide in a monorepo so the api and the app cannot drift:
+
+     ```yaml
+     # pnpm-workspace.yaml
+     overrides:
+       better-auth: 1.7.1
+       '@better-auth/passkey': 1.7.1
+     ```
+
+  3. Verify a 2FA activation end to end. That is the flow the split breaks, and the one no
+     build step checks.
+
+  If you skip step 1, 2FA activation fails at runtime while every project's `check` stays green.
+
+  **Emergency escape hatch.** If an advisory ever lands on 1.7.x with the fix only in 1.8.0, do not
+  widen the range in a panic — override it locally and open an issue so both framework repos move
+  together:
+
+  ```jsonc
+  // consumer package.json — temporary, until nuxt-extensions ships a matching release
+  "pnpm": { "peerDependencyRules": { "allowedVersions": { "better-auth": "1.8.x" } } }
+  ```
+
+### Added
+
+- **Guards for the invariants this release depends on.** The narrowed range was previously a claim
+  nothing could check; these make it enforceable.
+
+  - `test/peer-dependency-ranges.test.ts` — asserts every published peer range is satisfied by the
+    devDependency the suite actually runs against, including the optional `@better-auth/passkey`
+    that no other process in the repo touched, and that our floor is not one `@better-auth/passkey`
+    rejects.
+  - `test/better-auth-contract.test.ts` — pins the better-auth surface this module consumes
+    (subpath exports, the plugin factories, and the `method`-discriminated `enable` response), in
+    the spirit of `test/upstream-dom-contract.test.ts`. Turns "the code requires 1.7" from an
+    assertion into something the suite proves.
+  - `test/module-version-sync.test.ts` — covers `scripts/sync-module-version.mjs`, including the
+    not-found guard whose removal previously cost zero test failures, plus a check that the newest
+    CHANGELOG heading matches `package.json`.
+  - `test/optional-peers.test.ts` — now pins the passkey stub against the **real** package rather
+    than only asserting it in isolation.
+  - CI (`build.yml`, `publish.yml`) now runs `format:check`, `version:check` and `check:manifest`.
+    They previously ran on a maintainer's laptop only, so `pnpm test` was the sole enforced gate —
+    including on the publish path.
+
+### Fixed
+
+- **`@better-auth/passkey` stub no longer breaks consumer builds that import more than
+  `passkeyClient`.** The stub is aliased over the specifier app-wide (Vite *and* Nitro), so a
+  consumer importing `PASSKEY_ERROR_CODES` or `getPasskeyActions` from
+  `@better-auth/passkey/client` hit an unresolved-export failure — the same class of error the stub
+  exists to prevent, merely relocated. The stub now mirrors the real package's full export surface,
+  and its actions reject rather than resolving falsely.
+- **Passkey detection no longer misses a package the consumer installed.** `tryResolveModule` now
+  resolves against the consumer's `rootDir` as well as this module's own location. Under a strict,
+  non-hoisted install the package is only reachable from the consumer's tree, so passkeys were
+  silently disabled with nothing but a warning.
+- **The module no longer dumps its resolved config into every consumer build.** The verbose banner
+  is now dev-only; it was writing three lines of our configuration into other teams' production CI
+  logs for no diagnostic value there. A single `[@lenne.tech/nuxt-extensions] v1.15.0` line still
+  prints unconditionally, and deliberately so: `scripts/check-consumer-build.mjs` asserts that the
+  packed module announces itself during a consumer's `nuxt build`, which is how it proves the
+  tarball actually registered instead of silently doing nothing.
+
+### Changed
+
+- **`auth-client.ts` reaches better-auth's plugin surfaces through one documented type assertion**
+  instead of twelve separate `as any` casts, each with its own eslint suppression. Twelve
+  suppressions read as twelve unexamined decisions. The erasure itself is structural — the plugin
+  array is built from runtime flags, so better-auth cannot infer the action surface — but the
+  narrowed range makes a hand-written shape stable enough to be worth declaring, and
+  `test/better-auth-contract.test.ts` pins it against the real package.
+
 ## [1.14.0] - 2026-08-23
 
 Started as a one-line fix for a defect 1.13.0 shipped, and a review found three more problems in

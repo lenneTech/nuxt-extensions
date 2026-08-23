@@ -29,8 +29,18 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Format check
+        run: pnpm format:check
+
       - name: Lint
         run: pnpm lint
+
+      # Release-critical guards that used to run on a maintainer's laptop only.
+      # `version:check` protects the invariant whose failure mode froze the published
+      # `meta.version` at 1.5.2 for three minor releases; `check:manifest` protects the
+      # `files`/`exports` targets. Neither was enforced anywhere before.
+      - name: Version sync check
+        run: pnpm run version:check
 
       - name: Prepare
         run: pnpm dev:prepare
@@ -40,6 +50,15 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Package manifest check
+        run: pnpm run check:manifest
+
+      # Non-blocking: an advisory published between commits should surface in CI, but
+      # must not fail a build for a transitive dev-only finding the diff never touched.
+      - name: Audit
+        run: pnpm audit
+        continue-on-error: true
 
       - name: Save build
         uses: actions/upload-artifact@v4

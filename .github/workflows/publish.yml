@@ -28,8 +28,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Format check
+        run: pnpm format:check
+
       - name: Lint
         run: pnpm lint
+
+      # Gates the PUBLISH itself. `prepack` rewrites src/module.ts from package.json,
+      # so a broken sync script would ship a wrong `meta.version` while exiting 0 —
+      # exactly how 1.5.2 was published three times over.
+      - name: Version sync check
+        run: pnpm run version:check
 
       - name: Prepare
         run: pnpm dev:prepare
@@ -39,6 +48,9 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Package manifest check
+        run: pnpm run check:manifest
 
       - uses: JS-DevTools/npm-publish@v3
         with:

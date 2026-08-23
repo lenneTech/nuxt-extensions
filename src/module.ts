@@ -6,12 +6,13 @@
  */
 
 import { addComponent, addImports, addPlugin, addRouteMiddleware, createResolver, defineNuxtModule, tryResolveModule } from '@nuxt/kit';
+import { pathToFileURL } from 'node:url';
 
 import type { LtExtensionsModuleOptions } from './runtime/types';
 
 // Module meta
 export const name = '@lenne.tech/nuxt-extensions';
-export const version = '1.14.0';
+export const version = '1.15.0';
 export const configKey = 'ltExtensions';
 
 // Default cookie names — re-exported from auth-state so consumers can read
@@ -97,7 +98,11 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
     // specifier even when a project never enables passkeys. Alias it onto a
     // no-op stub when the package is absent, otherwise the build fails with an
     // unresolved-optional-peer error instead of honouring the optionality.
-    const passkeyAvailable = !!(await tryResolveModule('@better-auth/passkey/client', new URL(import.meta.url)));
+    // Resolve from the CONSUMER's root as well as from this module's own location.
+    // Under a strict (non-hoisted) install the package sits in the consumer's tree and is
+    // not reachable from here — resolving only against `import.meta.url` would report it
+    // absent, silently alias the stub, and disable passkeys with nothing but a warning.
+    const passkeyAvailable = !!(await tryResolveModule('@better-auth/passkey/client', [new URL(import.meta.url), pathToFileURL(`${nuxt.options.rootDir}/`)]));
     if (!passkeyAvailable) {
       const passkeyStub = resolve('./runtime/lib/passkey-stub');
       nuxt.options.alias['@better-auth/passkey/client'] = passkeyStub;
@@ -325,11 +330,25 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
     nuxt.options.build.transpile.push(resolve('./runtime'));
     nuxt.options.build.transpile.push('tus-js-client');
 
-    console.log(`[${name}] Module loaded with config:`, {
-      auth: resolvedOptions.auth?.enabled ? 'enabled' : 'disabled',
-      i18nAutoMerge: resolvedOptions.i18n?.autoMerge,
-      tusEndpoint: resolvedOptions.tus?.defaultEndpoint,
-    });
+    // One terse line, ALWAYS — `scripts/check-consumer-build.mjs` asserts that this
+    // module's name appears in a consumer's `nuxt build` output, which is how it proves
+    // the packed tarball actually registered rather than silently doing nothing. A build
+    // can succeed with the module inert; this line is the evidence that it did not.
+    //
+    // Do NOT gate this on `nuxt.options.dev`. It was tried (1.15.0) and it turned the
+    // release gate red: `✗ the packed module never announced itself during the build`.
+    // Naming itself once is also what every Nuxt module does, so it is not noise.
+    console.log(`[${name}] v${version}`);
+
+    // The verbose config dump IS dev-only — it fires once per build in every consuming
+    // project and has no diagnostic value in someone else's production CI log.
+    if (nuxt.options.dev) {
+      console.log(`[${name}] Module loaded with config:`, {
+        auth: resolvedOptions.auth?.enabled ? 'enabled' : 'disabled',
+        i18nAutoMerge: resolvedOptions.i18n?.autoMerge,
+        tusEndpoint: resolvedOptions.tus?.defaultEndpoint,
+      });
+    }
   },
 });
 
