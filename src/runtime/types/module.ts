@@ -140,8 +140,62 @@ export interface LtExtensionsModuleOptions {
   errorTranslation?: LtErrorTranslationModuleOptions;
   /** i18n configuration */
   i18n?: LtI18nModuleOptions;
+  /** Pre-hydration input preservation configuration */
+  preHydrationInput?: LtPreHydrationInputOptions;
   /** TUS upload module configuration */
   tus?: LtTusModuleOptions;
+}
+
+/**
+ * Pre-hydration input preservation.
+ *
+ * Until Vue hydrates a server-rendered `<input>`, the element carries no framework listener:
+ * text typed into it reaches no model and is then overwritten by the mounting value — ERASED,
+ * not delayed.
+ *
+ * Vue fixed this in 3.5.41 (vuejs/core#14411), but only for `type="text"` and `textarea`.
+ * Every other type still loses the entry: `email`, `password`, `tel`, `url`, `search`,
+ * `number` — precisely the fields a sign-in form uses, and where people are most likely to
+ * type on sight. Widening it is tracked upstream as vuejs/core#15210.
+ *
+ * This closes that remaining gap: what the user typed is read out of the DOM just before
+ * hydration and written back afterwards, with a synthetic `input` event so `v-model` adopts
+ * it. Fields stay ordinary editable fields throughout — nothing is made `readonly`, so
+ * autofill, screen-reader semantics and the mobile keyboard are untouched. A browser autofill
+ * that lands before hydration is recovered the same way.
+ *
+ * Applies to every `<input>` and `<textarea>` on the page, regardless of which UI library
+ * rendered it. It is a stopgap and is meant to be removed once Vue covers the remaining
+ * types.
+ *
+ * @example
+ * ```ts
+ * export default defineNuxtConfig({
+ *   ltExtensions: {
+ *     preHydrationInput: { enabled: false },
+ *   },
+ * });
+ * ```
+ */
+export interface LtPreHydrationInputOptions {
+  /**
+   * Enable preservation. Defaults to `true`.
+   *
+   * Turn it off only with a reason: the alternative is that a user who types immediately
+   * after a page appears loses the entry silently.
+   */
+  enabled?: boolean;
+
+  /**
+   * How long after mount to keep restoring, in milliseconds. Defaults to `1500`; `0` restores
+   * once and stops immediately.
+   *
+   * Most fields are repaired in the first pass. The window exists for subtrees whose mount is
+   * deferred — an unresolved `<Suspense>` boundary writes its model value later than
+   * `app:mounted`. When it elapses the snapshot is dropped, so preserved values, passwords
+   * included, are not kept alive for the session.
+   */
+  maxRestoreMs?: number;
 }
 
 // =============================================================================
@@ -182,6 +236,10 @@ export interface LtExtensionsPublicRuntimeConfig {
     errorTranslation: {
       enabled: boolean;
       defaultLocale: string;
+    };
+    preHydrationInput: {
+      enabled: boolean;
+      maxRestoreMs: number;
     };
     tus: {
       defaultChunkSize: number;

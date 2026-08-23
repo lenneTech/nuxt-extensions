@@ -39,6 +39,24 @@
         </LtTransitionFade>
       </section>
 
+      <!-- Pre-Hydration Input Preservation Demo -->
+      <section>
+        <h2 class="text-xl font-semibold mb-2">Pre-Hydration Input Preservation</h2>
+        <p class="text-sm text-gray-500 mb-2">
+          Type into these before the page hydrates (throttle the CPU and reload). Vue keeps the
+          text field on its own since 3.5.41; the email and password fields are the gap this
+          module's plugin closes.
+        </p>
+        <div class="space-y-2">
+          <input v-model="demoText" class="border rounded px-2 py-1 w-full" placeholder="type=text (Vue handles this)" type="text">
+          <input v-model="demoEmail" autocomplete="username" class="border rounded px-2 py-1 w-full" placeholder="type=email (module handles this)" type="email">
+          <input v-model="demoSecret" autocomplete="current-password" class="border rounded px-2 py-1 w-full" placeholder="type=password (module handles this)" type="password">
+        </div>
+        <!-- The models, so a test can tell the model adopted the value rather than the DOM
+             node merely showing one. -->
+        <pre id="demo-models" class="mt-2 text-xs">{{ JSON.stringify({ text: demoText, email: demoEmail, secret: demoSecret }) }}</pre>
+      </section>
+
       <!-- File Utils Demo -->
       <section>
         <h2 class="text-xl font-semibold mb-2">File Utils Demo</h2>
@@ -52,6 +70,9 @@
 
 <script setup lang="ts">
 const showTransition = ref(false);
+const demoText = ref('');
+const demoEmail = ref('');
+const demoSecret = ref('');
 
 // Auth composable
 const { user, isAuthenticated, signOut } = useLtAuth();

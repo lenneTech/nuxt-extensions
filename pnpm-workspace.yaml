@@ -29,7 +29,9 @@ overrides:
   # arrays, bypassing the CVE-2026-14257 mitigation — patched only in 5.0.9, which is why
   # the 5.x floor moved up from 5.0.8). One entry per affected major, each a patch bump
   # INSIDE that major — a wider range would force a dependency across two majors.
-  'brace-expansion@>=2.0.0 <2.1.2': '2.1.2'
+  # The 2.x target tracks the newest release in that major (2.1.2 -> 2.1.4): an override key is a
+  # PIN, not a floor, so a target left behind the newest patch turns into a downgrade lock.
+  'brace-expansion@>=2.0.0 <2.1.2': '2.1.4'
   'brace-expansion@>=5.0.0 <5.0.9': '5.0.9'
   # The real lever for GHSA-mh99-v99m-4gvg: only brace-expansion 5.0.8 carries the fix, and
   # forcing it onto a minimatch@3 consumer throws "expand is not a function" (5.x exports a
@@ -48,8 +50,10 @@ overrides:
   # svgo — the removeScripts plugin left some executable scripts intact (GHSA-2p49-hgcm-8545).
   'svgo@>=4.0.0 <4.0.2': '4.0.2'
   # postcss path traversal in previous-source-map auto-loading via sourceMappingURL, leaking
-  # arbitrary .map files (GHSA-r28c-9q8g-f849, patched >=8.5.18).
-  'postcss@<8.5.18': '8.5.24'
+  # arbitrary .map files (GHSA-r28c-9q8g-f849, patched >=8.5.18). Target raised 8.5.24 -> 8.5.26
+  # (newest in the major): part of the tree already requested 8.5.26 on its own, so the older
+  # target was pinning a second, redundant copy of postcss alongside it.
+  'postcss@<8.5.18': '8.5.26'
   # nanoid — custom generators loop indefinitely when size is 0 (GHSA-qmxm-cq3q-gh8v, HIGH,
   # patched >=3.3.17). Only the 3.x line is in this tree (via postcss); 3.3.18 is the current
   # `legacy` dist-tag, so this stays inside the major the consumers ask for.
@@ -57,9 +61,10 @@ overrides:
 
 # No `minimumReleaseAge` gate is set in THIS repo, so the exclude list below is inert here. It is
 # mirrored — together with the overrides — into nuxt-base-starter / lt-monorepo, where an age gate
-# IS enforced and would otherwise block the two freshest security fixes. Keep this list in sync with
-# THEIR threshold: at a >=7d gate, tar@7.5.22 (~6d) and brace-expansion@5.0.8 (~7d) must be excluded
-# there too; at <=5d only the two freshest below (minimatch@10.2.6 ~3d, postcss@8.5.24 ~2d) need it.
+# IS enforced and would otherwise block the freshest security fixes. Keep this list in sync with
+# THEIR threshold. As of 2026-08-23 every override target has aged well past a 7d gate (the newest,
+# postcss@8.5.26, is ~17d), so the list is currently belt-and-braces rather than load-bearing — it
+# only matters again when a future maintenance run raises a target to a just-published patch.
 minimumReleaseAgeExclude:
   - minimatch@10.2.6
-  - postcss@8.5.24
+  - postcss@8.5.26

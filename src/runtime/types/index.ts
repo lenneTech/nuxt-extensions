@@ -17,6 +17,7 @@ export type {
   LtExtensionsModuleOptions,
   LtExtensionsPublicRuntimeConfig,
   LtI18nModuleOptions,
+  LtPreHydrationInputOptions,
   LtSystemSetupModuleOptions,
   LtTusModuleOptions,
 } from './module';

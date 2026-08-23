@@ -37,9 +37,14 @@ describe('@lenne.tech/nuxt-extensions', () => {
   });
 
   describe('types', () => {
-    it('exports all required types', async () => {
+    it('is importable as a module without side effects', async () => {
+      // Deliberately narrow. `src/runtime/types` is a TYPE-ONLY barrel, so it compiles to an
+      // empty module object: an `expect(types).toBeDefined()` here would pass even if every
+      // type in the file were deleted. All this pins is that importing the barrel neither
+      // throws nor drags runtime code in. The real export-surface guard — types-file to
+      // barrel parity — lives in `public-exports.test.ts`.
       const types = await import('../src/runtime/types');
-      expect(types).toBeDefined();
+      expect(Object.keys(types)).toEqual([]);
     });
   });
 });

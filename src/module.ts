@@ -11,7 +11,7 @@ import type { LtExtensionsModuleOptions } from './runtime/types';
 
 // Module meta
 export const name = '@lenne.tech/nuxt-extensions';
-export const version = '1.11.2';
+export const version = '1.12.0';
 export const configKey = 'ltExtensions';
 
 // Default cookie names — re-exported from auth-state so consumers can read
@@ -54,6 +54,9 @@ const defaultOptions: LtExtensionsModuleOptions = {
   i18n: {
     autoMerge: true,
   },
+  preHydrationInput: {
+    enabled: true,
+  },
   tus: {
     defaultChunkSize: 5 * 1024 * 1024, // 5MB
     defaultEndpoint: '/files/upload',
@@ -81,6 +84,7 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
       },
       errorTranslation: { ...defaultOptions.errorTranslation, ...options.errorTranslation },
       i18n: { ...defaultOptions.i18n, ...options.i18n },
+      preHydrationInput: { ...defaultOptions.preHydrationInput, ...options.preHydrationInput },
       tus: { ...defaultOptions.tus, ...options.tus },
     };
 
@@ -173,6 +177,10 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
       errorTranslation: {
         enabled: resolvedOptions.errorTranslation?.enabled ?? true,
         defaultLocale: resolvedOptions.errorTranslation?.defaultLocale || 'de',
+      },
+      preHydrationInput: {
+        enabled: resolvedOptions.preHydrationInput?.enabled ?? true,
+        maxRestoreMs: resolvedOptions.preHydrationInput?.maxRestoreMs ?? 1500,
       },
       tus: {
         defaultChunkSize: resolvedOptions.tus?.defaultChunkSize || 5 * 1024 * 1024,
@@ -281,6 +289,17 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
           ],
         });
       });
+    }
+
+    // =========================================================================
+    // Pre-hydration input preservation
+    // =========================================================================
+    // Vue 3.5.41 already keeps text typed before hydration — but only for `type="text"`
+    // and `textarea` (vuejs/core#14411). Every other type, sign-in fields included, is
+    // still erased. This plugin is a stopgap for that gap; see its header for the
+    // upstream issue that will make it removable.
+    if (resolvedOptions.preHydrationInput.enabled !== false) {
+      addPlugin(resolve('./runtime/plugins/pre-hydration-input.client'));
     }
 
     // Transpile runtime directory and tus-js-client (ESM compatibility)

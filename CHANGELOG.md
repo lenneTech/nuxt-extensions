@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.0] - 2026-08-23
+
+### Added
+
+- **Text typed before hydration is no longer silently erased — for the input types Vue does not cover.** Until Vue hydrates a server-rendered `<input>`, the element carries no framework listener: what the user types goes into the DOM node, the `input` event lands nowhere, and `v-model`'s mounted hook then writes the model value back over it. The entry is ERASED, not delayed. It is load-dependent, so it hides in development and surfaces on a cold cache, a slow device or a throttled CPU — most often on the sign-in screen, where people type on sight.
+
+  Vue fixed this in **3.5.41** ([vuejs/core#14411](https://github.com/vuejs/core/pull/14411), merged 2026-08-04): on hydration it compares the field's live value against what the server rendered and adopts the typed value into the model instead of overwriting the node. **That adoption is gated on `type="text"` and `textarea`.** Every other type still loses the entry — `email`, `password`, `tel`, `url`, `search`, `number` — which is precisely what a sign-in form is made of. Widening the gate is tracked upstream as [vuejs/core#15210](https://github.com/vuejs/core/issues/15210) (open, `p2-edge-case`, no milestone).
+
+  `runtime/plugins/pre-hydration-input.client.ts` closes the remaining gap: at `app:beforeMount` the bundle has loaded but hydration has not run, so every field still holds what was typed; at `app:mounted` anything that was overwritten is written back with a synthetic `input` event so `v-model` adopts it. A field counts as edited when its value differs from `defaultValue` — the same test Vue itself uses, so values the server pre-filled are never mistaken for user input. A browser autofill that lands before hydration is recovered the same way.
+
+  New options: `ltExtensions.preHydrationInput.enabled` (default `true`) and `maxRestoreMs` (default `1500`, for subtrees whose mount is deferred behind an unresolved `<Suspense>`).
+
+  **This is a stopgap.** When Vue covers the remaining types, delete the plugin — `test/pre-hydration-input.test.ts` pins the current gate and will fail on the types Vue takes over, which is the signal.
+
+### Changed
+
+- Dependency maintenance ahead of the release. The one runtime dependency, `@nuxt/kit`, now resolves to 4.5.2 instead of 4.4.8 — the module is developed against Nuxt 4.5.2, and building against an older kit than the Nuxt it targets is how two copies end up in a consumer's tree. The declared range stays `^4.0.0`: a published library must not narrow what its consumers may resolve.
+- `better-auth` and `@better-auth/passkey` raised 1.6.23 → 1.7.1 (dev + peer). **Worth knowing if you use 2FA:** better-auth 1.7.0 changed `twoFactor.enable` to return a discriminated result carrying `method: "otp" | "totp"`, which has to be narrowed before reading `totpURI` or `backupCodes`. This module's wrapper passes the result through unchanged, so nothing here needed migrating — but your own code that reads those fields does. The peer range remains `>=1.0.0`, so this is not forced on you.
+- TypeScript stays on 5.9.3. TypeScript 7 is available but `vue-tsc` 3.3.11 still resolves `typescript/lib/tsc`, a path TypeScript 7's `exports` map no longer exposes, so the type-check gate would break. Revisit once Volar declares TS 7 support.
+- Toolchain and test dependencies refreshed: `vitest` + `@vitest/coverage-v8` 4.1.11, `vue-tsc` 3.3.11, `oxlint` 1.79.0, `oxfmt` 0.64.0, `@nuxt/module-builder` 1.0.3, `@playwright/test` 1.62.1, `@types/node` 26.2.0, `happy-dom` 20.11.6. The oxfmt bump reformatted three transition components (whitespace only).
+
+### Security
+
+- Two `overrides` in `pnpm-workspace.yaml` had drifted into downgrade locks and were raised: `postcss` 8.5.24 → 8.5.26 and `brace-expansion` 2.1.2 → 2.1.4. The postcss one was concretely harmful — part of the tree already requested 8.5.26 on its own while the override held another consumer at 8.5.24, so two copies were being installed. `pnpm audit` reports zero findings across all severities.
+
+### Notes on the approach
+
+- **A `readonly`-until-mounted guard was built first and then removed.** Declining the keystroke looks like the obvious remedy and is worse: the user faces a field that looks usable and silently refuses, which reads as a broken page. Measured costs beyond that: `readonly` is the documented technique for SUPPRESSING browser autofill and the load-time autofill pass runs inside exactly that window; screen readers announce "read only" and never announce the silent flip back; mobile browsers do not raise the on-screen keyboard for a readonly field, and do not raise it after the attribute is removed either, because presentation is tied to the focus gesture. Preserving the entry avoids all of it, because the field is never anything other than a normal editable field.
+- The plugin is library-agnostic — it protects every `<input>` and `<textarea>` on the page, whatever rendered it. The earlier approach wrapped three Nuxt UI components via `components:extend` and a Vite `resolveId` plugin; none of that machinery survives, and `@nuxt/ui` is not a dependency of this package in any form.
+
+### Tests
+
+- `test/pre-hydration-input.test.ts` — 14 cases. Seven pin what Vue 3.5.41 itself does, against real `vModelText`: `text` and `textarea` are adopted, `email` / `password` / `search` / `tel` / `url` are erased. The rest cover the plugin's own parts: which fields count as edited (a server-pre-filled value does not; the same value typed over does), and that restoration dispatches an `input` event rather than only assigning `.value` — without the event the model keeps the old value and the next render wipes the node again.
+
 ## [1.11.2] - 2026-08-12
 
 ### Fixed

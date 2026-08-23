@@ -1,6 +1,6 @@
 {
   "name": "@lenne.tech/nuxt-extensions",
-  "version": "1.11.2",
+  "version": "1.12.0",
   "description": "Reusable Nuxt 4 composables, components, and Better-Auth integration for lenne.tech projects",
   "repository": {
     "type": "git",
@@ -99,21 +99,22 @@
     }
   },
   "devDependencies": {
-    "@better-auth/passkey": "1.6.23",
-    "@nuxt/module-builder": "1.0.2",
+    "@better-auth/passkey": "1.7.1",
+    "@nuxt/module-builder": "1.0.3",
     "@nuxt/schema": "4.5.2",
-    "@playwright/test": "1.61.1",
-    "@types/node": "26.1.1",
-    "@vitest/coverage-v8": "4.1.10",
-    "better-auth": "1.6.23",
-    "happy-dom": "20.10.6",
+    "@playwright/test": "1.62.1",
+    "@types/node": "26.2.0",
+    "@vitest/coverage-v8": "4.1.11",
+    "@vue/server-renderer": "3.5.41",
+    "better-auth": "1.7.1",
+    "happy-dom": "20.11.6",
     "nuxt": "4.5.2",
-    "oxfmt": "0.59.0",
-    "oxlint": "1.74.0",
+    "oxfmt": "0.64.0",
+    "oxlint": "1.79.0",
     "tus-js-client": "4.3.1",
     "typescript": "5.9.3",
-    "vitest": "4.1.10",
-    "vue-tsc": "3.3.7"
+    "vitest": "4.1.11",
+    "vue-tsc": "3.3.11"
   },
   "keywords": [
     "nuxt",

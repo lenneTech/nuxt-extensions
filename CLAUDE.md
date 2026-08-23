@@ -76,6 +76,10 @@ export default defineNuxtConfig({
       enabled: true,
       basePath: '/ai',               // Must match the nest-server AI controller
     },
+    preHydrationInput: {
+      enabled: true,                 // keep text typed before hydration instead of losing it
+      maxRestoreMs: 1500,            // how long to keep repairing deferred subtrees
+    },
   },
 });
 ```
@@ -170,6 +174,35 @@ export default defineNuxtRouteMiddleware((to) => {
   return navigateTo('/auth/login');
 });
 ```
+
+## Pre-Hydration Input Preservation
+
+**The defect:** until Vue hydrates a server-rendered `<input>`, it carries no framework
+listener. Text typed in that window goes into the DOM node, the `input` event reaches nothing,
+and `v-model`'s mounted hook then overwrites it. The entry is **erased, not delayed**. It is
+load-dependent, so it hides in development.
+
+**Vue already fixes most of it.** Since 3.5.41 (vuejs/core#14411) Vue adopts the typed value
+into the model on hydration — but only for `type="text"` and `textarea`. `email`, `password`,
+`tel`, `url`, `search` and `number` are still erased. Upstream tracking: vuejs/core#15210.
+
+**What this module adds:** `runtime/plugins/pre-hydration-input.client.ts` snapshots edited
+fields at `app:beforeMount` and restores them at `app:mounted`, dispatching a synthetic
+`input` event so `v-model` adopts the value.
+
+**What this means when you debug a consuming project:**
+
+- **Do not add a `readonly`-until-mounted guard to inputs.** It was tried and removed: it makes
+  the field look usable while silently refusing, suppresses browser autofill (`readonly` is the
+  documented technique for exactly that), makes screen readers announce "read only" with no
+  announcement when it flips back, and stops mobile browsers raising the on-screen keyboard.
+- A field is treated as edited when `value !== defaultValue`, so server-pre-filled values are
+  never restored over a legitimate change made during hydration.
+- Each field is restored at most once; a later programmatic clear is not undone.
+- This is a **stopgap**. When Vue widens its gate, delete the plugin —
+  `test/pre-hydration-input.test.ts` pins the current behaviour and will fail on the types Vue
+  takes over.
+- Opt out with `ltExtensions.preHydrationInput.enabled: false`.
 
 ## Development Rules
 

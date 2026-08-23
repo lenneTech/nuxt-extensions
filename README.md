@@ -41,6 +41,7 @@ npm install tus-js-client
 - **Transition Components** - Ready-to-use Vue transition wrappers
 - **i18n Support** - English and German translations (works without i18n too)
 - **Auto-imports** - All composables and components are auto-imported
+- **Pre-hydration input preservation** - text typed before hydration is kept, not erased
 
 ## Environment Variables
 
@@ -151,6 +152,70 @@ export default defineNuxtConfig({
     ai: {
       enabled: true,                // Enable AI composables / auto-imports
       basePath: '/ai',              // Must match the nest-server AI controller
+    },
+  },
+});
+```
+
+## Pre-Hydration Input Preservation
+
+Text typed before a page has hydrated is kept instead of being silently thrown away.
+
+### The problem
+
+Until Vue hydrates a server-rendered `<input>`, the element carries **no framework listener**.
+Text typed in that window is written to the DOM node, the `input` event reaches nothing, and
+`v-model`'s mounted hook then writes the model value back over it. The entry is **erased, not
+delayed** — no error, no toast, nothing persisted.
+
+It is load-dependent, so it hides in development and shows up on a cold cache, a slow device
+or a throttled CPU — most often on the login screen, where people type on sight.
+
+### What Vue already does, and where it stops
+
+Vue fixed this in **3.5.41** ([vuejs/core#14411](https://github.com/vuejs/core/pull/14411)):
+on hydration it compares the field's live value against what the server rendered and, when
+they differ, adopts the typed value into the model instead of overwriting the node.
+
+That adoption is gated on `type="text"` and `textarea`. **Every other type still loses the
+entry** — and those are exactly the fields a sign-in form uses:
+
+| Input type | Typed before hydration |
+|------------|------------------------|
+| `text`, `textarea` | kept by Vue itself |
+| `email`, `password`, `tel`, `url`, `search`, `number` | **erased** |
+
+Widening the gate is tracked upstream as
+[vuejs/core#15210](https://github.com/vuejs/core/issues/15210) — open, labelled
+`p2-edge-case`, no milestone.
+
+### What this module adds
+
+A small client plugin that closes the remaining gap. Just before hydration it reads what is
+in each field; just after, it writes back anything that was overwritten and dispatches a
+synthetic `input` event so `v-model` adopts it.
+
+A field counts as edited when its value differs from `defaultValue` — the same test Vue uses,
+so values the server pre-filled are never mistaken for user input. A browser autofill that
+lands before hydration is recovered the same way.
+
+Fields stay ordinary editable fields throughout. Nothing is made `readonly`, so autofill,
+screen-reader semantics and the mobile on-screen keyboard are untouched, and the user never
+faces a field that looks usable and silently refuses.
+
+**This is a stopgap.** When Vue covers the remaining types, delete it —
+`test/pre-hydration-input.test.ts` pins the current gate and will fail on the types Vue takes
+over, which is the signal.
+
+### Opting out
+
+```ts
+export default defineNuxtConfig({
+  ltExtensions: {
+    preHydrationInput: {
+      enabled: false,
+      // or keep it on and only change how long deferred subtrees are waited for:
+      // maxRestoreMs: 3000,
     },
   },
 });
