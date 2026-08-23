@@ -186,22 +186,42 @@ export default defineNuxtRouteMiddleware((to) => {
 force-patched on hydration (vuejs/core#9083) while the label's `for` — a prop on reka-ui's
 `Label` component — is not. The label keeps the stale value and the association breaks.
 
-**What this module adds:** `runtime/plugins/form-label-association.client.ts` re-points
-dangling Nuxt UI field labels at the control in their own field, at `app:mounted` and for a
-bounded window afterwards (`maxRepairMs`, default 1500 ms).
+**What this module adds:** `runtime/plugins/form-label-association.client.ts` repairs three
+associations inside Nuxt UI fields whose label no longer resolves — `<label for>`,
+`aria-labelledby` on group roots, and `aria-describedby` on controls — at `app:mounted`, for a
+bounded window afterwards (`maxRepairMs`, default 1500 ms), and via a `MutationObserver` for
+subtrees that hydrate later (`observeDeferred`, default on).
 
 **What this means when you debug a consuming project:**
 
-- **A `for` attribute that changes after mount is this plugin, not a bug.** It logs a
-  `console.warn` in development naming how many labels it repaired.
-- **It refuses to guess.** The repair only fires when the field holds exactly one eligible
-  control. Radio and checkbox groups, hidden form-value proxies, `aria-hidden`/`disabled`
-  controls and button-only fields are skipped on purpose — binding a group caption to its
-  first option would submit a value the user never chose.
-- **Only Nuxt UI's own field labels are touched** (`label[data-slot="label"][for]`). Labels
-  your application wrote are never rewritten.
-- **Do not "fix" a skipped group by loosening the rule.** Inert beats wrong here; the correct
-  fix for a group is an SSR-stable id at the source.
+- **A `for` / `aria-labelledby` / `aria-describedby` that changes after mount is this plugin, not
+  a bug.** It logs once per page in development, naming the repaired fields. Repaired labels
+  carry `data-lt-label-repaired`.
+- **`aria-describedby` is the one people miss.** The error container's id IS force-patched on
+  hydration; the reference to it is not, so validation errors are visible but never announced
+  (WCAG 3.3.1 / 3.3.3). If a project reports "screen reader stays silent on form errors", check
+  whether this plugin is disabled before looking anywhere else.
+- **It refuses to guess.** The `for` repair fires only when the field holds exactly one eligible
+  control. Groups get `aria-labelledby` instead — a `for` on a `<div role="radiogroup">` is inert
+  however carefully it is chosen.
+- **`disabled` and `readonly` fields ARE repaired**, and must stay that way. They are rendered
+  and announced, so WCAG 1.3.1 / 4.1.2 apply unchanged; WCAG's only carve-out for inactive
+  components is contrast. Excluding `disabled` was tried in 1.13.0 and reproduced the very defect
+  the plugin repairs on every read-only form — and additionally mis-bound partially disabled radio
+  groups, so a click on one caption selected a different option.
+- **`[data-hidden]` alone does NOT mean "reka proxy".** The missing `id` is what means that.
+  `UFileUpload` renders the user's real file input through the same mechanism and stamps the
+  field id on it — excluding it unqualified takes out the field's only control.
+- **Only Nuxt UI's own field labels are touched** (`label[data-slot="label"][for]`). Labels your
+  application wrote are never rewritten, and naming the application set itself is never
+  overwritten.
+- **Never assert on a generated `for` or `id` value** in tests. Assert on the accessible name —
+  the ids come from `useId()` and are neither stable nor meaningful, and this plugin rewrites them.
+- **If you change a selector in that file, run the mutation check.** `test/upstream-dom-contract.test.ts`
+  pins what reka-ui and @nuxt/ui actually render (both are devDependencies for exactly this
+  reason); `test/form-label-association.test.ts` pins our own pairing rules. Every guard has a
+  case that fails when the guard is removed. The 1.13.0 defect shipped because a fixture was
+  invented rather than observed, and the invented selector matched the invented fixture.
 - This is a **stopgap** for a framework-level divergence. Opt out with
   `ltExtensions.formLabelAssociation.enabled: false`.
 

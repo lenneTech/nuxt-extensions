@@ -9,6 +9,11 @@ autoInstallPeers: true
 allowBuilds:
   '@parcel/watcher': true
   'esbuild': true
+  # Transitive of the @nuxt/ui devDependency. Its postinstall only picks the Vue 2 vs Vue 3
+  # re-export shim, and nothing in this repo imports vue-demi at runtime or in a test — the
+  # contract test mounts reka components (which do not use it) and reads @nuxt/ui sources as
+  # files. Skipped rather than trusted: a build script that buys us nothing should not run.
+  vue-demi: false
 
 # ----------------------------------------------------------------------------------
 # Security overrides: force vulnerable transitive deps onto patched versions.
@@ -58,6 +63,17 @@ overrides:
   # patched >=3.3.17). Only the 3.x line is in this tree (via postcss); 3.3.18 is the current
   # `legacy` dist-tag, so this stays inside the major the consumers ask for.
   'nanoid@<3.3.17': '3.3.18'
+  # esbuild — the dev server accepts requests from any origin on Windows, letting a malicious
+  # page read arbitrary files through it (GHSA-g7r4-m6w7-qqqr, patched >=0.28.1). Entered this
+  # tree with the @nuxt/ui devDependency, via @nuxt/fonts > fontless.
+  #
+  # Scoped to that one path rather than overriding esbuild globally: the advisory covers
+  # >=0.27.3 <0.28.1 only, and an unscoped entry would also drag the unaffected 0.25.x copy
+  # elsewhere in the tree across two minors for no security gain. `fontless` asks for ^0.27.0,
+  # so this deliberately steps outside its declared range — safe here because 0.28.2 is already
+  # resolved in this tree for other consumers, and because esbuild is dev-tooling that never
+  # reaches the published package.
+  'fontless>esbuild': '0.28.2'
 
 # No `minimumReleaseAge` gate is set in THIS repo, so the exclude list below is inert here. It is
 # mirrored — together with the overrides — into nuxt-base-starter / lt-monorepo, where an age gate

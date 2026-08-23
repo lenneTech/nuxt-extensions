@@ -5,7 +5,127 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.0] - 2026-08-23
+
+Started as a one-line fix for a defect 1.13.0 shipped, and a review found three more problems in
+the same file — including one worse than the original. The scope grew accordingly.
+
+### Fixed
+
+- **Form label repair no longer skips disabled and readonly fields.** 1.13.0 excluded
+  `[disabled]` from the controls a label may be re-pointed at. Where a field's only control was
+  disabled that left nothing eligible, so the repair never ran and the label stayed pointing at
+  nothing — the plugin reproduced the exact defect it exists to fix, on every read-only form.
+  Measured in a consuming app: a full Playwright suite went from 818/818 to 812/6, and the six
+  failures were all read-only forms whose fields had lost their accessible name.
+
+  A disabled control is rendered, stays in the accessibility tree and is announced. WCAG 1.3.1
+  and 4.1.2 apply to it unchanged, and WCAG's only carve-out for inactive components is contrast
+  (1.4.3 / 1.4.11) — there is no naming exemption anywhere. Note the repair restores the
+  accessible **name** only for such a field: a disabled control prevents click dispatch and is
+  not focusable, so the label's click-to-focus half is dead either way. On a read-only form the
+  name is the entire value, because that is a page people read rather than operate.
+
+- **Partially disabled radio and checkbox groups are no longer mis-bound.** This is the more
+  dangerous half of the same defect and it went unnoticed until review. With one item disabled,
+  `[disabled]` filtered it out, exactly one control remained eligible, the group rule never
+  engaged — and **every caption in the group was bound to the one enabled item**. Clicking "No"
+  then selected "Yes": a value the user never chose, submitted silently. That is precisely the
+  outcome the plugin's own "refuses to guess" rule exists to prevent.
+
+- **Reka's submit proxy is now identified by what it actually renders.** The exclusion list
+  assumed `type="hidden"`. Reka renders `VisuallyHidden as="input"` with `feature: 'fully-hidden'`,
+  producing an off-screen input carrying `data-hidden` and `tabindex="-1"` — with `type="checkbox"`
+  or `type="text"`, never `type="hidden"`. `aria-hidden` joined that variant only in reka-ui
+  2.10.1; on 2.9.x `data-hidden` is the sole identifier.
+
+  The proxy is excluded on `[data-hidden]:not([id])`, and the `:not([id])` is load-bearing:
+  Nuxt UI's `UFileUpload` renders the user's real file input through the same mechanism and puts
+  the FormField id on it. An unqualified `[data-hidden]` excluded that field's only control.
+
+### Added
+
+- **`aria-describedby` is repaired too.** The same hydration divergence breaks it, for the same
+  reason, and the consequence is worse. `FormField` renders its error / help / description
+  containers with `:id` as a compiled binding, so Vue force-patches those ids on hydration; the
+  matching `aria-describedby` reaches the control through a `v-bind` spread and does not get
+  patched. Every validation error then points at an id that no longer exists — a sighted user
+  sees "Required field", a screen-reader user gets silence (WCAG 3.3.1 / 3.3.3). Repaired
+  token-wise, so application-authored references survive untouched.
+
+- **Radio and checkbox groups are named via `aria-labelledby`.** Their FormField id lands on a
+  `<div role="radiogroup">`, and `for` only resolves against labelable elements — so a repaired
+  `for` was inert there no matter what. `aria-labelledby` names the group without touching any
+  item, which makes it strictly safer than the `for` repair. Never overwrites naming the
+  application wrote itself.
+
+- **Select, checkbox and switch fields are repaired.** Nuxt UI puts the FormField id on a
+  `<button>` for those three families, and `button` is a labelable element. They were previously
+  exempt — their only native control is reka's proxy, correctly excluded, leaving nothing
+  eligible. Narrowed to `[data-slot="base"]` so an ordinary submit or icon button inside a field
+  is not mistaken for the control.
+
+- **`formLabelAssociation.observeDeferred`** (default `true`) — a `MutationObserver` that catches
+  server-rendered subtrees hydrating after the repair window closes. `hydrate-on-visible` fires on
+  scroll and `hydrate-on-interaction` on a click, either of which can be long after mount; no
+  fixed window reaches those. It reacts only to added subtrees that actually contain a field
+  label and coalesces a burst into one sweep per frame.
+
+- Two guards against a repair that would be worse than the defect it replaces: a control that
+  already has a working label is left alone (multiple labels **concatenate** into one accessible
+  name), and an id that is not unique in the document is never written (`for` resolves through
+  `getElementById`, which returns the first match). A control hidden by `display:none` is also
+  ignored — binding there gains no name yet marks the field healthy forever.
+
+- `maxRepairMs` is clamped to `[0, 30000]`. A delay past 2^31 overflows `setTimeout` and fires
+  immediately, silently turning an over-large window into no window at all.
+
+### Changed
+
+- The development warning fires **once per page** instead of once per sweep, and names the
+  repaired fields instead of only counting them. Repaired labels carry `data-lt-label-repaired`,
+  so a consuming project can assert on it in E2E — the 1.13.0 defect was found by a Playwright
+  suite, not by anyone reading a console.
+
+### Tests
+
+- **`test/upstream-dom-contract.test.ts` (new).** `reka-ui` and `@nuxt/ui` are now devDependencies,
+  because the plugin's selectors are assertions about those libraries and nothing here could check
+  them: neither package was installed, so every fixture was hand-transcribed from something
+  observed once, elsewhere. That is not a theoretical weakness — it is the direct cause of the
+  1.13.0 defect. The proxy fixture was invented as `<input type="hidden">`, the invented shape was
+  caught by the invented selector, the suite went green, and the wrong theory shipped.
+
+  This file renders the real components and reads the real sources. It is the tripwire: when reka
+  renames `data-hidden` or Nuxt UI stops stamping `data-slot`, it fails — instead of the rule
+  tests staying green over a plugin that has silently stopped working.
+
+- 19 → 64 cases across three files, and each guard above is pinned by a case that fails when the
+  guard is removed (verified by mutation, not by inspection). Test names now state what each case
+  proves: the old "skips the hidden form-value proxy" described a fixture reka never renders, and
+  that misnaming is how the wrong theory survived review in the first place. Cases that are
+  characterisation rather than regression say so.
+
+### Upgrade
+
+No configuration change is required, and there is no API change.
+
+- **If you set `formLabelAssociation.enabled: false` to work around the 1.13.0 read-only-form
+  regression, remove it.** That is the defect this release fixes, and the option now costs you
+  the group, `aria-describedby` and select/checkbox/switch repairs as well.
+- Accessible-name assertions against disabled or read-only fields that failed on 1.13.0 pass
+  again — un-skip any specs you parked.
+- Expect `aria-describedby` and `aria-labelledby` to change after mount on affected fields, in
+  addition to `for`. Never assert on generated id values; assert on the accessible name.
+- Set `observeDeferred: false` if you render no lazily hydrated server content and would rather
+  not carry a `MutationObserver`.
+
 ## [1.13.0] - 2026-08-23
+
+> **Superseded.** The exclusion of `disabled` controls described below was a defect: it stopped
+> the repair on every field whose only control was disabled, and mis-bound partially disabled
+> radio groups. Both were fixed in [1.14.0](#1140---2026-08-23). The entry is kept unedited as
+> the historical record.
 
 ### Added
 

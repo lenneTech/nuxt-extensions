@@ -107,7 +107,12 @@ export default defineNuxtPlugin({
       return;
     }
 
-    const maxRestoreMs = options?.maxRestoreMs ?? 1500;
+    // Clamped for the same reason as `formLabelAssociation.maxRepairMs`: a delay past 2^31
+    // overflows `setTimeout` and fires IMMEDIATELY, so an over-large window silently becomes no
+    // window — here that means a typed value is dropped rather than kept, which is the whole
+    // defect this plugin exists to prevent. `NaN` behaves the same way.
+    const configuredRestoreMs = options?.maxRestoreMs ?? 1500;
+    const maxRestoreMs = Number.isFinite(configuredRestoreMs) && configuredRestoreMs > 0 ? Math.min(configuredRestoreMs, 30_000) : 0;
     let edited: Map<EditableField, string> = new Map();
 
     nuxtApp.hook('app:beforeMount', () => {

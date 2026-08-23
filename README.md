@@ -190,27 +190,39 @@ target, not a convenience. Tests using `getByRole('textbox', { name })` stop fin
 
 ### What the repair does
 
-After mount, and for a bounded window afterwards, every Nuxt UI field label whose target does
-not resolve is re-pointed at the control in its own field.
+After mount, and for a bounded window afterwards, three associations are repaired inside each
+Nuxt UI field whose label no longer resolves:
+
+| Association | Repaired how | Why it needs its own path |
+|---|---|---|
+| `<label for>` → control | re-pointed at the field's control | `for` carries **both** the accessible name and click-to-focus |
+| `aria-labelledby` on a group | caption id minted, group pointed at it | A radio group's id sits on a `<div role="radiogroup">`, and `for` only resolves against labelable elements — there it is inert however carefully it is chosen |
+| `aria-describedby` → error / help | dangling tokens re-pointed, token-wise | The error container's id **is** force-patched on hydration; the reference to it is not. So the message is visible and never announced (WCAG 3.3.1 / 3.3.3) |
 
 **It refuses to guess.** A repair that fires where it should not is worse than the defect: a
-dangling label is inert and visible, a mis-pointed one is confidently wrong and silent, and
-on a radio or checkbox a click on the caption would change a value the user never chose. So
-the repair only fires when the field contains exactly **one** eligible control. Skipped
-deliberately:
+dangling label is inert and visible, a mis-pointed one is confidently wrong and silent, and on a
+radio or checkbox a click on the caption would change a value the user never chose. So the `for`
+repair only fires when the field contains exactly **one** eligible control. Skipped deliberately:
 
 | Case | Why |
 |------|-----|
-| Radio / checkbox groups | One field root, many controls — binding every caption to the first option would submit a value nobody picked |
-| Hidden form-value proxies, `aria-hidden`, `disabled` | Not the user's control; pointing at one restores neither the name nor the click |
-| Fields whose only visible control is a `button` | Nothing safe to point at |
+| Radio / checkbox groups | One field root, many controls — binding every caption to one item would submit a value nobody picked. Named via `aria-labelledby` instead |
+| Reka's submit proxy (`[data-hidden]` with no `id`) | Not the user's control. The missing id is what identifies it — Nuxt UI's `UFileUpload` renders the *real* file input the same way, but stamps the field id on it |
+| Anything `aria-hidden`, `hidden`, `type="hidden"` or `display:none` | Outside the accessibility tree, so a label pointing there would carry no name — the repair would report success and change nothing |
+| A control that already has a working label | Multiple `<label>`s **concatenate** into one accessible name, so a second one produces a name matching no visible text |
+| An id that is not unique in the document | `for` resolves through `getElementById`, which returns the *first* match — the label's click would go to the other element |
 | Labels your application wrote | Only Nuxt UI's own field labels (`data-slot="label"`) are touched |
 
-`for` is repaired rather than `aria-labelledby` added, because `for` carries **both** the
-accessible name and click-to-focus.
+**`disabled` and `readonly` fields ARE repaired.** They are rendered, stay in the accessibility
+tree and are announced, so WCAG 1.3.1 / 4.1.2 apply unchanged — and WCAG's only carve-out for
+inactive components is contrast (1.4.3 / 1.4.11); there is no naming exemption. For a disabled
+field the repair restores the **name only**, since a disabled control prevents click dispatch and
+is not focusable. On a read-only form that is the whole value: it is a page people read rather
+than operate. Excluding `disabled` was tried in 1.13.0 and reproduced the very defect this plugin
+repairs on every read-only form.
 
-**This is a repair, not a cure.** The real fix is for the id not to diverge; this exists
-because the divergence sits in the framework stack rather than in any one application.
+**This is a repair, not a cure.** The real fix is for the id not to diverge; this exists because
+the divergence sits in the framework stack rather than in any one application.
 
 ### Opting out
 
@@ -219,15 +231,24 @@ export default defineNuxtConfig({
   ltExtensions: {
     formLabelAssociation: {
       enabled: false,
-      // or keep it on and only change how long deferred subtrees are waited for:
-      // maxRepairMs: 3000,
+      // Or keep it on and tune the two knobs:
+      // maxRepairMs: 3000,        // window for deferred subtrees; clamped to [0, 30000]
+      // observeDeferred: false,   // drop the MutationObserver for hydrate-on-visible content
     },
   },
 });
 ```
 
-Two real reasons to: your application assigns `for` itself and depends on those exact values,
-or your tests assert on literal `for` / `id` strings rather than on the accessible name.
+Two real reasons to turn it off: your application assigns `for` itself and depends on those exact
+values, or your tests assert on literal `for` / `id` strings rather than on the accessible name.
+Fix the second reason instead — assert on the accessible name, which is what a user perceives.
+
+### Debugging it in a consuming project
+
+- **A `for`, `aria-labelledby` or `aria-describedby` that changes after mount is this plugin.**
+  In development it logs once per page, naming the fields it repaired.
+- Repaired labels carry `data-lt-label-repaired`, so an E2E suite can assert the repair count is
+  zero once the upstream divergence is fixed — and delete the plugin at that point.
 
 ## Pre-Hydration Input Preservation
 

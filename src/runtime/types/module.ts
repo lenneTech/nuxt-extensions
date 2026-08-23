@@ -192,13 +192,31 @@ export interface LtFormLabelAssociationOptions {
 
   /**
    * How long after mount to keep repairing, in milliseconds. Defaults to `1500`; `0` sweeps
-   * once and stops.
+   * once and stops. Values above 30000 are clamped, and a non-finite value is treated as `0` —
+   * a delay past 2^31 overflows `setTimeout` and fires immediately, silently turning an
+   * over-large window into no window at all.
    *
-   * Most fields are repaired in the first pass. The window exists for server-rendered
-   * subtrees whose hydration is deferred — `hydrate-on-visible`, an unresolved `<Suspense>`,
-   * an island — which carry the same divergence but hydrate after `app:mounted`.
+   * Most fields are repaired in the first pass. The window exists for server-rendered subtrees
+   * whose hydration is deferred — an unresolved `<Suspense>`, an island — which carry the same
+   * divergence but hydrate after `app:mounted`. It does NOT reach `hydrate-on-visible` or
+   * `hydrate-on-interaction`, which can fire minutes later; `observeDeferred` covers those.
    */
   maxRepairMs?: number;
+
+  /**
+   * Keep watching for server-rendered subtrees that hydrate after the window closes.
+   * Defaults to `true`.
+   *
+   * `hydrate-on-visible` fires on scroll and `hydrate-on-interaction` on a click — either can
+   * be long after mount, and both carry the very same divergence, so no fixed window reaches
+   * them. A `MutationObserver` does, and it costs nothing while nothing changes: it reacts
+   * only to added subtrees that actually contain a field label, and coalesces a burst into one
+   * sweep per frame.
+   *
+   * Turn it off if your application renders no lazily hydrated server content and you would
+   * rather not carry an observer at all; the bounded window then remains the only mechanism.
+   */
+  observeDeferred?: boolean;
 }
 
 /**
@@ -295,6 +313,7 @@ export interface LtExtensionsPublicRuntimeConfig {
     formLabelAssociation: {
       enabled: boolean;
       maxRepairMs: number;
+      observeDeferred: boolean;
     };
     preHydrationInput: {
       enabled: boolean;
