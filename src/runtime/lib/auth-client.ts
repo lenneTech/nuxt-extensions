@@ -231,55 +231,6 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
     plugins,
   });
 
-  // ---------------------------------------------------------------------------
-  // The ONE assertion for plugin surfaces.
-  //
-  // better-auth infers a client's action surface from the LITERAL TUPLE of plugins
-  // at the `createAuthClient()` call site. `plugins` above is built conditionally on
-  // runtime flags (`enableAdmin` / `enableTwoFactor` / `enablePasskey`), plus external
-  // and registry plugins — so the tuple is `unknown[]` and the inference is erased.
-  // That is structural, not versional: pinning better-auth to one minor does not
-  // restore it.
-  //
-  // What the pin DOES buy is that a hand-written shape is now stable enough to be
-  // worth writing. This is that shape, declared once and reviewed once, instead of
-  // twelve separate `as any` casts each carrying its own eslint suppression — twelve
-  // suppressions read as twelve unexamined decisions.
-  //
-  // `Partial<>` is deliberate: a surface is genuinely absent when its flag is off.
-  // `test/better-auth-contract.test.ts` pins these members against the real installed
-  // package, so a rename upstream fails a test instead of yielding `undefined`.
-  // ---------------------------------------------------------------------------
-
-  // better-auth types each action's trailing `options` bag against THAT action's own
-  // body shape. Our public surface (`types/auth.ts`) deliberately exposes the looser
-  // `options?: unknown`, and a function taking a narrower parameter is not assignable
-  // to one taking `unknown` — so the two have to meet somewhere. They meet here, in
-  // typed assertions derived from the real signatures (`Parameters<typeof …>`), which
-  // keeps a better-auth rename a compile error rather than an `any`-shaped hole.
-  type LtRequestOptions = unknown;
-
-  interface LtPasswordAction {
-    (params: { password: string }, options?: LtRequestOptions): Promise<unknown>;
-  }
-
-  interface LtPluginSurfaces {
-    admin: Record<string, unknown>;
-    passkey: Record<string, unknown>;
-    twoFactor: {
-      disable: LtPasswordAction;
-      enable: LtPasswordAction;
-      generateBackupCodes: LtPasswordAction;
-      verifyBackupCode: (...args: unknown[]) => Promise<unknown>;
-      verifyTotp: (...args: unknown[]) => Promise<unknown>;
-    };
-  }
-
-  const withPlugins = baseClient as typeof baseClient & Partial<LtPluginSurfaces>;
-  const signInWithPlugins = baseClient.signIn as typeof baseClient.signIn & {
-    passkey?: (...args: unknown[]) => Promise<unknown>;
-  };
-
   // Return extended client with password hashing
   return {
     // Spread all base client properties and methods
@@ -287,8 +238,10 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
 
     // Explicitly pass through methods not captured by spread operator
     useSession: baseClient.useSession,
-    passkey: withPlugins.passkey,
-    admin: withPlugins.admin,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    passkey: (baseClient as any).passkey,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    admin: (baseClient as any).admin,
     $Infer: baseClient.$Infer,
     $fetch: baseClient.$fetch,
     $store: baseClient.$store,
@@ -297,17 +250,19 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
     /**
      * Change password for an authenticated user (both passwords are hashed)
      */
-    changePassword: async (params: { currentPassword: string; newPassword: string }, options?: LtRequestOptions) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    changePassword: async (params: { currentPassword: string; newPassword: string }, options?: any) => {
       const [hashedCurrent, hashedNew] = await Promise.all([ltSha256(params.currentPassword), ltSha256(params.newPassword)]);
-      return baseClient.changePassword?.({ currentPassword: hashedCurrent, newPassword: hashedNew }, options as Parameters<NonNullable<typeof baseClient.changePassword>>[1]);
+      return baseClient.changePassword?.({ currentPassword: hashedCurrent, newPassword: hashedNew }, options);
     },
 
     /**
      * Reset password with token (new password is hashed before sending)
      */
-    resetPassword: async (params: { newPassword: string; token: string }, options?: LtRequestOptions) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    resetPassword: async (params: { newPassword: string; token: string }, options?: any) => {
       const hashedPassword = await ltSha256(params.newPassword);
-      return baseClient.resetPassword?.({ newPassword: hashedPassword, token: params.token }, options as Parameters<NonNullable<typeof baseClient.resetPassword>>[1]);
+      return baseClient.resetPassword?.({ newPassword: hashedPassword, token: params.token }, options);
     },
 
     // Override signIn to hash password (keep passkey method from plugin)
@@ -316,15 +271,17 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
       /**
        * Sign in with email and password (password is hashed before sending)
        */
-      email: async (params: { email: string; password: string; rememberMe?: boolean }, options?: LtRequestOptions) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      email: async (params: { email: string; password: string; rememberMe?: boolean }, options?: any) => {
         const hashedPassword = await ltSha256(params.password);
-        return baseClient.signIn.email({ ...params, password: hashedPassword }, options as Parameters<typeof baseClient.signIn.email>[1]);
+        return baseClient.signIn.email({ ...params, password: hashedPassword }, options);
       },
       /**
        * Sign in with passkey (pass through to base client - provided by passkeyClient plugin)
        * @see https://www.better-auth.com/docs/plugins/passkey
        */
-      passkey: signInWithPlugins.passkey,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      passkey: (baseClient.signIn as any).passkey,
     },
 
     // Explicitly pass through signOut (not captured by spread operator)
@@ -336,44 +293,54 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
       /**
        * Sign up with email and password (password is hashed before sending)
        */
-      email: async (params: { email: string; name: string; password: string } & Record<string, unknown>, options?: LtRequestOptions) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      email: async (params: { email: string; name: string; password: string } & Record<string, unknown>, options?: any) => {
         const hashedPassword = await ltSha256(params.password);
-        return baseClient.signUp.email({ ...params, password: hashedPassword }, options as Parameters<typeof baseClient.signUp.email>[1]);
+        return baseClient.signUp.email({ ...params, password: hashedPassword }, options);
       },
     },
 
     // Override twoFactor to hash passwords (provided by twoFactorClient plugin)
     twoFactor: {
-      ...withPlugins.twoFactor,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ...(baseClient as any).twoFactor,
       /**
        * Disable 2FA (password is hashed before sending)
        */
-      disable: async (params: { password: string }, options?: LtRequestOptions) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      disable: async (params: { password: string }, options?: any) => {
         const hashedPassword = await ltSha256(params.password);
-        return withPlugins.twoFactor?.disable({ password: hashedPassword }, options);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return (baseClient as any).twoFactor.disable({ password: hashedPassword }, options);
       },
       /**
        * Enable 2FA (password is hashed before sending)
        */
-      enable: async (params: { password: string }, options?: LtRequestOptions) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      enable: async (params: { password: string }, options?: any) => {
         const hashedPassword = await ltSha256(params.password);
-        return withPlugins.twoFactor?.enable({ password: hashedPassword }, options);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return (baseClient as any).twoFactor.enable({ password: hashedPassword }, options);
       },
       /**
        * Generate backup codes (password is hashed before sending)
        */
-      generateBackupCodes: async (params: { password: string }, options?: LtRequestOptions) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      generateBackupCodes: async (params: { password: string }, options?: any) => {
         const hashedPassword = await ltSha256(params.password);
-        return withPlugins.twoFactor?.generateBackupCodes({ password: hashedPassword }, options);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return (baseClient as any).twoFactor.generateBackupCodes({ password: hashedPassword }, options);
       },
       /**
        * Verify TOTP code (pass through to base client)
        */
-      verifyTotp: withPlugins.twoFactor?.verifyTotp,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      verifyTotp: (baseClient as any).twoFactor.verifyTotp,
       /**
        * Verify backup code (pass through to base client)
        */
-      verifyBackupCode: withPlugins.twoFactor?.verifyBackupCode,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      verifyBackupCode: (baseClient as any).twoFactor.verifyBackupCode,
     },
   };
 }

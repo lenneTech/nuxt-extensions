@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.1] - 2026-08-23
+
+### Fixed
+
+- **Reverts the 1.15.0 type-surface change that broke consuming projects.** 1.15.0 replaced the
+  `as any` casts in `auth-client.ts` with a hand-written interface. That narrowed the wrappers'
+  `options` parameter from `any` to `unknown` — and better-auth derives each action's **return**
+  type from that generic, so returns collapsed and the plugin surfaces (`passkey`, `admin`,
+  `twoFactor.verifyTotp`, `twoFactor.verifyBackupCode`) became `| undefined` with no way for a
+  consumer to narrow them.
+
+  Measured in `nuxt-base-starter`, same starter code, only the dependency swapped:
+
+  | nuxt-extensions | `typecheck` |
+  |---|---|
+  | 1.14.0 | 0 errors |
+  | 1.15.0 | **14 errors** |
+
+  The published type surface of `auth-client.d.ts` is now byte-identical to 1.14.0 again.
+  Everything else 1.15.0 shipped — the peer-range narrowing, the guards, the stub and passkey
+  fixes — is unaffected and stays.
+
+  **If you are on 1.15.0, upgrade.** Nothing else is required; the runtime never changed, only
+  the declarations.
+
+### Added
+
+- **The consumer gate now typechecks, not just builds.** `scripts/check-consumer-build.mjs`
+  installs the packed tarball into a throwaway project and compiles type-level assertions against
+  it, so a change that keeps the module *running* but makes it unusable to *compile against* fails
+  before release. This is the gate whose absence let 1.15.0 out: `check` was 10/10 green, 291 tests
+  passed, and `nuxt build` in a real consumer succeeded — the break was visible only to `tsc`.
+
+  Verified against the defect it exists for: reapplying the 1.15.0 `auth-client.ts` turns it red
+  with named messages (`authClient.passkey became optional`, …); the fix turns it green. Its known
+  limit is documented in the script — it catches a type going useless, not a concrete union
+  narrowing to a different concrete union.
+
 ## [1.15.0] - 2026-08-23
 
 > **Release order matters for this one.** Ship `@lenne.tech/nest-server@11.37.0` first, or in the
