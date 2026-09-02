@@ -3,7 +3,7 @@
 // =============================================================================
 
 // Auth Types
-export type { LtAuthClientConfig, LtAuthMode, LtAuthResponse, LtAuthState, LtPasskeyAuthResult, LtPasskeyRegisterResult, LtUser, UseLtAuthReturn } from './auth';
+export type { LtAuthClientConfig, LtAuthMode, LtAuthResponse, LtAuthState, LtPasskeyAuthResult, LtPasskeyRegisterResult, LtUser, LtUserInput, UseLtAuthReturn } from './auth';
 
 // Upload Types
 export type { LtFileInfo, LtUploadItem, LtUploadOptions, LtUploadProgress, LtUploadStatus, UseLtFileReturn, UseLtTusUploadReturn } from './upload';

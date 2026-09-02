@@ -122,3 +122,56 @@ describe('auth client — the passthrough list is the whole surface', () => {
     }
   });
 });
+
+/**
+ * The sub-objects, which is where this defect survived its own fix.
+ *
+ * 1.17.0 removed the top-level `...baseClient` and left `...baseClient.signIn`,
+ * `...baseClient.signUp` and `...baseClient.twoFactor` in place. Those spread nothing either —
+ * `baseClient.signIn` is fabricated by the same proxy and is `Object.keys`-empty in turn — so
+ * `twoFactor.getTotpUri` and `signIn.social` stayed declared-but-`undefined` through a release
+ * whose entire point was removing exactly that.
+ *
+ * The guard above could not see it: it asserts on the TOP-LEVEL keys, and `twoFactor` is
+ * present at the top level whatever it contains. So the shape of the assertion, not its
+ * subject, is what let the second half through.
+ */
+const EXPECTED_SUB_METHODS: Record<string, readonly string[]> = {
+  signIn: ['email', 'passkey'],
+  signUp: ['email'],
+  twoFactor: ['disable', 'enable', 'generateBackupCodes', 'verifyBackupCode', 'verifyTotp'],
+};
+
+describe('auth client — sub-objects are listed, not spread', () => {
+  it('the fixture sub-objects are spread-empty too', () => {
+    // Same guard-the-guard as above, one level down: an object-literal fixture would spread
+    // perfectly here and make every assertion below meaningless.
+    const proxy = makeDynamicPathProxy();
+    expect(Object.keys(proxy.twoFactor)).toEqual([]);
+    expect(Object.keys({ ...proxy.twoFactor })).toEqual([]);
+  });
+
+  for (const [group, methods] of Object.entries(EXPECTED_SUB_METHODS)) {
+    it(`${group} exposes exactly its listed methods`, async () => {
+      const client = await buildClient();
+      expect(Object.keys(client[group]).sort()).toEqual([...methods].sort());
+    });
+
+    for (const name of methods) {
+      it(`${group}.${name} survives to the consumer`, async () => {
+        const client = await buildClient();
+        expect(client[group][name], `${group}.${name} is missing`).toBeDefined();
+      });
+    }
+  }
+
+  it('does not re-declare the Better-Auth methods that are not listed', async () => {
+    const client = await buildClient();
+    // The four that 1.17.0 still promised. `getTotpUri` is the one to watch: it renders the
+    // TOTP QR code, so it is what a project reaches for next.
+    expect(client.twoFactor.getTotpUri, 'twoFactor.getTotpUri appeared without being listed').toBeUndefined();
+    expect(client.twoFactor.sendOtp, 'twoFactor.sendOtp appeared without being listed').toBeUndefined();
+    expect(client.twoFactor.verifyOtp, 'twoFactor.verifyOtp appeared without being listed').toBeUndefined();
+    expect(client.signIn.social, 'signIn.social appeared without being listed').toBeUndefined();
+  });
+});

@@ -377,9 +377,14 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
       return baseClient.resetPassword({ ...params, newPassword: hashedPassword }, options);
     },
 
-    // Override signIn to hash password (keep passkey method from plugin)
+    // Override signIn to hash password (keep passkey method from plugin).
+    //
+    // No `...baseClient.signIn` here, for the reason given at the top of this object: the
+    // sub-objects are proxies too. `Object.keys(baseClient.signIn)` is `[]`, so the spread
+    // copied nothing while the type declared everything — `signIn.social` type-checked and
+    // was `undefined` when called. 1.17.0 removed the top-level spread and left these three,
+    // which is how the same defect survived its own fix.
     signIn: {
-      ...baseClient.signIn,
       /**
        * Sign in with email and password (password is hashed before sending)
        */
@@ -397,9 +402,8 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
     // Explicitly pass through signOut (not captured by spread operator)
     signOut: baseClient.signOut,
 
-    // Override signUp to hash password
+    // Override signUp to hash password. No spread — see `signIn` above.
     signUp: {
-      ...baseClient.signUp,
       /**
        * Sign up with email and password (password is hashed before sending)
        */
@@ -410,8 +414,12 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
     },
 
     // Override twoFactor to hash passwords (provided by twoFactorClient plugin)
+    // No spread — see `signIn` above. This is the sub-object where it mattered most:
+    // `getTotpUri`, `sendOtp` and `verifyOtp` were declared by the type and `undefined` at
+    // runtime, and `getTotpUri` is what a project reaches for to render the TOTP QR code.
+    // They are not added here because none has a caller yet; each listed method is a promise
+    // this package then keeps across versions. Ask, and it gets a line.
     twoFactor: {
-      ...(baseClient as any).twoFactor,
       /**
        * Disable 2FA (password is hashed before sending)
        */

@@ -1,5 +1,6 @@
 import { assertType, describe, expectTypeOf, it } from 'vitest';
 
+import type { LtAuthClient } from '../src/runtime/lib/auth-client';
 import type { UseLtAuthReturn } from '../src/runtime/types/auth';
 
 /**
@@ -98,5 +99,70 @@ describe('the reset pair is on the composable at all', () => {
     expectTypeOf<UseLtAuthReturn>().toHaveProperty('requestPasswordReset');
     expectTypeOf<UseLtAuthReturn>().toHaveProperty('resetPassword');
     expectTypeOf<UseLtAuthReturn>().toHaveProperty('changePassword');
+  });
+});
+
+/**
+ * The auth CLIENT's type surface — the half a runtime test provably cannot guard.
+ *
+ * `LtAuthClient` is `ReturnType<typeof createLtAuthClient>`, so a `...baseClient` spread in that
+ * object contributes every DECLARED member of Better Auth's client to the published type while
+ * contributing nothing at runtime (the client is a proxy with no `ownKeys` trap). That asymmetry
+ * is the entire defect: methods that type-check, autocomplete, and are `undefined` when called.
+ *
+ * `auth-client-passthrough.test.ts` asserts the runtime half. It cannot assert this one, and the
+ * attempt is instructive: re-adding `...baseClient.twoFactor` to the source leaves that suite
+ * green, because against a faithful proxy fixture the spread is inert there too. A runtime guard
+ * can only ever observe what the spread does — which is nothing — never what it promises.
+ *
+ * So the promise is asserted here. If someone reintroduces a spread, these fail and that suite
+ * does not.
+ */
+describe('LtAuthClient promises exactly what it has', () => {
+  it('does not declare the Better-Auth methods that are deliberately not passed through', () => {
+    expectTypeOf<LtAuthClient>().not.toHaveProperty('updateUser');
+    expectTypeOf<LtAuthClient>().not.toHaveProperty('deleteUser');
+    expectTypeOf<LtAuthClient>().not.toHaveProperty('listSessions');
+    expectTypeOf<LtAuthClient>().not.toHaveProperty('revokeSessions');
+    expectTypeOf<LtAuthClient>().not.toHaveProperty('linkSocial');
+  });
+
+  it('does not declare sub-object methods that are not listed', () => {
+    // The four that survived 1.17.0, because that release removed only the top-level spread.
+    expectTypeOf<LtAuthClient['twoFactor']>().not.toHaveProperty('getTotpUri');
+    expectTypeOf<LtAuthClient['twoFactor']>().not.toHaveProperty('sendOtp');
+    expectTypeOf<LtAuthClient['twoFactor']>().not.toHaveProperty('verifyOtp');
+    expectTypeOf<LtAuthClient['signIn']>().not.toHaveProperty('social');
+  });
+
+  it('still declares everything it does pass through', () => {
+    // The other half: a guard that only forbids would be satisfied by an empty client.
+    expectTypeOf<LtAuthClient>().toHaveProperty('sendVerificationEmail');
+    expectTypeOf<LtAuthClient>().toHaveProperty('verifyEmail');
+    expectTypeOf<LtAuthClient>().toHaveProperty('getSession');
+    expectTypeOf<LtAuthClient['twoFactor']>().toHaveProperty('verifyTotp');
+    expectTypeOf<LtAuthClient['signIn']>().toHaveProperty('email');
+    expectTypeOf<LtAuthClient['signIn']>().toHaveProperty('passkey');
+  });
+});
+
+/**
+ * `setUser` takes Better Auth's session user unchanged.
+ *
+ * Its `image` is `string | null | undefined`; `LtUser.image` is `string | undefined`. Passing
+ * `getSession().data.user` straight in therefore did not compile, and every consumer wrote the
+ * same normalising line — while this package's own call sites hid it behind `as LtUser`.
+ */
+describe('setUser accepts a Better-Auth session user', () => {
+  it('accepts image: null without a cast', () => {
+    const auth = {} as UseLtAuthReturn;
+    assertType(auth.setUser({ email: 'a@test.com', id: '1', image: null }));
+  });
+
+  it('still accepts a real image and no image at all', () => {
+    const auth = {} as UseLtAuthReturn;
+    assertType(auth.setUser({ email: 'a@test.com', id: '1', image: 'https://x/y.png' }));
+    assertType(auth.setUser({ email: 'a@test.com', id: '1' }));
+    assertType(auth.setUser(null));
   });
 });

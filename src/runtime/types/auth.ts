@@ -15,6 +15,10 @@ export interface LtUser {
   email: string;
   emailVerified?: boolean;
   id: string;
+  /**
+   * Stored as `string | undefined`, never `null` — see {@link LtUserInput}, which is what
+   * `setUser` accepts. Reading code therefore has one empty case to handle, not two.
+   */
   image?: string;
   name?: string;
   /** Single-role shape (Better-Auth admin plugin). See also {@link LtUser.roles}. */
@@ -35,6 +39,23 @@ export interface LtUser {
   roles?: string[];
   twoFactorEnabled?: boolean;
 }
+
+/**
+ * What {@link UseLtAuthReturn.setUser} accepts: an {@link LtUser} whose `image` may also be
+ * `null`.
+ *
+ * Better Auth's session user declares `image?: string | null | undefined`
+ * (`@better-auth/core`), so handing `getSession().data.user` straight to `setUser` did not
+ * type-check — the two sides mean the same thing by "no picture" and write it differently.
+ * Every consumer combining them wrote the same normalising line, and this package's own call
+ * sites hid it behind `as LtUser`, which is why it went unnoticed until 1.17.0 exposed
+ * `getSession()` and gave that path a real type.
+ *
+ * `setUser` normalises `null` to `undefined` on the way in, so the stored user and every
+ * reader keep the single empty case. Widening `LtUser.image` itself would have done the
+ * opposite: pushed a second empty value onto everyone who only READS it.
+ */
+export type LtUserInput = Omit<LtUser, 'image'> & { image?: null | string };
 
 /**
  * Authentication mode for Cookie/JWT dual-mode authentication
@@ -270,7 +291,14 @@ export interface UseLtAuthReturn {
    * await resetPassword({ newPassword, token: route.query.token as string });
    */
   resetPassword: <T extends { newPassword: string; token: string }>(params: NoStrayCredential<T, 'newPassword'>, options?: unknown) => Promise<unknown>;
-  setUser: (userData: LtUser | null, mode?: LtAuthMode) => void;
+  /**
+   * Store the authenticated user.
+   *
+   * Accepts {@link LtUserInput}, so `getSession().data.user` can be handed over unchanged —
+   * Better Auth writes "no picture" as `image: null`, which this normalises to `undefined`
+   * before storing. Readers of {@link LtUser} keep a single empty case.
+   */
+  setUser: (userData: LtUserInput | null, mode?: LtAuthMode) => void;
   signIn: {
     email: <T extends { email: string; password: string; rememberMe?: boolean }>(params: NoStrayCredential<T, 'password'>, options?: unknown) => Promise<unknown>;
     passkey?: (options?: unknown) => Promise<unknown>;

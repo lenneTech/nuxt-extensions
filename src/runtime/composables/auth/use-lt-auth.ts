@@ -10,7 +10,7 @@
  * - If cookies fail (401) -> switch to JWT mode
  */
 
-import type { LtAuthMode, LtAuthState, LtPasskeyAuthResult, LtPasskeyRegisterResult, LtUser, UseLtAuthReturn } from '../../types';
+import type { LtAuthMode, LtAuthState, LtPasskeyAuthResult, LtPasskeyRegisterResult, LtUser, LtUserInput, UseLtAuthReturn } from '../../types';
 
 import { useNuxtApp, useCookie, useState, useRequestHeaders, ref, computed, watch } from '#imports';
 import { ltArrayBufferToBase64Url, ltBase64UrlToUint8Array } from '../../utils/crypto';
@@ -168,8 +168,12 @@ export function useLtAuth(): UseLtAuthReturn {
    * Set user data after successful login/signup
    * Also manually writes to browser cookie for SSR compatibility
    */
-  function setUser(userData: LtUser | null, mode: LtAuthMode = 'cookie'): void {
-    const newState = { user: userData, authMode: mode };
+  function setUser(userData: LtUserInput | null, mode: LtAuthMode = 'cookie'): void {
+    // Normalise Better Auth's `image: null` to `undefined` at the boundary, so the stored
+    // user and every reader keep ONE empty case. See `LtUserInput` for why this is not done
+    // by widening `LtUser.image` instead.
+    const normalised: LtUser | null = userData ? { ...userData, image: userData.image ?? undefined } : null;
+    const newState = { user: normalised, authMode: mode };
 
     // Cookie-backed state write rules:
     //  - On the CLIENT: always update (login/logout/2FA happen here).

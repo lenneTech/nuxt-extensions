@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.0] - 2026-09-02
+
+### Breaking
+
+- **The same false promise, one level down.** 1.17.0 removed the top-level `...baseClient` spread
+  and left `...baseClient.signIn`, `...baseClient.signUp` and `...baseClient.twoFactor` in place.
+  Those sub-objects are proxies too — `Object.keys(baseClient.twoFactor)` is `[]` — so they spread
+  nothing at runtime while the type kept declaring everything. Four methods therefore survived the
+  release whose entire point was removing exactly that:
+
+  `twoFactor.getTotpUri`, `twoFactor.sendOtp`, `twoFactor.verifyOtp`, `signIn.social`
+
+  They are gone from the type now. As in 1.17.0, calling one already threw `TypeError` at runtime,
+  so nothing that worked stops working — the crash moves to the build. `getTotpUri` is the one to
+  know about: it renders the TOTP QR code, and it is what a project reaches for next. Ask if you
+  need it; each listed method is a promise this package then keeps across versions.
+
+### Fixed
+
+- **`setUser()` takes a Better-Auth session user unchanged.** Better Auth declares its session
+  user's `image` as `string | null | undefined`; `LtUser.image` was `string | undefined`. Passing
+  `getSession().data.user` straight in therefore did not compile — the two sides mean the same
+  thing by "no picture" and write it differently — so every consumer combining them wrote the same
+  normalising line.
+
+  `setUser` now accepts `LtUserInput` and normalises `null` to `undefined` on the way in.
+  `LtUser.image` deliberately stays `string | undefined`: widening it would have pushed a second
+  empty case onto everyone who only READS the user, to spare the few who write it.
+
+  This defect predates 1.17.0 and was invisible until it: consumers reached the session through
+  untyped `$fetch`, and this package's own call sites hid it behind `as LtUser`.
+
+### Added
+
+- **A type-level guard for the client surface**, because a runtime one provably cannot do this job.
+  Re-adding a spread leaves the runtime suite green — against a faithful proxy fixture the spread is
+  inert there too, which is precisely why 1.17.0's guard did not catch its own gap. The promise is
+  now asserted where it is made, in `test/auth-types.test-d.ts`.
+
 ## [1.17.0] - 2026-09-02
 
 ### Breaking
