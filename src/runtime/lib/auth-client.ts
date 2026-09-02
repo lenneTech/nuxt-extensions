@@ -6,6 +6,34 @@
  *
  * SECURITY: Passwords are hashed with SHA256 client-side to prevent
  * plain text password transmission over the network.
+ *
+ * ---
+ *
+ * A HASHING WRAPPER REPLACES ONE FIELD — IT IS NEVER A WHITELIST.
+ *
+ * This is the invariant every wrapper below shares, and it has been broken twice, so it
+ * lives here rather than beside one method that a refactor could delete.
+ *
+ * Each wrapper exists to substitute ONE field with its SHA256 digest. It must forward
+ * everything else the caller passed, untouched:
+ *
+ *     { ...params, password: hashedPassword }   // correct
+ *     { password: hashedPassword }              // WRONG — drops every other option
+ *     { password: hashedPassword, ...params }   // WRONG — puts the PLAINTEXT back
+ *
+ * The first mistake is silent data loss: `changePassword` dropped `revokeOtherSessions`,
+ * so callers who set it after a suspected compromise got a successful password change and
+ * every other session left open. `twoFactor.enable` dropped `method` and `issuer`, so
+ * `method: 'otp'` quietly enabled TOTP instead.
+ *
+ * The second is worse and looks almost identical: `params` still carries the raw value, so
+ * a trailing spread overwrites the digest and the plaintext password goes on the wire.
+ * Trailing-spread is the more common JS idiom, which is exactly why this warning is here.
+ *
+ * Both are pinned by tests: `test/auth-client-hashing.test.ts` asserts the real request
+ * payload (it catches both mistakes), `test/auth-client-param-forwarding.test.ts` keeps the
+ * source-level half so a whitelist rebuild is visible in review. If you add a wrapper that
+ * hashes something, add it to both.
  */
 
 import { passkeyClient } from '@better-auth/passkey/client';
@@ -41,7 +69,6 @@ let _pluginsChangedAfterCreation = false;
  * Managed here to allow registerLtAuthPlugins to reset it directly.
  * Type is inferred at runtime to avoid circular reference issues.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _authClientSingleton: any = null;
 
 /**
@@ -190,7 +217,6 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
   } = config;
 
   // Build plugins array based on configuration
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const plugins: any[] = [];
 
   if (enableAdmin) {
@@ -238,31 +264,66 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
 
     // Explicitly pass through methods not captured by spread operator
     useSession: baseClient.useSession,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     passkey: (baseClient as any).passkey,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    /**
+     * Better-Auth admin plugin, passed through UNWRAPPED — and therefore UNHASHED.
+     *
+     * `admin.createUser` (`password`) and `admin.setUserPassword` (`newPassword`) carry
+     * credentials that every other method in this file hashes. These two do not.
+     *
+     * Why that is deliberate rather than an oversight: `@lenne.tech/nest-server` does not
+     * register better-auth's `admin()` plugin and offers no option to — the two routes do
+     * not exist server-side, so a call 404s today. Hashing here would build a client
+     * expectation the server does not answer, and if the plugin were later enabled without
+     * normalising those routes, this wrapper would CREATE the credential-store desync it
+     * was meant to prevent.
+     *
+     * What that costs, stated plainly: `auth.enableAdmin` defaults to `true`, so the admin
+     * CLIENT plugin is registered in every consuming project. The trap is armed and waiting
+     * for a server that answers. Enabling `admin()` server-side is therefore a LOCKSTEP
+     * change — the routes join nest-server's password-normalisation table and these two
+     * methods get `ltSha256` wrappers here, in one release. Half of it produces accounts
+     * whose password nobody can log in with, and nothing warns.
+     */
     admin: (baseClient as any).admin,
     $Infer: baseClient.$Infer,
     $fetch: baseClient.$fetch,
     $store: baseClient.$store,
+    // Deliberately a bare passthrough: it takes an email address, never a password, so
+    // there is nothing to hash — and passing it through untouched is what keeps
+    // `redirectTo` intact (see the note above `resetPassword`).
     requestPasswordReset: baseClient.requestPasswordReset,
 
     /**
-     * Change password for an authenticated user (both passwords are hashed)
+     * Change password for an authenticated user (both passwords are hashed).
+     *
+     * `revokeOtherSessions` is the option that made the whitelist bug matter — see the
+     * file header.
      */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    changePassword: async (params: { currentPassword: string; newPassword: string }, options?: any) => {
+    changePassword: async <T extends { currentPassword: string; newPassword: string }>(params: T, options?: any) => {
       const [hashedCurrent, hashedNew] = await Promise.all([ltSha256(params.currentPassword), ltSha256(params.newPassword)]);
-      return baseClient.changePassword?.({ currentPassword: hashedCurrent, newPassword: hashedNew }, options);
+      if (!baseClient.changePassword) {
+        // Not defensive noise: `?.` here would resolve to `undefined`, the caller would find
+        // no `error` on it and report success, and the password would be unchanged.
+        throw new Error('[lt-auth] changePassword is unavailable on the Better-Auth client — the password was NOT changed.');
+      }
+      return baseClient.changePassword({ ...params, currentPassword: hashedCurrent, newPassword: hashedNew }, options);
     },
 
     /**
-     * Reset password with token (new password is hashed before sending)
+     * Reset password with token (new password is hashed before sending).
+     *
+     * Spread first, then overwrite the one field this wrapper exists for — see the file
+     * header for why the order is not a style question.
      */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    resetPassword: async (params: { newPassword: string; token: string }, options?: any) => {
+    resetPassword: async <T extends { newPassword: string; token: string }>(params: T, options?: any) => {
       const hashedPassword = await ltSha256(params.newPassword);
-      return baseClient.resetPassword?.({ newPassword: hashedPassword, token: params.token }, options);
+      if (!baseClient.resetPassword) {
+        // A silent `undefined` here is the worst case in the whole file: the user believes a
+        // credential rotation happened, and it did not.
+        throw new Error('[lt-auth] resetPassword is unavailable on the Better-Auth client — the password was NOT changed.');
+      }
+      return baseClient.resetPassword({ ...params, newPassword: hashedPassword }, options);
     },
 
     // Override signIn to hash password (keep passkey method from plugin)
@@ -271,8 +332,7 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
       /**
        * Sign in with email and password (password is hashed before sending)
        */
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      email: async (params: { email: string; password: string; rememberMe?: boolean }, options?: any) => {
+      email: async <T extends { email: string; password: string; rememberMe?: boolean }>(params: T, options?: any) => {
         const hashedPassword = await ltSha256(params.password);
         return baseClient.signIn.email({ ...params, password: hashedPassword }, options);
       },
@@ -280,7 +340,6 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
        * Sign in with passkey (pass through to base client - provided by passkeyClient plugin)
        * @see https://www.better-auth.com/docs/plugins/passkey
        */
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       passkey: (baseClient.signIn as any).passkey,
     },
 
@@ -293,8 +352,7 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
       /**
        * Sign up with email and password (password is hashed before sending)
        */
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      email: async (params: { email: string; name: string; password: string } & Record<string, unknown>, options?: any) => {
+      email: async <T extends { email: string; name: string; password: string }>(params: T, options?: any) => {
         const hashedPassword = await ltSha256(params.password);
         return baseClient.signUp.email({ ...params, password: hashedPassword }, options);
       },
@@ -302,44 +360,38 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
 
     // Override twoFactor to hash passwords (provided by twoFactorClient plugin)
     twoFactor: {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ...(baseClient as any).twoFactor,
       /**
        * Disable 2FA (password is hashed before sending)
        */
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      disable: async (params: { password: string }, options?: any) => {
+      disable: async <T extends { password: string }>(params: T, options?: any) => {
         const hashedPassword = await ltSha256(params.password);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return (baseClient as any).twoFactor.disable({ password: hashedPassword }, options);
+        // Spread, never a whitelist — see the note above `resetPassword`.
+        return (baseClient as any).twoFactor.disable({ ...params, password: hashedPassword }, options);
       },
       /**
        * Enable 2FA (password is hashed before sending)
        */
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      enable: async (params: { password: string }, options?: any) => {
+      enable: async <T extends { password: string }>(params: T, options?: any) => {
         const hashedPassword = await ltSha256(params.password);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return (baseClient as any).twoFactor.enable({ password: hashedPassword }, options);
+        // Spread, never a whitelist — see the note above `resetPassword`.
+        return (baseClient as any).twoFactor.enable({ ...params, password: hashedPassword }, options);
       },
       /**
        * Generate backup codes (password is hashed before sending)
        */
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      generateBackupCodes: async (params: { password: string }, options?: any) => {
+      generateBackupCodes: async <T extends { password: string }>(params: T, options?: any) => {
         const hashedPassword = await ltSha256(params.password);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return (baseClient as any).twoFactor.generateBackupCodes({ password: hashedPassword }, options);
+        // Spread, never a whitelist — see the note above `resetPassword`.
+        return (baseClient as any).twoFactor.generateBackupCodes({ ...params, password: hashedPassword }, options);
       },
       /**
        * Verify TOTP code (pass through to base client)
        */
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       verifyTotp: (baseClient as any).twoFactor.verifyTotp,
       /**
        * Verify backup code (pass through to base client)
        */
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       verifyBackupCode: (baseClient as any).twoFactor.verifyBackupCode,
     },
   };

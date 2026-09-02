@@ -34,7 +34,6 @@ type LtUserOptionalKeys<T> = { [K in keyof T]-?: object extends Pick<T, K> ? K :
  */
 function useTranslation() {
   const nuxtApp = useNuxtApp();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const i18n = (nuxtApp as any).$i18n;
 
   return (key: string, germanFallback: string): string => {
@@ -482,14 +481,12 @@ export function useLtAuth(): UseLtAuthReturn {
    */
   const signIn = {
     ...authClient.signIn,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     email: async (params: { email: string; password: string; rememberMe?: boolean }, options?: any) => {
       isLoading.value = true;
       try {
         const result = await authClient.signIn.email(params, options);
 
         // Extract token from response (JWT mode: cookies: false)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const resultAny = result as any;
         const token = resultAny?.token || resultAny?.data?.token;
         const userData = resultAny?.user || resultAny?.data?.user;
@@ -519,14 +516,12 @@ export function useLtAuth(): UseLtAuthReturn {
    */
   const signUp = {
     ...authClient.signUp,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     email: async (params: { email: string; name: string; password: string } & Record<string, unknown>, options?: any) => {
       isLoading.value = true;
       try {
         const result = await authClient.signUp.email(params, options);
 
         // Extract token from response (JWT mode: cookies: false)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const resultAny = result as any;
         const token = resultAny?.token || resultAny?.data?.token;
         const userData = resultAny?.user || resultAny?.data?.user;
@@ -553,7 +548,6 @@ export function useLtAuth(): UseLtAuthReturn {
   /**
    * Sign out
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const signOut = async (options?: any) => {
     isLoading.value = true;
     try {
@@ -748,7 +742,6 @@ export function useLtAuth(): UseLtAuthReturn {
           timeout: options.timeout,
           attestation: options.attestation,
           authenticatorSelection: options.authenticatorSelection,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           excludeCredentials: (options.excludeCredentials || []).map((cred: any) => ({
             ...cred,
             id: ltBase64UrlToUint8Array(cred.id).buffer as ArrayBuffer,
@@ -864,6 +857,23 @@ export function useLtAuth(): UseLtAuthReturn {
     changePassword: authClient.changePassword,
     clearUser,
     registerPasskey,
+    // The reset pair, exposed so no project has to reach for `useLtAuthClient()` or hand-roll
+    // the flow — the one that did forgot the client-side hashing and desynchronised the two
+    // credential stores. The full contract, including why `redirectTo` must be absolute and
+    // must never come from user input, lives on `UseLtAuthReturn` in `runtime/types/auth.ts`:
+    // that is the surface consumers read, and one copy cannot drift from itself.
+    //
+    // `params` is forwarded WHOLE and stays fully type-checked. Only `options` is cast, and
+    // only because `UseLtAuthReturn` declares it `unknown` while Better-Auth wants its own
+    // `ClientFetchOption`. Casting the METHOD instead — which is what this used to do — would
+    // throw away the checking on `params` as collateral, on the one argument that carries a
+    // credential. The `Parameters<>` here reads the client's option type INSIDE the
+    // implementation; it never reaches the published declarations, so it does not recreate
+    // the better-auth coupling that 1.15.1 had to revert.
+    requestPasswordReset: <T extends { email: string }>(params: T, options?: unknown) =>
+      authClient.requestPasswordReset(params, options as Parameters<typeof authClient.requestPasswordReset>[1]),
+    resetPassword: <T extends { newPassword: string; token: string }>(params: T, options?: unknown) =>
+      authClient.resetPassword(params, options as Parameters<typeof authClient.resetPassword>[1]),
     setUser,
     signIn,
     signOut,

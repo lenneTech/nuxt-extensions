@@ -277,11 +277,8 @@ export default (nuxtApp: NuxtApp): void => {
   // Guard against double-wrapping on HMR / repeated plugin invocation. Without
   // this, `originalFetch` / `originalNativeFetch` become the *previous wrapper*
   // on each reload — stack growth + duplicated 401 handlers (double redirect).
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const wrapMarker = '__ltAuthFetchWrapped';
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if (!(globalThis as any)[wrapMarker]) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (globalThis as any)[wrapMarker] = true;
 
     // Override the default $fetch to add response error handling.
@@ -289,15 +286,12 @@ export default (nuxtApp: NuxtApp): void => {
     // string url makes vue-tsc instantiate that deeply-nested conditional type and
     // fail with "Excessive stack depth". Cast to a loose callable — the wrapper
     // below is reassigned `as typeof globalThis.$fetch`, so the public type is kept.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const originalFetch = globalThis.$fetch as any;
 
     // Use a wrapper to intercept responses
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     globalThis.$fetch = ((url: string, options?: any) => {
       return originalFetch(url, {
         ...options,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         onResponseError: (context: any) => {
           // Call original onResponseError if provided
           if (options?.onResponseError) {

@@ -5,6 +5,129 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.0] - 2026-09-02
+
+### Fixed
+
+- **`changePassword` silently discarded `revokeOtherSessions` — check your app after upgrading.**
+  The wrapper rebuilt the request body from `{ currentPassword, newPassword }`, so any further
+  option the caller passed was dropped between the call and the request. Better Auth reads and
+  acts on `revokeOtherSessions` (`update-user` route), so a caller who set it got a successful
+  password change **and every other session left open** — no error, no warning.
+
+  This is the option you set after a password was compromised, which is what makes it worse than
+  the four other occurrences below: the caller believes foreign sessions were ended. If your app
+  passes it, verify after the bump that other sessions are actually terminated.
+
+- **`twoFactor.enable` silently dropped `method` and `issuer`.** Its body schema is
+  `{ password, method, issuer }`; the wrapper rebuilt it as `{ password }`. So
+  `enable({ password, method: 'otp' })` — email/SMS codes — quietly set up TOTP instead, and a
+  custom `issuer` never reached the authenticator app. Same shape as the `changePassword` defect
+  above, and equally shipped.
+
+- **Hashing wrappers forward the caller's parameters instead of rebuilding them.** The same
+  field-whitelist shape affected `resetPassword` and the three `twoFactor` methods, while
+  `signIn.email` and `signUp.email` already spread correctly — an inconsistency that is exactly
+  why it went unnoticed. A hashing wrapper replaces ONE field; it is never a whitelist. New Better
+  Auth options now work by default rather than needing a change here.
+
+  **Being precise about which of these lost data.** Measured against the installed better-auth
+  1.7.1 rather than assumed: `changePassword` (`revokeOtherSessions`) and `twoFactor.enable`
+  (`method`, `issuer`) genuinely dropped options the server reads — those are the two defects.
+  `resetPassword` did NOT: its body schema is `{ newPassword, token }` and nothing else, so the old
+  whitelist happened to pass exactly what the endpoint accepts. `redirectTo` lives only on
+  `requestPasswordReset`, which was never wrapped and still is not. Fixing `resetPassword` and the
+  other `twoFactor` methods is consistency and future-proofing — a schema gaining a field must not
+  need a change here — not a repaired data loss.
+
+  Pinned by `test/auth-client-hashing.test.ts`, which asserts what actually reaches the request
+  payload for all seven wrappers: the hash arrives, the plaintext appears nowhere, and the
+  forwarded options survive. `test/auth-client-param-forwarding.test.ts` keeps the narrower
+  source-level half — a spread is present at each call site, visible in review.
+
+  **Why the runtime test is the one that matters**, stated because an earlier draft of this entry
+  claimed the opposite: a source-shape assertion catches a whitelist rebuild but NOT the inversion
+  `{ newPassword: hashed, ...params }`. That is valid JavaScript, `params` still carries the raw
+  value, the spread overwrites the hash — the **plaintext password goes on the wire** — and the
+  shape test passed 11/11 with exactly that applied. A guard a defect satisfies is worse than no
+  guard, because it also carries the reassurance. Both mutations were re-run against the new test;
+  both go red.
+
+  `test/auth-types.test-d.ts` covers the other boundary, and `vitest.config.ts` now enables
+  `typecheck` so it actually runs — a `.test-d.ts` file is otherwise collected by nothing.
+
+### Changed
+
+- **The three widened signatures use a generic parameter instead of `& Record<string, unknown>`.**
+  TypeScript gives a `type` alias an implicit index signature and an `interface` deliberately none,
+  so the intersection rejected an interface-typed variable or a `Ref<Form>.value` — the dominant
+  shapes in this stack. That is the same boundary 1.15.0 broke and 1.15.1 reverted; twice in one
+  release line is a pattern, so it is now asserted from the outside in
+  `test/auth-types.test-d.ts` rather than left to review.
+
+  The generic also restores the excess-property check that widening had removed: a stray
+  `changePassword({ …, password: plaintext })` type-checked and would have travelled in the
+  request body into proxy logs and error reporters. The foreign credential keys are typed `never`.
+
+### Added
+
+- **`useLtAuth()` exposes `requestPasswordReset` and `resetPassword`.** The composable offered
+  `changePassword` but neither reset method, so a project building a reset page had to reach past
+  it — and one that did hand-rolled the client-side hashing, sent a password shaped differently
+  from what the server verifies, and desynchronised the two credential stores (fixed on the server
+  side in `@lenne.tech/nest-server` 11.38.0). The gap is what created the workaround.
+
+  **No backend bump is required for this release.** `revokeOtherSessions` and the `twoFactor.enable`
+  fields are read by Better Auth itself, on every nest-server version. The 11.38.0 reference above
+  is background — that release fixes the server half of the same defect and additionally makes
+  plaintext-sending clients work; for this client, which hashes, it changes nothing.
+
+  Both are straight passthroughs, arguments included. `redirectTo` MUST be an absolute app URL:
+  Better Auth resolves it against the API origin, so a relative value lands on the API host where
+  the route does not exist — 403, no mail sent, nothing visible in the browser. In an lt starter
+  project `appUrl()` builds one and throws rather than returning something relative; that helper
+  lives in the **starter** (`app/utils/app-origin.ts`), not in this package, so elsewhere use
+  `new URL(path, config.public.siteUrl).toString()`.
+
+  Documented for consumers in `CLAUDE.md` ("Password Handling") and the README, including the two
+  things people get wrong: `redirectTo` carries a live reset token and must never be built from
+  user input, and a minimum password length can only be enforced in your form — better-auth checks
+  it against the value it receives, which is always a 64-character hash on this path.
+
+### Migration
+
+See [`migration-guides/1.15.x-to-1.16.0.md`](migration-guides/1.15.x-to-1.16.0.md). Short version:
+upgrade the package, and if your app passes `revokeOtherSessions` or `twoFactor.enable`'s
+`method`/`issuer`, verify they now take effect. No backend bump, no config changes.
+
+### Known limitations
+
+- **`changePassword`, `requestPasswordReset` and `resetPassword` still return `Promise<unknown>`,**
+  so a consumer cannot read `data` / `error` without a cast. Widening it to better-auth's real
+  result type is worth doing and is deliberately **not** in this release: 1.15.0 narrowed this type
+  surface and broke consumers, 1.15.1 reverted it, and 1.16.0 already changes it once more. A third
+  move at the same boundary in the same release is a bad trade. When it happens it needs its own
+  case in `test/auth-types.test-d.ts`, asserted against the real return object — and not via
+  `Parameters<typeof …>`, which reintroduces exactly the better-auth coupling 1.15.1 removed.
+
+- **`admin.createUser` and `admin.setUserPassword` pass the password through UNHASHED.** They are
+  the only credential-carrying methods here that do not hash. Harmless today —
+  `@lenne.tech/nest-server` does not register better-auth's `admin()` plugin and offers no option
+  to, so those routes 404 — but `auth.enableAdmin` defaults to `true`, so the client plugin is
+  registered in every consuming project. Enabling `admin()` server-side is a **lock-step** change
+  across both repos in one release: the routes join nest-server's password-normalisation table and
+  these two methods get `ltSha256` wrappers here. Half of it produces accounts nobody can log in
+  with. Hashing here pre-emptively would be equally wrong — it would build a client expectation the
+  server does not answer.
+
+### Note on the reverse direction
+
+Spreading means caller keys that were previously discarded now reach the server. In practice this
+changes nothing — better-auth validates each route body with a zod schema that strips unknown keys
+— but it is a behaviour change in the "what leaves the browser" direction, so it is stated rather
+than left to be discovered. The type-level guard above is what keeps a stray *credential* out of
+that payload.
+
 ## [1.15.1] - 2026-08-23
 
 ### Fixed

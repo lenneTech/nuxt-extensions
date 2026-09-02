@@ -41,7 +41,6 @@ export function useLtShare(): UseLtShareReturn {
    * Helper function for i18n with German fallback
    */
   function t(key: string, germanFallback: string): string {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const i18n = (nuxtApp as any).$i18n;
 
     // No i18n installed -> German (for single-language DE projects)
@@ -80,7 +79,6 @@ export function useLtShare(): UseLtShareReturn {
         await navigator.clipboard.writeText(url ?? window.location.origin);
 
         // Try to use toast notification if available (Nuxt UI)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const useToast = (nuxtApp as any).$useToast || (globalThis as any).useToast;
         if (typeof useToast === 'function') {
           try {

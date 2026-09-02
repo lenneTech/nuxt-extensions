@@ -42,6 +42,20 @@ export default defineConfig({
   test: {
     environment: 'happy-dom',
     include: ['test/**/*.test.ts'],
+    /**
+     * Type-level tests (`*.test-d.ts`) run as part of `pnpm test`.
+     *
+     * Not optional plumbing: this package's failures twice landed at the TYPE boundary rather than
+     * at runtime — 1.15.0 narrowed the auth surface and broke consumers, 1.16.0 widened it with
+     * `& Record<string, unknown>` and broke interface-typed callers. Neither is visible to
+     * `vue-tsc --noEmit`, which only compiles this package, nor to a runtime suite. Without this
+     * flag a `.test-d.ts` file is collected by nothing and silently proves nothing.
+     */
+    typecheck: {
+      enabled: true,
+      include: ['test/**/*.test-d.ts'],
+      tsconfig: './tsconfig.json',
+    },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],

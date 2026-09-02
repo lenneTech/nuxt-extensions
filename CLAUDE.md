@@ -25,8 +25,8 @@ src/
 
 | Composable | Purpose |
 |-----------|---------|
-| `useLtAuth()` | Authentication state, login, logout, session management |
-| `useLtAuthClient()` | Raw Better Auth client access |
+| `useLtAuth()` | Authentication state, login, logout, session management, password change + reset |
+| `useLtAuthClient()` | Raw Better Auth client access (`twoFactor.*`, `admin.*`, `passkey`) |
 | `useSystemSetup()` | First-admin setup flow |
 | `useLtTusUpload()` | TUS resumable file uploads |
 | `useLtFile()` | File utilities (size formatting, URLs) |
@@ -179,6 +179,90 @@ export default defineNuxtRouteMiddleware((to) => {
 });
 ```
 
+## Password Handling: Reset, Change, and Client-Side Hashing
+
+**Every password leaves the browser SHA256-hashed.** `auth-client.ts` wraps each Better-Auth
+method that carries a credential and substitutes that one field with its digest;
+`@lenne.tech/nest-server` hashes the received value again on its side. The two ends agree only
+because both do this — which is why a hand-rolled call is not a style choice but a way to lock
+a user out of their own account.
+
+### Use the composable. Never hand-roll the flow.
+
+`useLtAuth()` exposes the whole set — `changePassword`, `requestPasswordReset`, `resetPassword`
+(since 1.16.0) — alongside `signIn` / `signUp`. Reach for `useLtAuthClient()` only for surfaces
+the composable does not carry (`twoFactor.*`, `admin.*`, `passkey`); that client hashes too.
+
+What went wrong when a project did otherwise: `useLtAuth()` offered `changePassword` but neither
+reset method, so a reset page was built directly against `$fetch`, the client-side hashing was
+forgotten, and the backend stored `scrypt(plaintext)` while sign-in verified
+`scrypt(sha256(plaintext))`. The password the user had just chosen did not work, and nothing in
+either log said why. The gap in this composable is what created that workaround.
+
+```typescript
+const { requestPasswordReset, resetPassword } = useLtAuth();
+
+// Step 1 — send the mail. `redirectTo` MUST be absolute (see below).
+await requestPasswordReset({
+  email,
+  redirectTo: new URL('/auth/reset-password', config.public.siteUrl).toString(),
+});
+
+// Step 2 — on the reset page, with the token from the query string.
+await resetPassword({ newPassword, token });
+```
+
+### `redirectTo` must be absolute, and must never come from user input
+
+Better Auth resolves it against the **API** origin (`new URL(callbackURL, ctx.baseURL)`). A
+relative value therefore lands on the API host, where the route does not exist: 403
+`INVALID_REDIRECT_URL`, no mail sent, nothing visible in the browser. It fails silently.
+
+**It also carries a live single-use reset token.** An attacker-chosen value is account takeover,
+not a phishing redirect — so never build it from `route.query`, a referrer, or a form field.
+The only thing holding it back is the server's `trustedOrigins` allowlist; a project that
+widens that (or sets a wildcard) removes the last barrier. In lt starter projects `appUrl()`
+(from the starter's `app/utils/app-origin.ts`, not from this package) builds one and throws
+rather than returning something relative; elsewhere use `new URL(path, siteUrl).toString()`.
+
+### Password length is enforced by YOUR form — the server cannot do it
+
+better-auth checks `minPasswordLength` against the value it **receives**
+(`api/routes/password.mjs`). Because this library hashes first, that value is always a 64-character
+hex string, so the check passes trivially on every path. nest-server 11.38.0 adds a raw-value
+length check for plaintext clients, and it deliberately skips anything matching `^[a-f0-9]{64}$`
+— i.e. skips us.
+
+This is a consequence of client-side hashing, not a bug in either backend, and there is nothing to
+"fix" server-side. **A minimum length must live in your form schema** (the starters use
+`v.minLength(8)` on register, setup and reset). If someone later removes that rule reasoning that
+"the server validates it", nothing will catch it.
+
+### `admin.*` is passed through UNHASHED — an armed trap, not a live one
+
+`admin.createUser` (`password`) and `admin.setUserPassword` (`newPassword`) are the only
+credential-carrying methods this library does **not** hash.
+
+Today that is harmless: `@lenne.tech/nest-server` does not register better-auth's `admin()`
+plugin and has no option to enable it, so those routes 404. But `auth.enableAdmin` defaults to
+`true`, meaning the admin *client* plugin is registered in every consuming project — the trap is
+armed and waiting for a server that answers.
+
+**Enabling `admin()` server-side is therefore a lock-step change across both repos in one
+release:** the two routes join nest-server's password-normalisation table, and these two methods
+get `ltSha256` wrappers here. Doing only the server half creates accounts whose password nobody
+can ever log in with, with no error anywhere. Hashing here pre-emptively is equally wrong — it
+would build a client expectation the server does not answer.
+
+### If you add a wrapper that hashes something
+
+Add it to both guards. `test/auth-client-hashing.test.ts` asserts the actual request payload;
+`test/auth-client-param-forwarding.test.ts` keeps the source-level half. A hashing wrapper
+replaces ONE field and forwards the rest — `{ ...params, password: hashed }`. Never
+`{ password: hashed }` (drops `revokeOtherSessions`, `redirectTo`, `method`, `issuer` — all
+shipped defects), and never `{ password: hashed, ...params }`, which looks almost identical and
+puts the **plaintext** back on the wire.
+
 ## Form Label Repair
 
 **The defect:** Nuxt UI's `FormField` derives the label's `for` and the control's `id` from one
@@ -257,7 +341,10 @@ fields at `app:beforeMount` and restores them at `app:mounted`, dispatching a sy
 ## Development Rules
 
 1. **ALWAYS read source code** in `dist/runtime/` to understand available composables and components
-2. **Use `useLtAuth()`** for authentication — never implement auth manually
+2. **Use `useLtAuth()`** for authentication — never implement auth manually. This includes the
+   password-reset flow: passwords are SHA256-hashed client-side, and a hand-rolled call that skips
+   that step desynchronises the two credential stores and locks the user out (see "Password
+   Handling" below).
 3. **Check existing composables** before creating new ones — this module may already provide what you need
 4. **Peer dependencies** (`better-auth`, `@better-auth/passkey`, `tus-js-client`) must be installed in the consuming project.
    `better-auth` and `@better-auth/passkey` are pinned to **`>=1.7.1 <1.8.0`** — deliberately not a caret.

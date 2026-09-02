@@ -120,6 +120,28 @@ export interface LtPasskeyRegisterResult {
 /**
  * Return type for useLtAuth composable
  */
+/**
+ * Accepts any caller-supplied shape while refusing a stray plaintext credential field.
+ *
+ * WHY A GENERIC AND NOT `& Record<string, unknown>`
+ *
+ * TypeScript gives a `type` alias an implicit index signature and an `interface` deliberately none
+ * (declaration merging could add anything later). So an intersection with `Record<string, unknown>`
+ * REJECTS an interface-typed variable — and `app/interfaces/*.interface.ts` plus `Ref<Form>.value`
+ * are the dominant shapes in this stack. That is how 1.15.0 broke consuming projects; the same
+ * mistake in a different costume is not worth repeating.
+ *
+ * A generic parameter carries every shape and keeps the excess-property check, which matters:
+ * widening these signatures to forward caller options also removed the compiler's objection to
+ * `changePassword({ …, password: plaintext })` — a plaintext credential that would land in the
+ * request body and from there in proxy logs, APM body capture and error reporters. Naming the
+ * foreign credential keys `never` puts that objection back without closing the passthrough.
+ *
+ * @typeParam T - whatever the caller actually passes
+ * @typeParam Own - the credential keys this method legitimately carries
+ */
+type NoStrayCredential<T, Own extends string> = Omit<{ currentPassword?: never; newPassword?: never; password?: never }, Own> & T;
+
 export interface UseLtAuthReturn {
   // Auth state
   authMode: ComputedRef<LtAuthMode>;
@@ -182,19 +204,80 @@ export interface UseLtAuthReturn {
 
   // Auth actions
   authenticateWithPasskey: () => Promise<LtPasskeyAuthResult>;
-  changePassword: (params: { currentPassword: string; newPassword: string }, options?: unknown) => Promise<unknown>;
+  /**
+   * Change the password of the signed-in user. Both passwords are hashed client-side.
+   *
+   * Pass `revokeOtherSessions: true` after a suspected compromise — Better Auth reads it on the
+   * `update-user` route and ends every other session. Until 1.16.0 the wrapper silently dropped
+   * it, so a caller believed foreign sessions were ended when they were not.
+   */
+  changePassword: <T extends { currentPassword: string; newPassword: string }>(
+    params: NoStrayCredential<T, 'currentPassword' | 'newPassword'>,
+    options?: unknown,
+  ) => Promise<unknown>;
   clearUser: () => void;
   fetchWithAuth: (url: string, options?: RequestInit) => Promise<Response>;
   refreshJwtToken: () => Promise<boolean>;
   registerPasskey: (name?: string) => Promise<LtPasskeyRegisterResult>;
+
+  /**
+   * Ask for a password-reset mail.
+   *
+   * `redirectTo` MUST be an absolute app URL — Better Auth resolves it against the API
+   * origin, so a relative value lands on the API host, the route does not exist, and the
+   * answer is a 403 with no mail sent. In an lt starter project `appUrl()` builds one; elsewhere
+   * construct it yourself, e.g. `new URL('/auth/reset-password', config.public.siteUrl).toString()`.
+   *
+   * **SECURITY: never build `redirectTo` from `route.query`, a referrer, or a form field.** The
+   * reset redirect carries a live single-use token, so an attacker-controlled value is account
+   * takeover rather than phishing. What holds it back is `trustedOrigins` rejecting foreign
+   * origins — a project that widens that removes the last barrier.
+   *
+   * From `@lenne.tech/nest-server` 11.38.0 the reset mail links straight to the app, so
+   * `redirectTo` is no longer consulted on the default path. It stays load-bearing where a project
+   * sets `betterAuth.emailVerification.passwordResetLink: false` to keep Better Auth's own link.
+   *
+   * Generic rather than a closed shape: this is a passthrough, and a closed shape would push
+   * callers back to the raw client for any option the library has not enumerated yet — which is
+   * how hand-rolled reset flows start.
+   *
+   * @example
+   * const { requestPasswordReset } = useLtAuth();
+   * await requestPasswordReset({
+   *   email,
+   *   redirectTo: new URL('/auth/reset-password', config.public.siteUrl).toString(),
+   * });
+   * @see {@link UseLtAuthReturn.resetPassword} — step two, with the token from the query string.
+   */
+  requestPasswordReset: <T extends { email: string }>(params: NoStrayCredential<T, never>, options?: unknown) => Promise<unknown>;
+
+  /**
+   * Set a new password from a reset token. The password is hashed client-side.
+   *
+   * **The minimum-length rule has to live in your form.** Better Auth checks `minPasswordLength`
+   * against the value it RECEIVES, and this client hashes first — so the server sees 64 characters
+   * whatever the user typed, on every version. That is a consequence of client-side hashing, not
+   * of any particular server release. The lt starter's `reset-password.vue`, `register.vue` and
+   * `setup.vue` declare `v.minLength(8)`; a project using this package without those forms has to
+   * add it.
+   *
+   * Takes `{ newPassword, token }` and nothing else — better-auth's `/reset-password` body schema
+   * carries no `redirectTo`, so the absolute-URL trap applies one step earlier, on
+   * {@link UseLtAuthReturn.requestPasswordReset}.
+   *
+   * @example
+   * const { resetPassword } = useLtAuth();
+   * await resetPassword({ newPassword, token: route.query.token as string });
+   */
+  resetPassword: <T extends { newPassword: string; token: string }>(params: NoStrayCredential<T, 'newPassword'>, options?: unknown) => Promise<unknown>;
   setUser: (userData: LtUser | null, mode?: LtAuthMode) => void;
   signIn: {
-    email: (params: { email: string; password: string; rememberMe?: boolean }, options?: unknown) => Promise<unknown>;
+    email: <T extends { email: string; password: string; rememberMe?: boolean }>(params: NoStrayCredential<T, 'password'>, options?: unknown) => Promise<unknown>;
     passkey?: (options?: unknown) => Promise<unknown>;
   };
   signOut: (options?: unknown) => Promise<unknown>;
   signUp: {
-    email: (params: { email: string; name: string; password: string } & Record<string, unknown>, options?: unknown) => Promise<unknown>;
+    email: <T extends { email: string; name: string; password: string }>(params: NoStrayCredential<T, 'password'>, options?: unknown) => Promise<unknown>;
   };
   switchToJwtMode: () => Promise<boolean>;
   validateSession: () => Promise<boolean>;

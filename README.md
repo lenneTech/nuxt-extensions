@@ -363,6 +363,9 @@ const {
   authenticateWithPasskey,
   registerPasskey,
   twoFactor,
+  changePassword,
+  requestPasswordReset,
+  resetPassword,
 } = useLtAuth();
 
 // Login with email/password
@@ -425,6 +428,50 @@ const { hasRole, hasAnyRole } = useLtAuth();
   <NuxtLink v-if="hasAnyRole('admin', 'editor')" to="/manage">Manage</NuxtLink>
 </template>
 ```
+
+### Password Change and Reset
+
+All three methods hash the password with SHA256 before it leaves the browser, because
+`@lenne.tech/nest-server` verifies that shape. **Use them rather than calling the endpoints
+yourself** — a hand-rolled reset that skips the hashing stores a credential the login can never
+match, and the user is locked out of the account they just set a password for. That is not
+hypothetical; it is why these two methods were added in 1.16.0.
+
+```vue
+<script setup lang="ts">
+const { changePassword, requestPasswordReset, resetPassword } = useLtAuth();
+const config = useRuntimeConfig();
+
+// Signed-in user changes their own password.
+// `revokeOtherSessions` ends every OTHER session — set it after a suspected compromise.
+await changePassword({ currentPassword, newPassword, revokeOtherSessions: true });
+
+// Step 1: send the reset mail.
+await requestPasswordReset({
+  email,
+  redirectTo: new URL('/auth/reset-password', config.public.siteUrl).toString(),
+});
+
+// Step 2: on the reset page, with the token from the query string.
+await resetPassword({ newPassword, token: route.query.token as string });
+</script>
+```
+
+**`redirectTo` must be an absolute URL.** Better Auth resolves it against the **API** origin, so
+a relative value lands on the API host where the route does not exist — a 403
+`INVALID_REDIRECT_URL`, no mail sent, and nothing visible in the browser. In an lt starter
+project the auto-imported `appUrl()` helper builds one and throws rather than returning something
+relative; that helper lives in the starter (`app/utils/app-origin.ts`), not in this package, so
+outside a starter use `new URL(path, siteUrl).toString()` as above.
+
+**Never build `redirectTo` from user input** (`route.query`, a referrer, a form field). The link
+carries a live single-use reset token, so an attacker-chosen destination is account takeover
+rather than a phishing redirect. The server's `trustedOrigins` allowlist is what stops it.
+
+**Enforce a minimum password length in your own form.** better-auth checks `minPasswordLength`
+against the value it receives, and because this library hashes first, that value is always a
+64-character hex string — the check passes on every path. The form is the only place the rule can
+live.
 
 ### Custom Better Auth Plugins
 
@@ -655,8 +702,8 @@ The package works **with or without** `@nuxtjs/i18n`:
 
 | Composable | Description |
 |------------|-------------|
-| `useLtAuth()` | Better-Auth integration with session, passkey, 2FA |
-| `useLtAuthClient()` | Direct access to the Better-Auth client singleton |
+| `useLtAuth()` | Better-Auth integration with session, passkey, 2FA, password change + reset |
+| `useLtAuthClient()` | Direct access to the Better-Auth client singleton (`twoFactor.*`, `admin.*`, `passkey`) |
 | `useLtErrorTranslation()` | Translate backend error codes to user-friendly messages |
 | `useLtTusUpload()` | TUS protocol file uploads with pause/resume |
 | `useLtFile()` | File utilities (size formatting, URLs) |

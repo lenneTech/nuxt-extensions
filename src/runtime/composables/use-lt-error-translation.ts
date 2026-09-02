@@ -55,7 +55,6 @@ export function useLtErrorTranslation(): UseLtErrorTranslationReturn {
    * Helper function for i18n with German fallback
    */
   function t(key: string, germanFallback: string): string {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const i18n = (nuxtApp as any).$i18n;
 
     // No i18n installed -> German (for single-language DE projects)
@@ -72,7 +71,6 @@ export function useLtErrorTranslation(): UseLtErrorTranslationReturn {
    */
   function detectLocale(): string {
     // 1. Check @nuxtjs/i18n
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const i18n = (nuxtApp as any).$i18n;
     if (i18n?.locale?.value) {
       return i18n.locale.value;
@@ -142,7 +140,6 @@ export function useLtErrorTranslation(): UseLtErrorTranslationReturn {
     }
 
     if (typeof errorOrMessage === 'object' && errorOrMessage !== null) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const obj = errorOrMessage as any;
       // Try common error response formats
       return obj.message || obj.error?.message || obj.data?.message || obj.statusMessage || String(obj);
@@ -203,7 +200,6 @@ export function useLtErrorTranslation(): UseLtErrorTranslationReturn {
     // Use Nuxt UI useToast composable via nuxtApp context
     try {
       nuxtApp.runWithContext(() => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const toastComposable = (nuxtApp as any).useToast || (globalThis as any).useToast;
         if (typeof toastComposable === 'function') {
           const toast = toastComposable();
