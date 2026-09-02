@@ -121,3 +121,42 @@ describe('peer declaration matches what is imported', () => {
     }
   });
 });
+
+describe('the client is a dynamic-path proxy, not a plain object', () => {
+  // The upstream fact the whole passthrough list rests on, pinned against the INSTALLED
+  // package rather than a fixture. `auth-client.ts` must name every method it exposes
+  // because a spread of this object yields nothing; if better-auth ever adds an `ownKeys`
+  // trap, these assertions fail and the comments in `auth-client.ts` — plus the fixture in
+  // `auth-client-passthrough.test.ts` — have gone stale and must be revisited.
+
+  it('owns no enumerable properties, so a spread copies nothing', async () => {
+    const { createAuthClient } = await import('better-auth/vue');
+    const client = createAuthClient({ baseURL: 'http://localhost:3000', basePath: '/iam' });
+
+    expect(Object.keys(client)).toEqual([]);
+    expect(Object.keys({ ...client })).toEqual([]);
+  });
+
+  it('fabricates any name on access, which is why probing it proves nothing', async () => {
+    const { createAuthClient } = await import('better-auth/vue');
+    const client = createAuthClient({ baseURL: 'http://localhost:3000', basePath: '/iam' }) as any;
+
+    // Both the real methods...
+    expect(typeof client.sendVerificationEmail).toBe('function');
+    expect(typeof client.verifyEmail).toBe('function');
+    // ...and a name that exists nowhere in better-auth. A test that asserts "the method is
+    // there" against this object is therefore always green and never useful — the reason
+    // `auth-client-passthrough.test.ts` asserts on OUR returned object instead.
+    expect(typeof client.thisEndpointDoesNotExist).toBe('function');
+  });
+
+  it('a spread of it does not carry methods to a consumer', async () => {
+    const { createAuthClient } = await import('better-auth/vue');
+    const client = createAuthClient({ baseURL: 'http://localhost:3000', basePath: '/iam' }) as any;
+
+    // The exact shape `auth-client.ts` used to rely on, and the exact reason it failed.
+    const spread: any = { ...client };
+    expect(spread.sendVerificationEmail).toBeUndefined();
+    expect(spread.signIn).toBeUndefined();
+  });
+});

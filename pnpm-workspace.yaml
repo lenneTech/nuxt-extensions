@@ -74,6 +74,29 @@ overrides:
   # resolved in this tree for other consumers, and because esbuild is dev-tooling that never
   # reaches the published package.
   'fontless>esbuild': '0.28.2'
+  # @tiptap/core — mergeAttributes() promotes an own `__proto__` key into inherited,
+  # executable DOM attributes (GHSA-cp6q-959q-f8rh, MODERATE, patched >=3.30.4). Entered
+  # this tree with the @nuxt/ui devDependency.
+  #
+  # Worth knowing before anyone "simplifies" this away: @nuxt/ui asks for ^3.29.2, a range
+  # that ALREADY permits the fix, and 4.11.0 is its newest release — so neither an update
+  # nor a wider range helps. The tree sat on 3.30.2 because every sibling @tiptap/*
+  # package pins core to its own exact version, so core cannot move unless it is pushed.
+  #
+  # Deliberately 3.30.5 and not the newest (3.31.0): this block is mirrored into repos that
+  # DO enforce `minimumReleaseAge`, and on 2026-09-02 3.30.6 and 3.31.0 were 2 and 1 days
+  # old — both would have needed an exclude entry to install at all. 3.30.5 carries the fix,
+  # clears a 7d gate, and stays a patch step from the 3.30.2 the sibling extensions are
+  # built against instead of pulling core a minor ahead of them.
+  #
+  # TWO entries, and the second is not optional: the @tiptap packages peer their siblings
+  # at an EXACT version, so lifting core alone leaves `@tiptap/pm` behind as an unmet peer
+  # (core@3.30.5 peers "@tiptap/pm": "3.30.5"). `pnpm audit` does not look at peer
+  # conflicts, so the tree reports zero vulnerabilities while being internally inconsistent
+  # — `pnpm peers check` is the one that says so. The other three dozen @tiptap packages
+  # need no entry: pnpm rewrites their peer requirement onto the overridden version.
+  '@tiptap/core@<3.30.4': '3.30.5'
+  '@tiptap/pm@<3.30.4': '3.30.5'
 
 # No `minimumReleaseAge` gate is set in THIS repo, so the exclude list below is inert here. It is
 # mirrored — together with the overrides — into nuxt-base-starter / lt-monorepo, where an age gate
@@ -84,3 +107,28 @@ overrides:
 minimumReleaseAgeExclude:
   - minimatch@10.2.6
   - postcss@8.5.26
+
+# ----------------------------------------------------------------------------------
+# Accepted peer drift.
+#
+# `pnpm peers check` runs in the `check` chain, right behind `pnpm audit`, because the
+# two answer different questions and a tree can pass one while failing the other: audit
+# asks "is anything here known-vulnerable", peers asks "is this tree internally
+# consistent". Overriding a package onto a patched version is exactly the move that
+# satisfies the first and breaks the second — lifting `@tiptap/core` left `@tiptap/pm`
+# behind as an unmet peer while audit reported zero vulnerabilities.
+#
+# An entry here is therefore a claim that a specific mismatch is HARMLESS, not a way to
+# quiet the gate. Add one only with the reason, and only when raising the installed
+# version is not the right fix — which for almost every conflict it is.
+# ----------------------------------------------------------------------------------
+peerDependencyRules:
+  allowedVersions:
+    # `mkdist` declares `vue-sfc-transformer: ^0.1.1`, but `unbuild` — which ships mkdist
+    # and pulls this in — installs 0.2.5. The installed copy is a major AHEAD of the
+    # declared range, so this is not a stale lockfile that a bump would fix: forcing
+    # ^0.1.x would break unbuild, and there is nothing else to force. Both arrive through
+    # `nuxt-module-build`, it is build tooling that never reaches the published package,
+    # the `build` step is green on it, and the fix belongs upstream in mkdist's range.
+    # Drop this line once mkdist widens it.
+    'mkdist>vue-sfc-transformer': '0.2.5'

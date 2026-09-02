@@ -257,12 +257,26 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
     plugins,
   });
 
-  // Return extended client with password hashing
+  // Return extended client with password hashing.
+  //
+  // EVERY method below is listed by name on purpose, and that is the whole mechanism —
+  // there is no fallback that catches the rest. This object used to begin with
+  // `...baseClient` under a comment claiming it spread "all base client properties and
+  // methods". It spread nothing. Better-Auth builds its client through
+  // `createDynamicPathProxy`: a `new Proxy(function () {}, { apply, get })` over an empty
+  // function, with no `ownKeys` trap. Every method is fabricated inside `get`, so the
+  // proxy owns no enumerable properties and a spread copies none of them —
+  // `Object.keys({ ...baseClient })` is `[]`.
+  //
+  // What made that dangerous rather than merely useless is that TypeScript spreads the
+  // DECLARED members regardless. `LtAuthClient` is `ReturnType<typeof createLtAuthClient>`,
+  // so some fourteen methods were promised by the type, offered by autocomplete and waved
+  // through by the compiler, while being `undefined` at runtime. Three projects
+  // independently met that crash and rebuilt the call against raw `$fetch`; each looked
+  // like a project going its own way, and each was the only thing that worked.
+  //
+  // To expose a Better-Auth method, add a line here. Nothing else will.
   return {
-    // Spread all base client properties and methods
-    ...baseClient,
-
-    // Explicitly pass through methods not captured by spread operator
     useSession: baseClient.useSession,
     passkey: (baseClient as any).passkey,
     /**
@@ -289,6 +303,43 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
     $Infer: baseClient.$Infer,
     $fetch: baseClient.$fetch,
     $store: baseClient.$store,
+    /**
+     * Read the current session (`GET /get-session`).
+     *
+     * Carries no credential, so it is a bare passthrough.
+     */
+    getSession: baseClient.getSession,
+
+    /**
+     * Send (or re-send) an email-verification mail (`POST /send-verification-email`).
+     *
+     * A BARE passthrough, and it must stay one. `callbackURL` is the value Better Auth
+     * puts into the mail, and it MUST reach the server exactly as the caller wrote it:
+     * Better Auth resolves a relative value against the API origin, so `/auth/verify-email`
+     * lands on `api.<host>/auth/verify-email`, where the route does not exist. The mail
+     * still goes out, and the user follows a link to a 404 — the same silent failure
+     * `redirectTo` produces on the reset path.
+     *
+     * So do not normalise it here, do not supply a default, and do not resolve it against
+     * the client's `baseURL`. A library that quietly repairs the value hides the mistake
+     * until the next caller makes it somewhere we cannot see. Fixing it belongs to the
+     * caller (the lt starters use `appUrl()`, which throws rather than return something
+     * relative).
+     */
+    sendVerificationEmail: baseClient.sendVerificationEmail,
+
+    /**
+     * Verify an email address from a token (`POST /verify-email`).
+     *
+     * Carries no credential, so it is a bare passthrough. Note what the endpoint does with
+     * the query, because it decides the shape of the answer: WITH a `callbackURL` it
+     * answers `302` to that URL (carrying neither token nor status), WITHOUT one it answers
+     * `{ status: true }` as JSON. Callers that want the result rather than a redirect must
+     * therefore omit `callbackURL` here — which is not the same parameter as the one
+     * `sendVerificationEmail` puts into the mail, and confusing the two is easy.
+     */
+    verifyEmail: baseClient.verifyEmail,
+
     // Deliberately a bare passthrough: it takes an email address, never a password, so
     // there is nothing to hash — and passing it through untouched is what keeps
     // `redirectTo` intact (see the note above `resetPassword`).

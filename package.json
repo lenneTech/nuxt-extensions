@@ -1,6 +1,6 @@
 {
   "name": "@lenne.tech/nuxt-extensions",
-  "version": "1.16.0",
+  "version": "1.17.0",
   "description": "Reusable Nuxt 4 composables, components, and Better-Auth integration for lenne.tech projects",
   "repository": {
     "type": "git",
@@ -51,9 +51,9 @@
     "prepack": "node scripts/sync-module-version.mjs && nuxt-module-build build",
     "c": "pnpm run check",
     "check": "node scripts/check.mjs",
-    "check:raw": "pnpm install --frozen-lockfile && pnpm audit && pnpm run format:check && pnpm run lint && pnpm run version:check && pnpm run dev:prepare && pnpm test:types && pnpm test && pnpm run build && pnpm run check:manifest",
-    "check:fix": "pnpm install && pnpm audit --fix && pnpm run format && pnpm run lint:fix && pnpm run version:sync && pnpm test:types && pnpm test && pnpm run build && pnpm run check:manifest",
-    "check:naf": "pnpm install && pnpm run format && pnpm run lint:fix && pnpm run version:sync && pnpm test:types && pnpm test && pnpm run build && pnpm run check:manifest",
+    "check:raw": "pnpm install --frozen-lockfile && pnpm audit && pnpm peers check && pnpm run format:check && pnpm run lint && pnpm run version:check && pnpm run dev:prepare && pnpm test:types && pnpm test && pnpm run build && pnpm run check:manifest",
+    "check:fix": "pnpm install && pnpm audit --fix && pnpm peers check && pnpm run format && pnpm run lint:fix && pnpm run version:sync && pnpm test:types && pnpm test && pnpm run build && pnpm run check:manifest",
+    "check:naf": "pnpm install && pnpm peers check && pnpm run format && pnpm run lint:fix && pnpm run version:sync && pnpm test:types && pnpm test && pnpm run build && pnpm run check:manifest",
     "cf": "pnpm run check:fix",
     "cnaf": "pnpm run check:naf",
     "dev": "pnpm dev:prepare && nuxt dev playground",

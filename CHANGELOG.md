@@ -5,6 +5,61 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.0] - 2026-09-02
+
+### Breaking
+
+- **The auth client no longer declares Better-Auth methods it never had.** `createLtAuthClient()`
+  began with `...baseClient` under a comment claiming it spread "all base client properties and
+  methods". It spread nothing: Better Auth builds its client with `createDynamicPathProxy`, a
+  `Proxy` over an empty function with no `ownKeys` trap, so it owns no enumerable properties and
+  `Object.keys({ ...baseClient })` is `[]`.
+
+  TypeScript spreads DECLARED members regardless, which is what made this dangerous rather than
+  merely useless. `LtAuthClient` is `ReturnType<typeof createLtAuthClient>`, so roughly fourteen
+  methods were promised by the type, offered by autocomplete and accepted by the compiler — and
+  `undefined` when called.
+
+  **What changes for you:** code calling one of those methods stops compiling. It already threw
+  `TypeError` at runtime, so nothing that worked stops working — a crash moves to the build, where
+  it is visible. The version stays a minor because the MAJOR digit tracks the Nuxt major (1.x is
+  Nuxt 4); see the migration guide for the affected names and what to do instead.
+
+### Added
+
+- **`sendVerificationEmail`, `verifyEmail` and `getSession` are passed through.** All three had a
+  caller in the wild and none of them existed at runtime, so three projects independently rebuilt
+  them against raw `$fetch` — which read as three teams going their own way and was in fact the
+  only thing that worked.
+
+  `sendVerificationEmail` is a bare passthrough on purpose: `callbackURL` is the value that goes
+  into the mail, and Better Auth resolves a relative one against the API origin, where the route
+  does not exist. The mail still goes out and the user follows a link to a 404. Normalising it
+  here would hide the mistake until the next caller made it somewhere unseen.
+
+- **`pnpm peers check` runs in the `check` chain.** `pnpm audit` and a peer check answer different
+  questions, and a tree can pass one while failing the other — lifting a package onto a patched
+  version is exactly the move that satisfies audit and leaves a sibling behind as an unmet peer.
+
+### Fixed
+
+- **A raw `$fetch` error now translates.** `useLtErrorTranslation()` read `err.message` for anything
+  `instanceof Error`, and ofetch's `FetchError` keeps the TRANSPORT line there
+  (`[POST] "/iam/reset-password": 400 Bad Request`) with the response body in `data`. The backend
+  message — the only one that can carry a `#LTNS_` marker — was never looked at, and the transport
+  line was shown to the user as if it were an explanation. The `obj.data?.message` fallback that
+  existed for this case was unreachable for every real fetch error.
+
+  Extraction now reads `data.message` first and falls back to the thrown message when there is no
+  usable body. Unwrapping at the call site (`err.data?.message ?? err`) is no longer necessary.
+
+### Documentation
+
+- `translateError` documents two traps that cost real debugging time: `translateError(x) || 'Fallback'`
+  never reaches the fallback, because an unrecognised message is returned unchanged and is therefore
+  truthy; and callers must branch on the error CODE, not the message, since Better Auth answers
+  `POST /reset-password` with five different errors under one `400`.
+
 ## [1.16.0] - 2026-09-02
 
 ### Fixed

@@ -136,6 +136,17 @@ export function useLtErrorTranslation(): UseLtErrorTranslationReturn {
     }
 
     if (errorOrMessage instanceof Error) {
+      // The response body wins over the thrown message, and that ordering is the whole
+      // point. ofetch's `FetchError` extends `Error`, puts the TRANSPORT line in `message`
+      // (`[POST] "/iam/reset-password": 400 Bad Request`) and the parsed body in `data`.
+      // The backend's own message — the only one that can carry a `#LTNS_` marker — lives
+      // in the body. This branch used to return `message` unconditionally, so the
+      // `obj.data?.message` fallback below was unreachable for every real fetch error and
+      // the user was shown the transport line verbatim.
+      const body = (errorOrMessage as { data?: { message?: unknown } }).data;
+      if (typeof body?.message === 'string' && body.message) {
+        return body.message;
+      }
       return errorOrMessage.message;
     }
 
@@ -180,7 +191,12 @@ export function useLtErrorTranslation(): UseLtErrorTranslationReturn {
   }
 
   /**
-   * Translate an error to user-friendly message
+   * Translate an error to user-friendly message.
+   *
+   * Never returns an empty string for an error that carries a message — which is why
+   * `translateError(x) || 'Fallback'` is a no-op. The full contract lives on
+   * `UseLtErrorTranslationReturn` in `runtime/types/error.ts`, the surface consumers
+   * actually read; one copy cannot drift from itself.
    */
   function translateError(errorOrMessage: unknown): string {
     const parsed = parseError(errorOrMessage);
