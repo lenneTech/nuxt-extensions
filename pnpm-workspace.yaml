@@ -16,6 +16,38 @@ allowBuilds:
   vue-demi: false
 
 # ----------------------------------------------------------------------------------
+# No accepted advisories.
+#
+# There is deliberately no `auditConfig.ignoreGhsas` block here: `pnpm audit` is clean
+# on its own merits, with nothing suppressed. This is the last resort, because
+# suppression makes the audit green while the vulnerability is still present.
+#
+# If one ever becomes unavoidable, the bar is: name the advisory, trace the resolution
+# path, say why it cannot be fixed, say why the residual risk is acceptable, give the
+# condition for deleting the entry, and date the verification. One GHSA id per entry,
+# never a range or a whole package, so anything new still turns the audit red.
+#
+# Two traps, both paid for elsewhere in the stack:
+#
+# 1. `ignoreGhsas` is keyed on the GHSA id ALONE — no package, version or path filter.
+#    An entry hides that advisory EVERYWHERE in the graph, permanently. Since lt CLI
+#    1.42.0 `auditConfig` is also hoisted as a UNION into generated projects, so an
+#    entry here can silence an advisory well beyond this repo.
+#
+# 2. A suppression ages invisibly. It vanishes from `pnpm audit --json` completely, so
+#    nothing reminds you to re-check it. In nest-server one sat five weeks obsolete
+#    because the backport its justification called non-existent shipped a day after the
+#    assessment. Re-verify on a schedule, not on a prompt.
+#
+# What the report does with one: `scripts/check.mjs` counts findings that are counted in
+# `metadata.vulnerabilities` but missing from `advisories`, and annotates the summary
+# `(N <severity> not listed)`. It dims those numbers ONLY when an entry exists here —
+# without one, an unlisted finding is merely below pnpm's default `--audit-level` of
+# `low` (which excludes `info`), and nobody has assessed it. See `dimmableSeverities`
+# in scripts/lib/audit-report.mjs; test/audit-report.test.ts pins the distinction.
+# ----------------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------------
 # Security overrides: force vulnerable transitive deps onto patched versions.
 #
 # WARNING — these do NOT reach consumers of the published package. `overrides:` is

@@ -1,6 +1,6 @@
 {
   "name": "@lenne.tech/nuxt-extensions",
-  "version": "1.18.0",
+  "version": "1.18.1",
   "description": "Reusable Nuxt 4 composables, components, and Better-Auth integration for lenne.tech projects",
   "repository": {
     "type": "git",
@@ -60,8 +60,8 @@
     "dev:build": "nuxt build playground",
     "dev:prepare": "nuxt-module-build build --stub && nuxt-module-build prepare && nuxt prepare playground",
     "build": "nuxt-module-build build",
-    "lint": "oxlint src/",
-    "lint:fix": "oxlint --fix --fix-suggestions src/",
+    "lint": "oxlint src/ scripts/",
+    "lint:fix": "oxlint --fix --fix-suggestions src/ scripts/",
     "format": "oxfmt --write src/",
     "format:check": "oxfmt --check src/",
     "version:sync": "node scripts/sync-module-version.mjs",

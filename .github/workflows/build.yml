@@ -56,6 +56,17 @@ jobs:
 
       # Non-blocking: an advisory published between commits should surface in CI, but
       # must not fail a build for a transitive dev-only finding the diff never touched.
+      #
+      # This is deliberately NOT the same gate as `pnpm check`. That wrapper
+      # (scripts/check.mjs) treats audit as fatal and blocks on a non-zero exit; the job
+      # here is advisory, and publish.yml runs no audit at all. So the blocking audit gate
+      # is local-only, and this workflow runs the check chain's steps individually rather
+      # than invoking the wrapper.
+      #
+      # Keeping it that way is a choice, not an oversight: making CI block on a bare
+      # `pnpm audit` means a newly published dev-only advisory can red an unrelated hotfix
+      # pipeline with no change to this repo. The trade is that a green CI does not prove
+      # a green `pnpm check` — run it before pushing.
       - name: Audit
         run: pnpm audit
         continue-on-error: true

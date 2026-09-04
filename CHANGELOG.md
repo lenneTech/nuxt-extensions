@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.1] - 2026-09-04
+
+Repository tooling only — **no consumer-facing change**. The published package is
+byte-identical to 1.18.0 apart from this version number; nothing under `dist/` moved. Update
+only if you want the tag; there is nothing to do in your project.
+
+### Fixed
+
+- **The `check` script no longer reports "clean" for an audit that never ran.** `scripts/check.mjs`
+  gates every release of this package on `pnpm audit`, and three separate ways existed for it to
+  print a green tick having verified nothing:
+
+  - **A dead registry looks exactly like a clean tree.** With the advisory service unreachable,
+    `pnpm audit` exits `0` and emits a complete, well-formed report with every count at zero and no
+    error envelope — byte-identical to a genuinely clean run. Measured against three real outage
+    modes (connection refused, dead DNS, 502). The run now asks the service directly whenever the
+    report is ambiguous, and reports "vulnerabilities NOT checked" when nobody answers.
+  - **Exit 0 with unreadable output** fell through every branch — not blocking, not degraded — and
+    printed a tick with a literal `0` beside it.
+  - **A genuine failure could degrade into a warning**, because a bare `5xx` was matched anywhere in
+    the error text: `audited 503 packages` and `gave up after 504 ms` both qualified.
+
+  Working offline now yields a warning where it used to yield a green tick. That is the correction,
+  not a regression: offline, nothing was checked.
+
+- **Suppressed advisories are rendered yellow, never grey, and name their severity.** Grey reads as
+  "handled" and lets a suppression age out of sight. The annotation now says which severity it
+  refers to (`1 high not listed`), so a mixed line cannot be misread as the critical being the
+  assessed one.
+
+### Added
+
+- Tests for the audit accounting (`test/audit-report.test.ts`, `test/check-audit-wiring.test.ts`),
+  and `lint` now covers `scripts/` as well as `src/`. Everything under `scripts/` had been outside
+  every gate in the repo — vitest, oxlint, oxfmt, `vue-tsc` and CI alike — so a defect there could
+  not be caught by anything. Each guard is verified by mutation: removing it turns a test red.
+
 ## [1.18.0] - 2026-09-02
 
 ### Breaking

@@ -12,7 +12,7 @@ import type { LtExtensionsModuleOptions } from './runtime/types';
 
 // Module meta
 export const name = '@lenne.tech/nuxt-extensions';
-export const version = '1.18.0';
+export const version = '1.18.1';
 export const configKey = 'ltExtensions';
 
 // Default cookie names — re-exported from auth-state so consumers can read

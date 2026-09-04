@@ -30,6 +30,17 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { C, stripAnsi } from "./lib/ansi.mjs";
+import {
+  countSuppressions,
+  advisoryServiceReachable,
+  auditOutcome,
+  countUnlistedBySeverity,
+  isAuditResultAmbiguous,
+  renderVulnLine,
+  sumSeverities,
+} from "./lib/audit-report.mjs";
+
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VERBOSE = process.argv.includes("--verbose") || process.argv.includes("-v");
 const SEQUENTIAL = process.argv.includes("--sequential") || process.argv.includes("--seq");
@@ -40,16 +51,6 @@ const PROJECT_FILTERS = process.argv
 // Verbose streams raw output, so the in-place live view is disabled there.
 const TTY = Boolean(process.stdout.isTTY) && !VERBOSE;
 
-// ── tiny ANSI helpers ──────────────────────────────────────────────────────
-const C = {
-  bold: (s) => `\x1b[1m${s}\x1b[0m`,
-  cyan: (s) => `\x1b[36m${s}\x1b[0m`,
-  dim: (s) => `\x1b[2m${s}\x1b[0m`,
-  green: (s) => `\x1b[32m${s}\x1b[0m`,
-  red: (s) => `\x1b[31m${s}\x1b[0m`,
-  yellow: (s) => `\x1b[33m${s}\x1b[0m`,
-};
-const stripAnsi = (s) => s.replace(/\x1b\[[0-9;]*m/g, "");
 const shortRel = (rel) => rel.replace(/^projects\//, "");
 
 function fmtDuration(ms) {
@@ -143,7 +144,6 @@ function parseLint(out) {
 }
 
 // ── audit (faithful: runs the project's OWN audit command) ──────────────────
-const SEVERITIES = ["critical", "high", "moderate", "low", "info"];
 
 // Run the audit command exactly as the check chain defines it (same scope /
 // --prod / --audit-level), only appending --json for the counts. The gate is
@@ -154,13 +154,38 @@ async function runAudit(auditCmd) {
   const cmd = /(^|\s)--json(\s|$)/.test(auditCmd) ? auditCmd : `${auditCmd} --json`;
   const { code, out } = await capture(cmd, ROOT);
   let counts = null;
+  let unlisted = {};
+  let silentOutage = false;
   try {
-    counts = JSON.parse(out.slice(out.indexOf("{")))?.metadata?.vulnerabilities ?? null;
+    const parsed = JSON.parse(out.slice(out.indexOf("{")));
+    counts = parsed?.metadata?.vulnerabilities ?? null;
+    unlisted = countUnlistedBySeverity(parsed);
+    // An all-zero report is byte-identical whether the tree is clean or the service was dead, so
+    // the report alone cannot answer it — ask the service. Only reached when the result is
+    // ambiguous: a repo WITH findings never pays for this, a clean one pays about half a second.
+    if (isAuditResultAmbiguous(parsed)) {
+      silentOutage = !(await advisoryServiceReachable());
+    }
   } catch {
     /* fall through to raw reason */
   }
-  const total = counts ? SEVERITIES.reduce((n, s) => n + (counts[s] || 0), 0) : 0;
-  return { auditCmd, blocking: code !== 0, counts, reason: counts ? null : out, total };
+  // One decision, in one place, testable on its own — see `auditOutcome`. It covers both ways
+  // the audit can fail to produce an answer: the command failing on an outage, and the command
+  // SUCCEEDING while producing nothing readable. Only "ok" may render as a green tick.
+  const outcome = auditOutcome({ code, counts, out, silentOutage });
+  return {
+    auditCmd,
+    blocking: outcome === "blocked",
+    degraded: outcome !== "ok" && outcome !== "blocked",
+    outcome,
+    counts,
+    reason: counts ? null : out,
+    // Read from the workspace, not from the report: a suppressed advisory leaves no trace in the
+    // JSON, so this is the only evidence that a human assessed anything. See `dimmableSeverities`.
+    suppressions: countSuppressions(ROOT),
+    total: sumSeverities(counts),
+    unlisted,
+  };
 }
 
 // Watchdog: kill a TEST step whose child produces NO output for this long. A
@@ -538,18 +563,27 @@ async function main() {
     if (audit.blocking) {
       liveCount = 0; // the failure line must survive — nothing may overwrite it
       const summary = audit.counts
-        ? `${audit.total} vuln (${renderVulnLine(audit.counts)})`
+        ? `${audit.total} vuln (${renderVulnLine(audit)})`
         : "failed";
       console.log(`${C.red("✗")} audit  ${C.red(summary)} ${C.dim(`(${fmtDuration(dur)})`)}`);
       return fail(
         `audit (${auditCmd})`,
-        audit.counts ? renderVulnLine(audit.counts) : audit.reason,
+        audit.counts ? renderVulnLine(audit) : audit.reason,
         started,
       );
     }
-    if (!TTY) {
+    if (audit.degraded) {
+      // Never a green ✓ here: a ✓ reads as "no vulnerabilities", and that is a claim we did not
+      // verify. Yellow ⚠, and the line survives the live view so it is still on screen at the end.
+      // The wording names no cause — a retired endpoint and a transient outage both land here,
+      // and stating the wrong one is worse than stating neither.
+      liveCount = 0;
+      console.log(
+        `${C.yellow("⚠")} audit  ${C.yellow(`${degradeReason(audit.outcome)} — vulnerabilities NOT checked; not blocking`)} ${C.dim(`(${fmtDuration(dur)})`)}`,
+      );
+    } else if (!TTY) {
       process.stdout.write(
-        `  ${C.green("✓")} audit  ${audit.counts ? renderVulnLine(audit.counts) : C.dim("0")} ${C.dim(`(${fmtDuration(dur)})`)}\n`,
+        `  ${C.green("✓")} audit  ${audit.counts ? renderVulnLine(audit) : C.dim("0")} ${C.dim(`(${fmtDuration(dur)})`)}\n`,
       );
     }
     // TTY success: NO permanent line — the live status view overwrites the audit
@@ -584,15 +618,17 @@ async function main() {
   process.exit(0);
 }
 
-// ── rendering helpers ─────────────────────────────────────────────────────────
-function renderVulnLine(counts) {
-  return SEVERITIES.map((s) => {
-    const n = counts[s] || 0;
-    const txt = `${s} ${n}`;
-    if (n > 0 && (s === "critical" || s === "high")) return C.red(txt);
-    return n > 0 ? C.yellow(txt) : C.dim(txt);
-  }).join(C.dim(" · "));
+// What the reader should DO about a degraded audit. Not accuracy for its own sake: on
+// "unreachable" waiting and re-running fixes it, on "retired" waiting fixes nothing (it needs a
+// pnpm upgrade), and "unreadable" points at the command itself. A single neutral sentence takes
+// away the one fact that decides the next action.
+function degradeReason(outcome) {
+  if (outcome === "retired") return "could not run — the endpoint pnpm calls has been retired";
+  if (outcome === "unreadable") return "produced no readable result";
+  return "could not reach the advisory service";
 }
+
+// ── rendering helpers ─────────────────────────────────────────────────────────
 
 function metricSuffix(r) {
   if (r.kind === "test" && r.tests?.passed != null) {
@@ -664,7 +700,13 @@ function report(started, results) {
     `\n${C.bold("Vulnerabilities")} ${C.dim(audit ? `(${audit.auditCmd})` : "(no audit step)")}`,
   );
   console.log(
-    `  ${audit?.counts ? renderVulnLine(audit.counts) : C.dim(audit ? "counts unavailable" : "—")}`,
+    `  ${
+      audit?.counts
+        ? renderVulnLine(audit)
+        : audit?.degraded
+          ? C.yellow(`audit ${degradeReason(audit.outcome)} — vulnerabilities NOT checked`)
+          : C.dim(audit ? "counts unavailable" : "—")
+    }`,
   );
 
   console.log(`\n${C.bold("Tests")}`);
