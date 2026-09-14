@@ -84,8 +84,15 @@ overrides:
   # patched >=1.9.0 — 1.8.5 never existed on the registry: versions jump 1.8.4 -> 1.9.0 -> 1.10.0,
   # so `<1.9.0` is the accurate lower bound and behaves identically to the vulnerable set `<=1.8.4`).
   'shell-quote@<1.9.0': '1.10.0'
-  # svgo — the removeScripts plugin left some executable scripts intact (GHSA-2p49-hgcm-8545).
-  'svgo@>=4.0.0 <4.0.2': '4.0.2'
+  # svgo — the removeScripts plugin left executable content intact: some scripts
+  # (GHSA-2p49-hgcm-8545, patched 4.0.2), links smuggled through namespace and control-character
+  # bypasses (GHSA-w27v-7q3p-w38r, HIGH) and HTML inside <foreignObject> (GHSA-4vpr-x523-8j87),
+  # both patched >=4.1.0. Arrives via cssnano > postcss-svgo, from @nuxt/module-builder > mkdist
+  # and nuxt > @nuxt/vite-builder; module-builder 1.0.3 and mkdist 2.4.1 are the newest releases,
+  # so no parent bump carries the fix. Both parents request ^4.0.x, which permits 4.1.0 — the old
+  # 4.0.2 target was the pin that held the tree below the fix. Key and target raised together;
+  # 4.1.0 is the newest release in the major.
+  'svgo@>=4.0.0 <4.1.0': '4.1.0'
   # postcss path traversal in previous-source-map auto-loading via sourceMappingURL, leaking
   # arbitrary .map files (GHSA-r28c-9q8g-f849, patched >=8.5.18). Target raised 8.5.24 -> 8.5.26
   # (newest in the major): part of the tree already requested 8.5.26 on its own, so the older
