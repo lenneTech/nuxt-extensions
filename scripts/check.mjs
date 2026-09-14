@@ -92,10 +92,14 @@ function toFixCommand(kind, cmd) {
     if (/\bprettier\b/.test(cmd)) return cmd.replace(/\s--check\b/, " --write");
     return cmd;
   }
+  // `--fix` only. `--fix-suggestions` applies fixes oxlint itself marks as
+  // behaviour-changing: it deletes unused imports and `debugger` statements, and
+  // with no-console enabled it blanks every `console.log` — unasked, in a run
+  // that reports green.
   if (kind === "lint") {
     if (/\blint:fix\b/.test(cmd) || /--fix\b/.test(cmd)) return cmd;
     if (/\brun\s+lint\b/.test(cmd)) return cmd.replace(/\brun\s+lint\b/, "run lint:fix");
-    if (/\boxlint\b/.test(cmd)) return cmd.replace(/\boxlint\b/, "oxlint --fix --fix-suggestions");
+    if (/\boxlint\b/.test(cmd)) return cmd.replace(/\boxlint\b/, "oxlint --fix");
     return cmd;
   }
   // A version drift between package.json and the module's `meta.version` export
