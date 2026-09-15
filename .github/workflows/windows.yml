@@ -1,0 +1,114 @@
+name: Windows
+
+# Non-blocking until M5 of the Windows roadmap (decision D4). This is its own
+# workflow on purpose: publish.yml runs on `release` and waits for nothing, and
+# nothing may ever wait for this one — no `workflow_call`, no `needs`.
+on:
+  push:
+    branches:
+      - '*/*'
+      - '*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows (non-blocking)
+    runs-on: windows-latest
+    continue-on-error: true
+    timeout-minutes: 45
+
+    steps:
+      # Git for Windows' default. Setting it before the checkout makes this job
+      # prove that .gitattributes keeps the tree LF, instead of assuming it.
+      - name: Enable core.autocrlf
+        run: git config --global core.autocrlf true
+
+      - name: Git checkout
+        uses: actions/checkout@v4
+
+      # Only *.cmd / *.bat may be CRLF. The .githooks scripts run under sh and
+      # break with CRLF; oxfmt would report every CRLF file as unformatted.
+      - name: Verify LF line endings
+        shell: bash
+        run: |
+          crlf="$(git ls-files --eol | grep 'w/crlf' | grep -vE '\.(cmd|bat)$' || true)"
+          if [ -n "$crlf" ]; then
+            echo "Files checked out with CRLF:"
+            echo "$crlf"
+            exit 1
+          fi
+
+      - name: Install pnpm
+        if: ${{ !cancelled() }}
+        uses: pnpm/action-setup@v4
+
+      # Same runtime as build.yml, so a difference between the two is Windows.
+      - name: Use Node.js 24.x
+        if: ${{ !cancelled() }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        id: install
+        if: ${{ !cancelled() }}
+        run: pnpm install --frozen-lockfile
+
+      # The steps of `check:raw`, one by one. scripts/check.mjs aborts on the
+      # first failing step, so the wrapper alone cannot show whether a later step
+      # is red on Windows too. Each step runs whenever its own prerequisite
+      # succeeded, so every red step here is a finding of its own, not a
+      # consequence. `pnpm audit` is left to the wrapper: it is not
+      # platform-specific, and build.yml already reports it.
+      - name: Peer dependencies
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm peers check
+
+      - name: Format check
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run format:check
+
+      - name: Lint
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run lint
+
+      - name: Version sync check
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run version:check
+
+      - name: Prepare
+        id: prepare
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run dev:prepare
+
+      - name: Type check
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: pnpm test:types
+
+      - name: Test
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: pnpm test
+
+      - name: Build
+        id: build
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: pnpm run build
+
+      - name: Package manifest check
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: pnpm run check:manifest
+
+      # Last, because it auto-fixes format and lint: run earlier, it would hide a
+      # Windows-only format finding from the read-only steps above. Red here while
+      # every step above is green points at the wrapper itself.
+      - name: pnpm run check
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run check
