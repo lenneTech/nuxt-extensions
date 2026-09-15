@@ -61,7 +61,7 @@
     "dev:prepare": "nuxt-module-build build --stub && nuxt-module-build prepare && nuxt prepare playground",
     "build": "nuxt-module-build build",
     "lint": "oxlint src/ scripts/",
-    "lint:fix": "oxlint --fix --fix-suggestions src/ scripts/",
+    "lint:fix": "oxlint --fix src/ scripts/",
     "format": "oxfmt --write src/",
     "format:check": "oxfmt --check src/",
     "version:sync": "node scripts/sync-module-version.mjs",
