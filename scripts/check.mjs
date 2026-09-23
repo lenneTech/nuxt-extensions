@@ -25,7 +25,7 @@
  * Exit code: 0 when every step passed, 1 otherwise (preserves the contract the
  * lt-dev `running-check-script` skill relies on: non-zero === failed).
  */
-import { execSync, spawn } from "node:child_process";
+import { execFileSync, execSync, spawn } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,6 +40,7 @@ import {
   renderVulnLine,
   sumSeverities,
 } from "./lib/audit-report.mjs";
+import { killTreePlan } from "./lib/process-tree.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VERBOSE = process.argv.includes("--verbose") || process.argv.includes("-v");
@@ -223,6 +224,15 @@ const RUNNING = new Set();
 // zombie workers a deadlock leaves behind. Children are collected via pgrep
 // and killed leaves-first.
 function killTree(child, signal = "SIGTERM") {
+  const plan = killTreePlan(child.pid, signal);
+  if (plan.command) {
+    try {
+      execFileSync(plan.command, plan.args, { stdio: "ignore" });
+    } catch {
+      /* already gone, or taskkill refused — nothing further to try */
+    }
+    return;
+  }
   const pids = [];
   const collect = (pid) => {
     pids.push(pid);

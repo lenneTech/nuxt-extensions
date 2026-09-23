@@ -108,6 +108,7 @@
     "@vitest/coverage-v8": "4.1.11",
     "@vue/server-renderer": "3.5.41",
     "better-auth": "1.7.1",
+    "cross-spawn": "7.0.6",
     "happy-dom": "20.11.6",
     "nuxt": "4.5.2",
     "oxfmt": "0.64.0",

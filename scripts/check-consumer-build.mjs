@@ -23,11 +23,12 @@
  * Usage: node scripts/check-consumer-build.mjs [--keep]
  *   --keep  leave the temp project in place for inspection
  */
-import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { describeCommandFailure, runCommandSync } from "./lib/run-command.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const KEEP = process.argv.includes("--keep");
@@ -46,11 +47,10 @@ const omitted = Object.keys(optional).filter((name) => optional[name]?.optional 
 
 function run(cmd, args, cwd, label) {
   try {
-    return execFileSync(cmd, args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    return runCommandSync(cmd, args, { cwd, maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
   } catch (error) {
-    const out = `${error.stdout ?? ""}${error.stderr ?? ""}`.trim();
     console.error(`\n✗ ${label} failed\n`);
-    console.error(out.split("\n").slice(-30).join("\n"));
+    console.error(describeCommandFailure(error, 30));
     process.exit(1);
   }
 }

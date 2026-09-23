@@ -19,24 +19,25 @@
  *
  * Exit code: 0 when every promise holds, 1 otherwise.
  */
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { describeCommandFailure, runCommandSync } from "./lib/run-command.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
 
 let raw;
 try {
-  raw = execFileSync("npm", ["pack", "--dry-run", "--ignore-scripts", "--json"], {
+  raw = runCommandSync("npm", ["pack", "--dry-run", "--ignore-scripts", "--json"], {
     cwd: ROOT,
-    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
     stdio: ["ignore", "pipe", "pipe"],
   });
 } catch (error) {
   console.error("[package-manifest] `npm pack --dry-run` failed:");
-  console.error(`${error.stdout ?? ""}${error.stderr ?? ""}`.trim().split("\n").slice(-10).join("\n"));
+  console.error(describeCommandFailure(error));
   process.exit(1);
 }
 
