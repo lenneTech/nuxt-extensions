@@ -137,6 +137,13 @@ export function resetLtAuthClientSingleton(): void {
  * Get or create the auth client singleton.
  * This is the main entry point for accessing the auth client.
  * If plugins were registered after initial creation, the client is recreated.
+ *
+ * WARNING — on the server this singleton is shared by EVERY concurrent render in
+ * the Node process, not scoped to one request. It is safe today only because
+ * nothing user-specific hangs on it. Never attach request-scoped data to it —
+ * forwarded cookies, an Authorization header, a per-user fetch option: one
+ * user's session would be rendered into another user's response. Forwarding the
+ * browser's cookies during SSR needs a client created per request, not this one.
  */
 export function getOrCreateLtAuthClient(config?: LtAuthClientConfig): LtAuthClient {
   // Store config for potential recreation

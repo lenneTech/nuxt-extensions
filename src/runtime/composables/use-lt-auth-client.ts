@@ -41,6 +41,13 @@ export function resetLtAuthClient(): void {
  * This ensures Docker containers can be reconfigured without rebuilding.
  * Trailing slashes are automatically stripped.
  *
+ * During SSR the server-only `runtimeConfig.apiUrl` (`NUXT_API_URL`) comes first,
+ * the same chain as `resolveLtApiBaseUrl()`. The client is built on the server
+ * whenever `useLtAuth()` runs in setup, and a consumer's `getSession()` from a
+ * middleware or `useAsyncData` goes through it. The public URL may be a name only
+ * the browser resolves (on Windows `*.localhost` resolves in Chromium, not in
+ * Node), so the server must not depend on it when an internal address is set.
+ *
  * ## Proxy mode (`NUXT_PUBLIC_API_PROXY=true`)
  * When enabled, `baseURL` is set to `""` (same-origin) and `basePath` is
  * prefixed with `/api` (e.g., `/api/iam`). The Vite dev proxy forwards
@@ -53,6 +60,8 @@ export function useLtAuthClient(): LtAuthClient {
     const runtimeConfig = useRuntimeConfig();
     const config = runtimeConfig.public?.ltExtensions?.auth || {};
     const publicApiUrl = String(runtimeConfig.public?.apiUrl || '');
+    // Server-only URL (never promoted into the public bundle), SSR only
+    const serverApiUrl = import.meta.server ? String((runtimeConfig as Record<string, unknown>).apiUrl || '') : '';
 
     // When proxy is enabled, prefix basePath with /api for Vite dev proxy
     const useProxy = isLocalDevApiProxy();
@@ -63,10 +72,11 @@ export function useLtAuthClient(): LtAuthClient {
       basePath = `/api${basePath}`;
     }
 
-    // Resolve baseURL: prefer runtimeConfig.public.apiUrl (properly overridden
-    // at runtime by NUXT_PUBLIC_API_URL) over ltExtensions.auth.baseURL (which
-    // is baked at build time and may contain localhost fallbacks).
-    const authBaseURL = (publicApiUrl || config.baseURL || '').replace(/\/+$/, '');
+    // Resolve baseURL: on the server the internal NUXT_API_URL first; then
+    // runtimeConfig.public.apiUrl (properly overridden at runtime by
+    // NUXT_PUBLIC_API_URL) over ltExtensions.auth.baseURL (which is baked at
+    // build time and may contain localhost fallbacks).
+    const authBaseURL = (serverApiUrl || publicApiUrl || config.baseURL || '').replace(/\/+$/, '');
 
     return getOrCreateLtAuthClient({
       baseURL: useProxy ? '' : authBaseURL,
