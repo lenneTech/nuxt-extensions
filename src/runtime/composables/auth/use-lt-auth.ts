@@ -26,6 +26,11 @@ import { useLtAuthClient } from '../use-lt-auth-client';
 type LtUserOptionalKeys<T> = { [K in keyof T]-?: object extends Pick<T, K> ? K : never }[keyof T];
 
 /**
+ * Upper bound for `validateSession()` waiting on Better Auth's session request.
+ */
+const VALIDATE_SESSION_TIMEOUT_MS = 10_000;
+
+/**
  * Helper function for i18n with German fallback
  *
  * Two-stage fallback strategy:
@@ -413,20 +418,49 @@ export function useLtAuth(): UseLtAuthReturn {
    * cannot fail-close it. Intentional and self-healing (the next authenticated
    * request 401s a dead session), but it is exactly why `isAdmin` must remain a UI
    * gate: authorization is the backend's job, not this cache's.
+   *
+   * During SSR this does NOT contact the backend and answers from the request's
+   * `lt-auth-state` cookie alone. Better Auth's session atom never fetches when
+   * `window` is undefined (`client/query.mjs`: `if (isServer()) return;`), so
+   * `isPending` stays `true` for the whole server run and waiting on it used to
+   * hang the call — and with it the SSR response of any project that awaited it
+   * in setup, a middleware or `useAsyncData`. The client re-validates on mount.
+   * The server answer therefore means "the cookie claims a user", never "the
+   * session is valid": `lt-auth-state` is client-writable, so a forged value may
+   * shape the server-rendered UI but must never gate a decision.
+   *
+   * On the client the wait is bounded by `VALIDATE_SESSION_TIMEOUT_MS`; a session
+   * request that never settles then counts as "no session returned" and falls
+   * through to the cached-user branch (a slow line is not a logout), instead of
+   * leaving the caller pending.
+   *
+   * Both cached-user fallbacks read the duplicate-tolerant `resolvedAuthState`, not
+   * the raw `useCookie` ref: when host-only and domain-scoped twins disagree the ref
+   * may hold the empty one, and on the server nothing reconciles the two.
    */
   async function validateSession(): Promise<boolean> {
+    if (import.meta.server) {
+      return !!resolvedAuthState.value?.user;
+    }
+
     try {
       // Try to get session from Better Auth
       const session = authClient.useSession();
 
-      // Wait for session to load
+      // Wait for session to load, but never longer than the timeout
       if (session.value.isPending) {
         await new Promise((resolve) => {
-          const unwatch = watch(
+          let unwatch: (() => void) | undefined;
+          const timer = setTimeout(() => {
+            unwatch?.();
+            resolve(false);
+          }, VALIDATE_SESSION_TIMEOUT_MS);
+          unwatch = watch(
             () => session.value.isPending,
             (isPending: boolean) => {
               if (!isPending) {
-                unwatch();
+                clearTimeout(timer);
+                unwatch?.();
                 resolve(true);
               }
             },
@@ -447,7 +481,7 @@ export function useLtAuth(): UseLtAuthReturn {
       // Session not found from Better Auth API
       // Trust the stored auth-state if user exists (e.g., after 2FA verification)
       // The auth-state cookie is set by our application after successful login/2FA
-      if (authState.value?.user) {
+      if (resolvedAuthState.value?.user) {
         // Pre-fetch JWT for fallback
         switchToJwtMode().catch(() => {});
         return true;
@@ -455,7 +489,7 @@ export function useLtAuth(): UseLtAuthReturn {
 
       return false;
     } catch {
-      return !!authState.value?.user;
+      return !!resolvedAuthState.value?.user;
     }
   }
 
