@@ -9,11 +9,11 @@
  * nothing. A wrong display is worth less than a wrong gate.
  */
 
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { C } from "./ansi.mjs";
+import { runCommandSync } from "./run-command.mjs";
 
 export const SEVERITIES = ["critical", "high", "moderate", "low", "info"];
 
@@ -371,8 +371,7 @@ export function configuredRegistry() {
   const fromEnv = process.env.npm_config_registry ?? process.env.NPM_CONFIG_REGISTRY;
   if (typeof fromEnv === "string" && fromEnv.trim()) return fromEnv.trim();
   try {
-    return execFileSync("pnpm", ["config", "get", "registry"], {
-      encoding: "utf8",
+    return runCommandSync("pnpm", ["config", "get", "registry"], {
       stdio: ["ignore", "pipe", "ignore"],
     }).trim();
   } catch {

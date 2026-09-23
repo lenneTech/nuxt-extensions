@@ -1,8 +1,10 @@
 import { execSync } from 'node:child_process';
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+
+import { runCommandSync } from '../scripts/lib/run-command.mjs';
 
 // Guard the "packageManager as single source of truth" contract: Node >= 25 no
 // longer ships corepack, so the exact pnpm version must be pinned as
@@ -72,7 +74,13 @@ describe('packageManager pin contract', () => {
       const prefix = mkdtempSync(join(tmpdir(), 'pnpm-pin-'));
       try {
         execSync(`npm install -g --prefix "${prefix}" "${derived}"`, { encoding: 'utf8', stdio: 'pipe' });
-        const version = execSync(`"${join(prefix, 'bin', 'pnpm')}" --version`, { encoding: 'utf8' }).trim();
+        // npm's global layout differs per platform: `<prefix>/bin/pnpm` on macOS/Linux,
+        // `<prefix>\pnpm.cmd` directly in the prefix on Windows (measured on the runner:
+        // no `bin` directory exists there). Accept either, but exactly one — the test must
+        // run the pnpm it just installed, never one found on PATH.
+        const launchers = [join(prefix, 'bin', 'pnpm'), join(prefix, 'pnpm.cmd')].filter((path) => existsSync(path));
+        expect(launchers).toHaveLength(1);
+        const version = runCommandSync(launchers[0]!, ['--version']).trim();
         expect(`pnpm@${version}`).toBe(pinned);
       } finally {
         rmSync(prefix, { force: true, recursive: true });
