@@ -25,7 +25,7 @@
  * Exit code: 0 when every step passed, 1 otherwise (preserves the contract the
  * lt-dev `running-check-script` skill relies on: non-zero === failed).
  */
-import { execFileSync, execSync, spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,7 +40,7 @@ import {
   renderVulnLine,
   sumSeverities,
 } from "./lib/audit-report.mjs";
-import { killTreePlan } from "./lib/process-tree.mjs";
+import { killTreeWith } from "./lib/process-tree.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VERBOSE = process.argv.includes("--verbose") || process.argv.includes("-v");
@@ -131,7 +131,7 @@ function parseVitest(out) {
   const passed = sumMatches(clean, /Tests\s+(?:\d+\s+failed[^\n]*?)?(\d+)\s+passed/gi);
   const files = sumMatches(clean, /Test Files\s+(?:\d+\s+failed[^\n]*?)?(\d+)\s+passed/gi);
   const failed = sumMatches(clean, /Tests\s+(\d+)\s+failed/gi);
-  if (passed == null && files == null) return null;
+  if (passed === null && files === null) return null;
   return {
     failed: failed ?? 0,
     files,
@@ -219,41 +219,24 @@ const IDLE_TIMEOUT_MS = (() => {
 // ── command runner ─────────────────────────────────────────────────────────
 const RUNNING = new Set();
 
+/** Direct children of `pid` via `pgrep -P`; empty when there are none (pgrep exits 1). */
+function pgrepChildren(pid) {
+  const out = execFileSync("pgrep", ["-P", String(pid)], { stdio: ["ignore", "pipe", "ignore"] })
+    .toString()
+    .trim();
+  return out ? out.split("\n").map(Number) : [];
+}
+
 // Best-effort kill of a child's whole process tree (sh → pnpm → vitest →
 // fork workers). Killing only the direct child orphans the tree — exactly the
-// zombie workers a deadlock leaves behind. Children are collected via pgrep
-// and killed leaves-first.
+// zombie workers a deadlock leaves behind.
 function killTree(child, signal = "SIGTERM") {
-  const plan = killTreePlan(child.pid, signal);
-  if (plan.command) {
-    try {
-      execFileSync(plan.command, plan.args, { stdio: "ignore" });
-    } catch {
-      /* already gone, or taskkill refused — nothing further to try */
-    }
-    return;
-  }
-  const pids = [];
-  const collect = (pid) => {
-    pids.push(pid);
-    let out = "";
-    try {
-      out = execSync(`pgrep -P ${pid}`, { stdio: ["ignore", "pipe", "ignore"] })
-        .toString()
-        .trim();
-    } catch {
-      /* no children */
-    }
-    if (out) for (const p of out.split("\n")) collect(Number(p));
-  };
-  collect(child.pid);
-  for (const pid of pids.reverse()) {
-    try {
-      process.kill(pid, signal);
-    } catch {
-      /* already gone */
-    }
-  }
+  killTreeWith(child.pid, signal, {
+    childrenOf: pgrepChildren,
+    platform: process.platform,
+    run: (command, args) => execFileSync(command, args, { stdio: "ignore" }),
+    signal: (pid, sig) => process.kill(pid, sig),
+  });
 }
 
 // idleTimeoutMs > 0 arms the no-output watchdog for this child; 0 (the default)
@@ -645,9 +628,9 @@ function degradeReason(outcome) {
 // ── rendering helpers ─────────────────────────────────────────────────────────
 
 function metricSuffix(r) {
-  if (r.kind === "test" && r.tests?.passed != null) {
+  if (r.kind === "test" && typeof r.tests?.passed === "number") {
     const failed = r.tests.failed ? C.red(` / ${r.tests.failed} failed`) : "";
-    return `  ${C.dim(`${r.tests.passed} passed${r.tests.files != null ? ` / ${r.tests.files} files` : ""}`)}${failed}`;
+    return `  ${C.dim(`${r.tests.passed} passed${typeof r.tests.files === "number" ? ` / ${r.tests.files} files` : ""}`)}${failed}`;
   }
   if (r.kind === "lint" && r.lint) {
     return r.lint.warnings > 0
@@ -727,17 +710,17 @@ function report(started, results) {
   if (unit || api) {
     // Monorepo with app and/or api projects → the canonical area breakdown.
     console.log(
-      `  ${"Unit (app)".padEnd(18)}${unit?.passed != null ? `${unit.passed} passed` : C.dim("—")}`,
+      `  ${"Unit (app)".padEnd(18)}${typeof unit?.passed === "number" ? `${unit.passed} passed` : C.dim("—")}`,
     );
     console.log(
-      `  ${"API (api)".padEnd(18)}${api?.passed != null ? `${api.passed} passed` : C.dim("—")}`,
+      `  ${"API (api)".padEnd(18)}${typeof api?.passed === "number" ? `${api.passed} passed` : C.dim("—")}`,
     );
     console.log(`  ${"Playwright".padEnd(18)}${C.dim("— (run via `lt dev test` / CI)")}`);
   } else {
     // Single-package repo → one line per test-bearing project.
     for (const r of tests)
       console.log(
-        `  ${shortRel(r.project).padEnd(18)}${r.tests?.passed != null ? `${r.tests.passed} passed` : C.dim("—")}`,
+        `  ${shortRel(r.project).padEnd(18)}${typeof r.tests?.passed === "number" ? `${r.tests.passed} passed` : C.dim("—")}`,
       );
     if (tests.length === 0) console.log(`  ${C.dim("no test step")}`);
   }

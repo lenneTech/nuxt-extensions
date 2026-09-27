@@ -75,8 +75,44 @@ export async function waitForHydration(page: Page, options: { timeout?: number }
  * ```
  */
 export async function gotoAndWaitForHydration(page: Page, url: string, options: { timeout?: number } = {}): Promise<void> {
-  await page.goto(url);
+  await gotoWithAbortRetry(page, url);
   await waitForHydration(page, options);
+}
+
+/**
+ * `page.goto` that survives the page navigating away on its own while the goto is
+ * still pending.
+ *
+ * Chromium lets a hard navigation the page starts itself (`reloadNuxtApp()`,
+ * `location.href`, `navigateTo(..., { external: true })`) cancel a pending
+ * `page.goto` while the page holds user activation, which it does for a few
+ * seconds after any Playwright `click()`. A test that clicks a button whose
+ * handler reloads the app and then navigates on fails with
+ * `page.goto: net::ERR_ABORTED at <url>`. A client-side `navigateTo` (a history
+ * push) cancels nothing; without a preceding click, neither does a hard one.
+ *
+ * Re-issuing the goto is enough: the new navigation in turn cancels the page's
+ * still-pending one, so the test lands where it asked to. There is nothing to
+ * wait for in between — the competing navigation has not committed yet, so
+ * `waitForLoadState('load')` would return at once on the old document.
+ *
+ * Only `net::ERR_ABORTED` is retried, at most `maxAttempts` times in total; every
+ * other error propagates on the first attempt. A 204 response aborts the same way
+ * and still fails, only after the retries. Measured in Chromium, the only engine
+ * the lt starters test; other engines may word the abort differently.
+ */
+async function gotoWithAbortRetry(page: Page, url: string, maxAttempts = 3): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await page.goto(url);
+      return;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (attempt >= maxAttempts || !message.includes('net::ERR_ABORTED')) {
+        throw error;
+      }
+    }
+  }
 }
 
 /**

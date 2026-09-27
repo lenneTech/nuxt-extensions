@@ -66,10 +66,19 @@ overrides:
   # arrays, bypassing the CVE-2026-14257 mitigation — patched only in 5.0.9, which is why
   # the 5.x floor moved up from 5.0.8). One entry per affected major, each a patch bump
   # INSIDE that major — a wider range would force a dependency across two majors.
-  # The 2.x target tracks the newest release in that major (2.1.2 -> 2.1.4): an override key is a
-  # PIN, not a floor, so a target left behind the newest patch turns into a downgrade lock.
-  'brace-expansion@>=2.0.0 <2.1.2': '2.1.4'
-  'brace-expansion@>=5.0.0 <5.0.9': '5.0.9'
+  # Both targets track the newest release in their major: an override key is a PIN, not a floor,
+  # so a target left behind the newest patch turns into a downgrade lock.
+  #
+  # Verified 2026-09-27 against the GitHub advisory database:
+  # - 2.x KEY widened `<2.1.2` -> `<2.1.4`. The old key encoded only GHSA-3jxr-9vmj-r5cp; the two
+  #   later advisories reach further in that major (GHSA-mh99-v99m-4gvg `<2.1.3`,
+  #   GHSA-rgw5-rvv9-x895 `<2.1.4`), so a 2.1.2 or 2.1.3 in the tree slipped past it. Target
+  #   2.1.4 -> 2.1.7 (newest 2.x). No 2.x copy is in this tree today (latent entry, mirrored).
+  # - 5.x key unchanged (all three advisories are fixed by 5.0.9). Target 5.0.9 -> 5.0.12
+  #   (newest 5.x): minimatch 10.2.6 requests ^5.0.8, which intersects the key, so the old target
+  #   was pinning brace-expansion below the newest patch.
+  'brace-expansion@>=2.0.0 <2.1.4': '2.1.7'
+  'brace-expansion@>=5.0.0 <5.0.9': '5.0.12'
   # The real lever for GHSA-mh99-v99m-4gvg: only brace-expansion 5.0.8 carries the fix, and
   # forcing it onto a minimatch@3 consumer throws "expand is not a function" (5.x exports a
   # namespace object, not a callable). minimatch 10.2.6 REQUESTS ^5.0.8, so lifting every
@@ -93,15 +102,30 @@ overrides:
   # 4.0.2 target was the pin that held the tree below the fix. Key and target raised together;
   # 4.1.0 is the newest release in the major.
   'svgo@>=4.0.0 <4.1.0': '4.1.0'
-  # postcss path traversal in previous-source-map auto-loading via sourceMappingURL, leaking
-  # arbitrary .map files (GHSA-r28c-9q8g-f849, patched >=8.5.18). Target raised 8.5.24 -> 8.5.26
-  # (newest in the major): part of the tree already requested 8.5.26 on its own, so the older
-  # target was pinning a second, redundant copy of postcss alongside it.
-  'postcss@<8.5.18': '8.5.26'
-  # nanoid — custom generators loop indefinitely when size is 0 (GHSA-qmxm-cq3q-gh8v, HIGH,
-  # patched >=3.3.17). Only the 3.x line is in this tree (via postcss); 3.3.18 is the current
-  # `legacy` dist-tag, so this stays inside the major the consumers ask for.
-  'nanoid@<3.3.17': '3.3.18'
+  # postcss — arbitrary .map file disclosure through an attacker-controlled sourceMappingURL:
+  # GHSA-6g55-p6wh-862q (HIGH, patched 8.5.12), GHSA-r28c-9q8g-f849 (HIGH, path traversal in
+  # previous-source-map auto-loading, patched 8.5.18) and GHSA-fxqj-rqcc-2cmp (MODERATE, the
+  # incomplete fix of the first one when `from` is unset, patched 8.5.23). Arrives via nuxt >
+  # @nuxt/vite-builder, @nuxt/module-builder > mkdist > cssnano and @nuxt/ui > tailwindcss.
+  #
+  # Verified 2026-09-27: KEY widened `<8.5.18` -> `<8.5.23` so it covers GHSA-fxqj-rqcc-2cmp
+  # (`<=8.5.22`), which the old key missed. Target 8.5.26 -> 8.5.28 (newest in the major): an
+  # in-range refresh resolved 8.5.28 for direct consumers while the old target still pinned the
+  # peer requests of autoprefixer and postcss-calc (both intersect the key) to 8.5.26 — two
+  # copies, and an unmet peer that `pnpm peers check` rejects. The same two-copy tell as the
+  # previous raise (8.5.24 -> 8.5.26).
+  'postcss@<8.5.23': '8.5.28'
+  # nanoid 3.x — GHSA-2v37-7h3g-55p8 (HIGH, custom generators loop indefinitely when size is 0,
+  # patched 3.3.18), GHSA-28wg-ghj8-5hjv (HIGH, non-secure generators loop with a negative size,
+  # patched 3.3.16) and GHSA-xwg4-73v4-xw9w (HIGH, integer overflow, patched 3.3.12). Only the
+  # 3.x line is in this tree (via postcss).
+  #
+  # Verified 2026-09-27: KEY widened `<3.3.17` -> `<3.3.18`. The id this entry used to cite,
+  # GHSA-qmxm-cq3q-gh8v ("patched 3.3.17"), no longer resolves in the advisory database; the
+  # same defect is GHSA-2v37-7h3g-55p8, patched only in 3.3.18 — so 3.3.17 slipped past the
+  # old key. Target 3.3.18 -> 3.3.19 (newest 3.x): the tree carried both, the old target
+  # pinning a second copy next to the 3.3.19 postcss requests on its own.
+  'nanoid@<3.3.18': '3.3.19'
   # esbuild — the dev server accepts requests from any origin on Windows, letting a malicious
   # page read arbitrary files through it (GHSA-g7r4-m6w7-qqqr, patched >=0.28.1). Entered this
   # tree with the @nuxt/ui devDependency, via @nuxt/fonts > fontless.
@@ -114,38 +138,54 @@ overrides:
   # reaches the published package.
   'fontless>esbuild': '0.28.2'
   # @tiptap/core — mergeAttributes() promotes an own `__proto__` key into inherited,
-  # executable DOM attributes (GHSA-cp6q-959q-f8rh, MODERATE, patched >=3.30.4). Entered
-  # this tree with the @nuxt/ui devDependency.
+  # executable DOM attributes (GHSA-cp6q-959q-f8rh, MODERATE, patched >=3.30.4), and a
+  # quadratic ReDoS in block and inline Markdown attribute parsing (GHSA-j95f-988m-3j2f, HIGH,
+  # >=3.7.0 <3.30.5, patched 3.30.5 — published 2026-09-08, after this entry was written).
+  # Entered this tree with the @nuxt/ui devDependency.
   #
-  # Worth knowing before anyone "simplifies" this away: @nuxt/ui asks for ^3.29.2, a range
-  # that ALREADY permits the fix, and 4.11.0 is its newest release — so neither an update
-  # nor a wider range helps. The tree sat on 3.30.2 because every sibling @tiptap/*
-  # package pins core to its own exact version, so core cannot move unless it is pushed.
+  # Verified 2026-09-27: KEY widened `<3.30.4` -> `<3.30.5` on both entries so it covers
+  # GHSA-j95f-988m-3j2f. The old key missed 3.30.4; audit stayed clean only because the old
+  # target happened to be exactly 3.30.5.
   #
-  # Deliberately 3.30.5 and not the newest (3.31.0): this block is mirrored into repos that
-  # DO enforce `minimumReleaseAge`, and on 2026-09-02 3.30.6 and 3.31.0 were 2 and 1 days
-  # old — both would have needed an exclude entry to install at all. 3.30.5 carries the fix,
-  # clears a 7d gate, and stays a patch step from the 3.30.2 the sibling extensions are
-  # built against instead of pulling core a minor ahead of them.
+  # Worth knowing before anyone "simplifies" this away: @nuxt/ui 4.11.2 asks for ^3.31.3 as a
+  # dependency but ALSO declares every @tiptap/* package as a non-optional peer `^3`, and pnpm
+  # resolves the peer. With a lockfile present it keeps whatever `^3` copy is already there
+  # (the siblings sat on 3.30.2 through the @nuxt/ui bump), and every sibling @tiptap/*
+  # package pins core to its own exact version — so core cannot move unless it is pushed.
+  #
+  # Target 3.31.3 = newest release in the 3.x major (raised from 3.30.5; Verified 2026-09-27).
+  # It is a PIN, not a floor, and the old target had become a downgrade lock: @nuxt/ui 4.11.2
+  # declares @tiptap/* as a non-optional peer `^3`, that range intersects the key, and pnpm
+  # rewrote the peer onto the target — holding core at 3.30.5 although @nuxt/ui 4.11.2 itself
+  # requests `^3.31.3` as a dependency. 3.31.3 is ~23d old, so it also clears the 7d
+  # `minimumReleaseAge` gate of the repos this block is mirrored into (the reason 3.30.5 was
+  # chosen on 2026-09-02, when 3.31.0 was one day old, no longer applies). The key keeps
+  # encoding the advisory window; only the target moved. Path: @nuxt/ui (devDependency) >
+  # @tiptap/* peers.
   #
   # TWO entries, and the second is not optional: the @tiptap packages peer their siblings
   # at an EXACT version, so lifting core alone leaves `@tiptap/pm` behind as an unmet peer
-  # (core@3.30.5 peers "@tiptap/pm": "3.30.5"). `pnpm audit` does not look at peer
+  # (core@3.31.3 peers "@tiptap/pm": "3.31.3"). `pnpm audit` does not look at peer
   # conflicts, so the tree reports zero vulnerabilities while being internally inconsistent
   # — `pnpm peers check` is the one that says so. The other three dozen @tiptap packages
   # need no entry: pnpm rewrites their peer requirement onto the overridden version.
-  '@tiptap/core@<3.30.4': '3.30.5'
-  '@tiptap/pm@<3.30.4': '3.30.5'
+  # Raise both keys and both targets together, always.
+  '@tiptap/core@<3.30.5': '3.31.3'
+  '@tiptap/pm@<3.30.5': '3.31.3'
 
-# No `minimumReleaseAge` gate is set in THIS repo, so the exclude list below is inert here. It is
-# mirrored — together with the overrides — into nuxt-base-starter / lt-monorepo, where an age gate
-# IS enforced and would otherwise block the freshest security fixes. Keep this list in sync with
-# THEIR threshold. As of 2026-08-23 every override target has aged well past a 7d gate (the newest,
-# postcss@8.5.26, is ~17d), so the list is currently belt-and-braces rather than load-bearing — it
-# only matters again when a future maintenance run raises a target to a just-published patch.
+# No explicit `minimumReleaseAge` is set in THIS repo, so pnpm 11's built-in 24h default applies in
+# LOOSE mode: an immature pick is not blocked — pnpm appends it to the list below and carries on.
+# After any install or update, `git diff pnpm-workspace.yaml` must show no entry nobody wrote.
+#
+# The list is mirrored — together with the overrides — into nuxt-base-starter / lt-monorepo, where
+# a stricter age gate IS enforced and would otherwise block the freshest security fixes. Keep it in
+# sync with THEIR threshold. As of 2026-09-27 every override target has aged past a 7d gate (the
+# newest, brace-expansion@2.1.7 / 5.0.12, are ~13d), so the list is belt-and-braces rather than
+# load-bearing — it only matters again when a maintenance run raises a target to a just-published
+# patch. The postcss entry follows its override target (8.5.26 -> 8.5.28, ~24d old).
 minimumReleaseAgeExclude:
   - minimatch@10.2.6
-  - postcss@8.5.26
+  - postcss@8.5.28
 
 # ----------------------------------------------------------------------------------
 # Accepted peer drift.

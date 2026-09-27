@@ -42,6 +42,8 @@ export default defineConfig({
   test: {
     environment: 'happy-dom',
     include: ['test/**/*.test.ts'],
+    // A test may only signal processes it spawned — see the header of the guard.
+    setupFiles: ['test/support/signal-guard.setup.ts'],
     /**
      * Type-level tests (`*.test-d.ts`) run as part of `pnpm test`.
      *

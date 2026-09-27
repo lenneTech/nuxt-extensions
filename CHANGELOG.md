@@ -5,6 +5,60 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.2] - 2026-09-27
+
+Two runtime fixes in the auth composables and one in the Playwright test helpers. No API changed
+and no configuration was added. Everything else is repository tooling and dev-dependency
+maintenance that does not reach the published package.
+
+### Fixed
+
+- **`validateSession()` no longer hangs a server render.** It waited for Better Auth's session atom
+  to stop pending, but Better Auth never fetches while `window` is undefined, so on the server the
+  wait never ended. A project calling it in `setup`, in a route middleware or inside `useAsyncData`
+  blocked its SSR response indefinitely. On the server it now answers from the request's
+  `lt-auth-state` cookie without contacting the backend. That answer means "the cookie claims a
+  user", never "the session is valid"; the client re-validates on mount. In the browser the wait is
+  capped at 10 s, and a timeout falls back to the same cookie answer instead of reporting a
+  signed-out user.
+- **The auth client resolves `NUXT_API_URL` first during SSR**, the same chain as
+  `resolveLtApiBaseUrl()`. A `getSession()` issued during SSR previously went to the public API
+  name, which the server cannot always resolve (on Windows, only Chromium resolves `*.localhost`).
+- **`gotoAndWaitForHydration` survives a page that navigates away on its own**
+  (`@lenne.tech/nuxt-extensions/testing`). After a Playwright `click()`, a hard navigation the page
+  starts itself (`reloadNuxtApp()`, `location.href`) cancels a pending `page.goto` in Chromium with
+  `net::ERR_ABORTED`. The helper now re-issues the goto, at most three attempts in total and only
+  for `net::ERR_ABORTED`; every other error still fails on the first attempt. A client-side
+  `navigateTo` never triggered this. Measured with Playwright 1.62.1 and 1.63.0: the bare goto
+  failed 3/3, the helper reached its target 5/5 with exactly one retry.
+
+### Changed (repository only, not part of the published package)
+
+- **The `check` script's watchdog only ever signals processes it spawned.** `isKillablePid` rejects
+  `undefined`, `0`, `-1`, `1` and Windows' `0` and `4`, for the root and for every pid `pgrep`
+  returns. Children are looked up with `execFileSync` instead of a shell string, and every effect
+  is injected (`scripts/lib/process-tree.mjs`, ported from lt-monorepo). A new vitest setup file
+  fails any unit test that signals a process it did not spawn.
+- **oxlint actually loads its config.** `oxlint.json` is now `.oxlintrc.json` (oxlint only
+  discovers the dotted name), auto-fix no longer applies `--fix-suggestions` (fixes oxlint itself
+  flags as possibly behaviour-changing), and the `eqeqeq` warnings this surfaced in
+  `scripts/check.mjs` are fixed without a behaviour change.
+- **Windows:** LF line endings are pinned in `.gitattributes`, and a non-blocking Windows workflow
+  runs the check chain. It is green now that `scripts/lib/run-command.mjs` spawns `pnpm` and `npm`
+  through cross-spawn.
+- **Dev dependencies refreshed:** `@nuxt/ui` 4.11.2, `reka-ui` 2.10.4, `@playwright/test` 1.63.0,
+  `@types/node` 26.6.3, `@vue/server-renderer` 3.5.43, `happy-dom` 20.14.5, `oxlint` 1.85.0,
+  `oxfmt` 0.70.0. The lockfile was re-resolved from scratch. `better-auth` stays on 1.7.1, in
+  lock-step with `@lenne.tech/nest-server`.
+
+### Security (this repository's own install)
+
+- devalue 5.9.4 (GHSA-9rgm-9g3h-6x36), svgo 4.1.0 and colord 2.10.0 close the advisories in the
+  dev tree. Override ranges that newer advisories had outgrown now cover them: `brace-expansion`
+  (GHSA-mh99-v99m-4gvg, GHSA-rgw5-rvv9-x895), `postcss` (GHSA-fxqj-rqcc-2cmp), `nanoid`
+  (GHSA-2v37-7h3g-55p8) and `@tiptap/core` / `@tiptap/pm` (GHSA-j95f-988m-3j2f, high). Overrides
+  apply only to this repository's install and do not propagate to consuming projects.
+
 ## [1.18.1] - 2026-09-04
 
 Repository tooling only — **no consumer-facing change**. The published package is
