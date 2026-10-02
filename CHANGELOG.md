@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.3] - 2026-10-02
+
+One fix that reaches consuming apps: the auth interceptor plugin no longer triggers a build
+warning. Everything else is repository tooling that does not reach the published package.
+
+### Fixed
+
+- **No more `NUXT_B2007` warning from the auth interceptor.** `auth-interceptor.client.ts`
+  exported a bare function, so every app with `auth.interceptor.enabled` saw
+  `[NUXT_B2007] Plugin … is not wrapped in defineNuxtPlugin` at build time. It is now wrapped
+  like the module's other plugins. Runtime behaviour is unchanged: `defineNuxtPlugin` returns a
+  function plugin as is, and registration and order stay the same. Measured on the playground
+  build: one warning before, none after.
+
+### Changed (repository only, not part of the published package)
+
+- **Audit suppressions are re-checked on every `check`.** pnpm drops a suppressed advisory from
+  `pnpm audit --json` entirely, so nothing ever said when an `auditConfig.ignoreGhsas` entry lost
+  its reason. The new `check:suppressions` step looks every entry up in the GitHub Advisory
+  Database and the lockfile, and fails once a fix is installable from npm, the advisory is
+  withdrawn, or the package no longer resolves to a vulnerable version. A fix that is only
+  named, not published, still counts as unfixable. An entry it cannot verify (offline,
+  rate-limited) is reported as such, never as verified, and fails CI only when a token is set.
+  It also runs, non-blocking, in `build.yml`.
+- **The audit-summary test now reads this repository.** It resolved `new URL('..',
+  import.meta.url)` under the happy-dom environment to `/dist/module.mjs`, read a file that does
+  not exist, and reported zero suppressions whatever the workspace declared.
+
+### Security (this repository's own install)
+
+- GHSA-86w9-cpqp-85rv (high, node-forge `<=1.4.0`, via `listhen` in the Nuxt dev tooling) is
+  suppressed with a written justification. No patched release exists: npm names `>=1.4.1`, but
+  that version is not on the registry and GitHub lists no patched version. The published package
+  never reaches node-forge (`pnpm audit --prod` is clean), and listhen only uses it to generate
+  dev-server certificates, never to verify a signature. The entry goes once a fix is published,
+  which `check:suppressions` now reports.
+
 ## [1.18.2] - 2026-09-27
 
 Two runtime fixes in the auth composables and one in the Playwright test helpers. No API changed

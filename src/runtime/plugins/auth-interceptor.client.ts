@@ -17,12 +17,15 @@
  * management only makes sense in the browser context.
  */
 
-import type { NuxtApp } from '#app';
+import type { NuxtApp, ObjectPlugin, Plugin } from '#app';
+import { defineNuxtPlugin } from '#imports';
 
 import { useLtAuth } from '../composables/auth/use-lt-auth';
 import { getLtApiBase } from '../lib/auth-state';
 
-export default (nuxtApp: NuxtApp): void => {
+// Wrapped like every other plugin of this module: a bare function default export
+// makes Nuxt warn at build time (NUXT_B2007) in every consuming app.
+export default defineNuxtPlugin((nuxtApp: NuxtApp): void => {
   // Only run on client side
   if (import.meta.server) return;
 
@@ -324,4 +327,4 @@ export default (nuxtApp: NuxtApp): void => {
 
   // Provide a manual method to trigger logout on 401
   nuxtApp.provide('ltHandleUnauthorized', handleUnauthorized);
-};
+}) as Plugin & ObjectPlugin;

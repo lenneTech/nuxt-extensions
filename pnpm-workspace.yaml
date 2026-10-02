@@ -16,16 +16,15 @@ allowBuilds:
   vue-demi: false
 
 # ----------------------------------------------------------------------------------
-# No accepted advisories.
+# Accepted advisories: exactly one, in `auditConfig` below.
 #
-# There is deliberately no `auditConfig.ignoreGhsas` block here: `pnpm audit` is clean
-# on its own merits, with nothing suppressed. This is the last resort, because
-# suppression makes the audit green while the vulnerability is still present.
-#
-# If one ever becomes unavoidable, the bar is: name the advisory, trace the resolution
-# path, say why it cannot be fixed, say why the residual risk is acceptable, give the
-# condition for deleting the entry, and date the verification. One GHSA id per entry,
-# never a range or a whole package, so anything new still turns the audit red.
+# Suppression is the last resort, because it makes the audit green while the
+# vulnerability is still present. Every entry has to clear this bar: name the advisory,
+# trace the resolution path, say why it cannot be fixed, say why the residual risk is
+# acceptable, give the condition for deleting the entry, and date the verification. One
+# GHSA id per entry, never a range or a whole package, so anything new still turns the
+# audit red. test/audit-report.test.ts pins the number of entries, so adding one is a
+# deliberate edit there too.
 #
 # Two traps, both paid for elsewhere in the stack:
 #
@@ -37,7 +36,9 @@ allowBuilds:
 # 2. A suppression ages invisibly. It vanishes from `pnpm audit --json` completely, so
 #    nothing reminds you to re-check it. In nest-server one sat five weeks obsolete
 #    because the backport its justification called non-existent shipped a day after the
-#    assessment. Re-verify on a schedule, not on a prompt.
+#    assessment. Here `pnpm run check:suppressions` (part of `check`, and of build.yml)
+#    re-checks every entry against the GitHub Advisory Database and fails once its
+#    advisory gets an installable fix or is withdrawn.
 #
 # What the report does with one: `scripts/check.mjs` counts findings that are counted in
 # `metadata.vulnerabilities` but missing from `advisories`, and annotates the summary
@@ -46,6 +47,26 @@ allowBuilds:
 # `low` (which excludes `info`), and nobody has assessed it. See `dimmableSeverities`
 # in scripts/lib/audit-report.mjs; test/audit-report.test.ts pins the distinction.
 # ----------------------------------------------------------------------------------
+
+auditConfig:
+  ignoreGhsas:
+    # GHSA-86w9-cpqp-85rv (high): node-forge <=1.4.0 accepts extra nested DigestAlgorithm
+    # elements when VERIFYING an RSA PKCS#1 v1.5 signature (signature forgery).
+    # Path (dev tooling only): @nuxt/module-builder > @nuxt/cli > listhen > node-forge, and
+    #   nuxt > @nuxt/cli | @nuxt/nitro-server > nitropack > listhen > node-forge.
+    # Why it cannot be fixed: no patched release exists. `pnpm audit` names ">=1.4.1", but
+    #   registry.npmjs.org/node-forge/1.4.1 is a 404 and latest is 1.4.0; the GitHub advisory
+    #   lists first_patched_version = null; listhen 1.10.1 (latest) still requires ^1.4.0. An
+    #   override to 1.4.1 cannot resolve, and no parent bump drops node-forge.
+    # Why the residual risk is acceptable: the published package never reaches it (its only
+    #   dependency is @nuxt/kit; `pnpm audit --prod` reports 0 advisories). listhen uses
+    #   node-forge only to GENERATE self-signed dev-server certificates (generateKeyPair,
+    #   createCertificate, PEM conversion) and never verifies a signature, and neither package
+    #   ends up in any build output.
+    # Delete when: node-forge publishes a fixed version that listhen's range admits. Remove
+    #   this entry, re-resolve, and `pnpm audit` must be clean without it.
+    # Verified 2026-10-02.
+    - GHSA-86w9-cpqp-85rv
 
 # ----------------------------------------------------------------------------------
 # Security overrides: force vulnerable transitive deps onto patched versions.

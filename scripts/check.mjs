@@ -41,6 +41,7 @@ import {
   sumSeverities,
 } from "./lib/audit-report.mjs";
 import { killTreeWith } from "./lib/process-tree.mjs";
+import { parseSuppressionSummary } from "./lib/suppression-check.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VERBOSE = process.argv.includes("--verbose") || process.argv.includes("-v");
@@ -68,6 +69,10 @@ function classify(cmd) {
   const c = cmd.toLowerCase();
   if (c.includes("vendor-freshness"))
     return { fatal: false, kind: "vendor", label: "vendor-freshness" };
+  // Its own kind, so the summary line is parsed and an unverified run renders yellow
+  // instead of the plain tick an unclassified step would get.
+  if (c.includes("check:suppressions") || c.includes("check-suppressions"))
+    return { fatal: true, kind: "suppressions", label: "suppressions" };
   if (c.includes("audit")) return { fatal: true, kind: "audit", label: "audit" };
   if (c.includes("format:check") || c.includes("oxfmt") || c.includes("prettier"))
     return { fatal: true, kind: "format", label: "format" };
@@ -501,6 +506,7 @@ async function runGroup(group, states, results, abort) {
     const r = { dur, kind: step.kind, label: step.label, project: rel };
     if (step.kind === "test") r.tests = parseVitest(out);
     if (step.kind === "lint") r.lint = parseLint(out);
+    if (step.kind === "suppressions") r.suppressions = parseSuppressionSummary(out);
     results.push(r);
     if (code !== 0 && step.fatal) {
       st.failed = step.label;
@@ -631,6 +637,14 @@ function metricSuffix(r) {
   if (r.kind === "test" && typeof r.tests?.passed === "number") {
     const failed = r.tests.failed ? C.red(` / ${r.tests.failed} failed`) : "";
     return `  ${C.dim(`${r.tests.passed} passed${typeof r.tests.files === "number" ? ` / ${r.tests.files} files` : ""}`)}${failed}`;
+  }
+  // Unverified is yellow, never a plain tick: an entry nobody could check has not been checked.
+  if (r.kind === "suppressions" && r.suppressions) {
+    const s = r.suppressions;
+    if (s.state === "verified") return `  ${C.dim(`${s.total} verified`)}`;
+    if (s.state === "none") return `  ${C.dim("none declared")}`;
+    if (s.state === "unverified") return `  ${C.yellow(`${s.count} of ${s.total} NOT verified`)}`;
+    return `  ${C.red(`${s.count} obsolete`)}`;
   }
   if (r.kind === "lint" && r.lint) {
     return r.lint.warnings > 0

@@ -112,3 +112,7 @@ jobs:
       - name: pnpm run check
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm run check
+        # check:suppressions queries the GitHub Advisory API. With the token an entry it could not
+        # verify fails the run; without one it only warns (the runner's shared IP quota).
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

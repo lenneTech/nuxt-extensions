@@ -242,6 +242,17 @@ export function countUnlisted(parsed) {
  * Anything it cannot parse returns 0, which renders the numbers loud: the safe direction.
  */
 export function countSuppressions(root) {
+  return listSuppressions(root).length;
+}
+
+/**
+ * The GHSA ids this workspace suppresses via `auditConfig.ignoreGhsas`, in file order.
+ *
+ * The one parser behind both `countSuppressions` (the audit summary) and
+ * `scripts/check-suppressions.mjs` (which re-checks every entry against the GitHub Advisory
+ * Database), so the two can never disagree about which entries exist.
+ */
+export function listSuppressions(root) {
   for (const file of ["pnpm-workspace.yaml", "package.json"]) {
     let text;
     try {
@@ -261,20 +272,20 @@ export function countSuppressions(root) {
 
     // Inline form: `ignoreGhsas: [GHSA-x, GHSA-y]` or the JSON equivalent.
     const inline = lines[keyIdx].match(/ignoreGhsas"?\s*:\s*\[([^\]]*)\]/);
-    if (inline) return (inline[1].match(/GHSA-[0-9a-z]+(?:-[0-9a-z]+)*/gi) || []).length;
+    if (inline) return inline[1].match(/GHSA-[0-9a-z]+(?:-[0-9a-z]+)*/gi) || [];
 
     // Block form: subsequent `- GHSA-...` lines, stopping at the first line that is neither a
     // list entry nor a comment.
-    let found = 0;
+    const ids = [];
     for (const line of lines.slice(keyIdx + 1)) {
       if (/^\s*#/.test(line) || !line.trim()) continue;
       const entry = line.match(/^\s*-\s*"?(GHSA-[0-9a-z]+(?:-[0-9a-z]+)*)"?/i);
       if (!entry) break;
-      found += 1;
+      ids.push(entry[1]);
     }
-    return found;
+    return ids;
   }
-  return 0;
+  return [];
 }
 
 /**

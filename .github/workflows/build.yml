@@ -71,6 +71,16 @@ jobs:
         run: pnpm audit
         continue-on-error: true
 
+      # Same reasoning, same non-blocking status: re-checks every `auditConfig.ignoreGhsas`
+      # entry against the GitHub Advisory Database and goes red once a suppressed advisory gets
+      # an installable fix or is withdrawn — pnpm drops suppressed advisories from its report,
+      # so nothing else would ever say so. The token lifts the API quota off the runner's shared IP.
+      - name: Audit suppressions still justified
+        run: pnpm run check:suppressions
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
       - name: Save build
         uses: actions/upload-artifact@v4
         with:
