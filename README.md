@@ -29,8 +29,8 @@ Reusable Nuxt 4 composables, components, and Better-Auth integration for lenne.t
 |---|---|---|
 | Node | `>= 22` | |
 | Nuxt | `^4.0.0` | |
-| `better-auth` | `>=1.7.1 <1.8.0` | **required peer** — pin it, see below |
-| `@better-auth/passkey` | `>=1.7.1 <1.8.0` | optional peer, passkey/WebAuthn only |
+| `better-auth` | `>=1.7.7 <1.8.0` | **required peer** — pin it, see below |
+| `@better-auth/passkey` | `>=1.7.7 <1.8.0` | optional peer, passkey/WebAuthn only |
 | `tus-js-client` | `>=4.0.0` | optional peer, resumable uploads only |
 | `@lenne.tech/nest-server` | `>= 11.37.0` | **only if you use the backend** — see the lock-step rule |
 
@@ -38,7 +38,7 @@ Reusable Nuxt 4 composables, components, and Better-Auth integration for lenne.t
 better-auth is one protocol with two ends. This module is the client end and
 `@lenne.tech/nest-server` is the server end, and they must resolve the **same**
 better-auth minor. better-auth breaks in *minor* releases — 1.7 removed subpath
-exports and changed the 2FA response shape — so a caret (`^1.7.1`) would re-open the
+exports and changed the 2FA response shape — so a caret (`^1.7.7`) would re-open the
 hole at 1.8. If the api and the app drift apart, 2FA activation fails at runtime with a
 generic client error while **both** projects' checks stay green: each is internally
 consistent, and only the assembled workspace has both halves.
@@ -46,12 +46,17 @@ consistent, and only the assembled workspace has both halves.
 Raising better-auth therefore means raising it in `@lenne.tech/nest-server` **and**
 `@lenne.tech/nuxt-extensions` in one step.
 
+**Why the floor is 1.7.7:** better-auth below 1.7.7 is affected by
+[GHSA-965c-763c-88jm](https://github.com/better-auth/better-auth/security/advisories/GHSA-965c-763c-88jm)
+(critical): the OAuth state can be used as a magic link to sign in as another user. The flaw
+is in the server end, so your API must run 1.7.7 too, and the pin below keeps both halves on it.
+
 ## Installation
 
 ```bash
-npm install @lenne.tech/nuxt-extensions better-auth@1.7.1
+npm install @lenne.tech/nuxt-extensions better-auth@1.7.7
 # Optional: For passkey support
-npm install @better-auth/passkey@1.7.1
+npm install @better-auth/passkey@1.7.7
 # Optional: For TUS file uploads
 npm install tus-js-client
 ```
@@ -61,8 +66,8 @@ In a fullstack monorepo, pin it workspace-wide so the api and the app cannot dri
 ```yaml
 # pnpm-workspace.yaml
 overrides:
-  better-auth: 1.7.1
-  '@better-auth/passkey': 1.7.1
+  better-auth: 1.7.7
+  '@better-auth/passkey': 1.7.7
 ```
 
 ## Features

@@ -283,7 +283,7 @@ describe('createNpmVersionProbe', () => {
 describe('listSuppressions', () => {
   it('returns the ids this repo suppresses, in file order', () => {
     // `process.cwd()`, as in check-audit-wiring.test.ts (see the note in audit-report.test.ts).
-    expect(listSuppressions(process.cwd())).toEqual([ID]);
+    expect(listSuppressions(process.cwd())).toEqual([ID, 'GHSA-vfj7-8cjw-p6xm']);
   });
 });
 

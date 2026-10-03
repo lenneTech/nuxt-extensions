@@ -16,7 +16,7 @@ allowBuilds:
   vue-demi: false
 
 # ----------------------------------------------------------------------------------
-# Accepted advisories: exactly one, in `auditConfig` below.
+# Accepted advisories: exactly two, in `auditConfig` below.
 #
 # Suppression is the last resort, because it makes the audit green while the
 # vulnerability is still present. Every entry has to clear this bar: name the advisory,
@@ -67,6 +67,23 @@ auditConfig:
     #   this entry, re-resolve, and `pnpm audit` must be clean without it.
     # Verified 2026-10-02.
     - GHSA-86w9-cpqp-85rv
+    # GHSA-vfj7-8cjw-p6xm (high, CVE-2026-93687): braces <=3.0.3 recurses through its AST
+    # without a depth guard, so a deeply nested brace pattern exhausts the call stack and
+    # terminates the process (denial of service).
+    # Path (dev tooling only): nuxt > @nuxt/nitro-server > nitropack > globby (> fast-glob)
+    #   > micromatch@4.0.8 > braces@3.0.3.
+    # Why it cannot be fixed: no patched release exists. 3.0.3 is the newest version on the
+    #   registry, the GitHub advisory lists first_patched_version = null, the braces repository
+    #   has had no commit since 2025-01, and micromatch 4.0.8 (latest) still requires ^3.0.3.
+    #   There is nothing to override to.
+    # Why the residual risk is acceptable: the published package never reaches it (its only
+    #   dependency is @nuxt/kit; `pnpm why braces --prod` finds nothing). nitropack globs with
+    #   patterns from the project's own build configuration at build time, never with input
+    #   from a request, so there is nobody to send the nested pattern.
+    # Delete when: braces publishes a fixed version that micromatch's range admits. Remove this
+    #   entry, re-resolve, and `pnpm audit` must be clean without it.
+    # Verified 2026-10-03. nest-server suppresses the same advisory for its own dev path.
+    - GHSA-vfj7-8cjw-p6xm
 
 # ----------------------------------------------------------------------------------
 # Security overrides: force vulnerable transitive deps onto patched versions.

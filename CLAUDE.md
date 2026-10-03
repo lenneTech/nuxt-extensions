@@ -347,7 +347,7 @@ fields at `app:beforeMount` and restores them at `app:mounted`, dispatching a sy
    Handling" below).
 3. **Check existing composables** before creating new ones — this module may already provide what you need
 4. **Peer dependencies** (`better-auth`, `@better-auth/passkey`, `tus-js-client`) must be installed in the consuming project.
-   `better-auth` and `@better-auth/passkey` are pinned to **`>=1.7.1 <1.8.0`** — deliberately not a caret.
+   `better-auth` and `@better-auth/passkey` are pinned to **`>=1.7.7 <1.8.0`** — deliberately not a caret.
    **They move in lock-step with `@lenne.tech/nest-server`.** better-auth is one protocol with two ends;
    this module is the client end, nest-server the server end, and both declare the *same* narrow range.
    Raising it means raising it in **both** framework repos and pinning the new version in **both** starters,

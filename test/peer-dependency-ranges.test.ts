@@ -145,6 +145,26 @@ describe('peer dependency ranges', () => {
     expect(pkg.peerDependencies['@better-auth/passkey']).toBe(pkg.peerDependencies['better-auth']);
   });
 
+  it('does not bless a better-auth version with a known critical advisory', () => {
+    // GHSA-965c-763c-88jm (critical): the OAuth state can be replayed as a magic link to sign in
+    // as another user. Affects `>=1.4.0-beta.18 <1.7.7`, fixed in 1.7.7.
+    //
+    // The flaw is in the server end, which this module never runs. The floor still matters: an
+    // app resolving better-auth below the fix gets the advisory reported against its own
+    // lockfile, and the lock-step rule keeps this range byte-identical to nest-server's, which
+    // must exclude it. Lowering the floor again needs a better reason than "it still installs".
+    const fixedIn = '1.7.7';
+    for (const name of ['better-auth', '@better-auth/passkey']) {
+      const range: string = pkg.peerDependencies[name];
+      const floor = /(?:^|\s)>=\s*(\d+\.\d+\.\d+)/.exec(range)?.[1];
+      expect(floor, `expected a ">=" floor in ${name} "${range}"`).toBeTruthy();
+      expect(
+        satisfies(floor as string, `>=${fixedIn}`),
+        `${name} "${range}" admits versions affected by GHSA-965c-763c-88jm; the fix is ${fixedIn}.`,
+      ).toBe(true);
+    }
+  });
+
   it('does not bless a better-auth version that @better-auth/passkey rejects', async () => {
     // @better-auth/passkey peer-requires a better-auth version of its own. Our range
     // must not admit a `better-auth` that the passkey package would refuse, or we

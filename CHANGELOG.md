@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.4] - 2026-10-03
+
+Security release: the better-auth peer range moves to 1.7.7, in lock-step with
+`@lenne.tech/nest-server`. No code changed.
+
+### Security
+
+- **better-auth `>=1.7.7 <1.8.0`** (was `>=1.7.1 <1.8.0`), for both `better-auth` and
+  `@better-auth/passkey`. better-auth below 1.7.7 is affected by
+  [GHSA-965c-763c-88jm](https://github.com/better-auth/better-auth/security/advisories/GHSA-965c-763c-88jm)
+  (critical): the OAuth state can be used as a magic link to sign in as another user. The flaw is
+  in the server end, which this module never runs, but the range stays byte-identical to
+  nest-server's so the two ends cannot resolve different versions. `@better-auth/passkey@1.7.7`
+  itself requires `better-auth ^1.7.7`, so the floor could not stay lower anyway.
+
+  **Action required:** pin `better-auth` and `@better-auth/passkey` to `1.7.7` (in a monorepo,
+  in the workspace `overrides`) and update `@lenne.tech/nest-server` to 11.41.8, which declares the same
+  range. The API is what is vulnerable; updating only the app closes nothing. A project still
+  resolving 1.7.1 to 1.7.6 gets a peer-dependency warning from this release.
+
+  As of this release the advisory is listed only on better-auth's repository, not yet in the
+  global GitHub Advisory Database, so `pnpm audit` does not report it yet. Do not read a clean
+  audit as "not affected".
+
+### Changed (repository only, not part of the published package)
+
+- `test/peer-dependency-ranges.test.ts` fails if either peer floor admits a version affected by
+  GHSA-965c-763c-88jm again.
+
+### Security (this repository's own install)
+
+- GHSA-vfj7-8cjw-p6xm (high, braces `<=3.0.3`, stack exhaustion through deeply nested patterns,
+  via `nitropack` > `globby` > `micromatch` in the Nuxt build tooling) is suppressed with a
+  written justification. No patched release exists: 3.0.3 is the newest version and GitHub lists
+  no patched version. The published package never reaches braces, and nitropack only globs with
+  patterns from the project's own build configuration. `check:suppressions` reports when a fix
+  ships. Apps built on Nuxt carry the same path; their own audit decides for them.
+
 ## [1.18.3] - 2026-10-02
 
 One fix that reaches consuming apps: the auth interceptor plugin no longer triggers a build

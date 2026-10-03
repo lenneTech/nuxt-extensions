@@ -291,12 +291,12 @@ describe('countSuppressions', () => {
     expect(withWorkspace(yaml)).toBe(1);
   });
 
-  it('counts exactly the one documented suppression this repo carries (GHSA-86w9-cpqp-85rv)', () => {
-    // A second entry must be a deliberate edit here, not something that slips in unnoticed.
+  it('counts exactly the two documented suppressions this repo carries (node-forge, braces)', () => {
+    // A further entry must be a deliberate edit here, not something that slips in unnoticed.
     // `process.cwd()`, as in check-audit-wiring.test.ts. This test used `new URL('..',
     // import.meta.url)`, which under the happy-dom environment resolves to `/dist/module.mjs`:
     // it read a file that does not exist and reported 0 whatever the workspace declared.
-    expect(countSuppressions(process.cwd())).toBe(1);
+    expect(countSuppressions(process.cwd())).toBe(2);
   });
 
   it('reports none for a directory with no manifest at all', () => {
