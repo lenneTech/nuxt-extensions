@@ -33,6 +33,13 @@ Security release: the better-auth peer range moves to 1.7.7, in lock-step with
 
 - `test/peer-dependency-ranges.test.ts` fails if either peer floor admits a version affected by
   GHSA-965c-763c-88jm again.
+- Dev dependencies refreshed: vitest and @vitest/coverage-v8 4.1.11 → 5.0.3 (better-auth 1.7.7
+  accepts vitest 5 as a peer; no test or config change needed), @nuxt/ui 4.11.3 with the reka-ui
+  2.10.5 it pins, oxlint 1.86.0, oxfmt 0.71.0, vue-tsc 3.3.12, @types/node 26.6.4. TypeScript stays
+  on 5.9.3: vue-tsc and @nuxt/module-builder do not support 6 or 7 yet.
+- The two `brace-expansion` override keys now cover the three advisories published on 2026-09-29
+  (`<2.1.7`, `<5.0.12`). The targets were already the fixed versions, so the resolved tree does
+  not change; the wider keys stop a 2.1.4 to 2.1.6 or 5.0.9 to 5.0.11 copy from slipping past.
 
 ### Security (this repository's own install)
 

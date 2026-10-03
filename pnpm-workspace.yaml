@@ -98,25 +98,28 @@ auditConfig:
 # upstream has since requested on its own.
 # ----------------------------------------------------------------------------------
 overrides:
-  # brace-expansion DoS — three advisories: GHSA-3jxr-9vmj-r5cp (exponential-time expansion
+  # brace-expansion DoS — six advisories: GHSA-3jxr-9vmj-r5cp (exponential-time expansion
   # of consecutive non-expanding {} groups), GHSA-mh99-v99m-4gvg (unbounded expansion
-  # length -> OOM, patched in 5.0.8) and GHSA-rgw5-rvv9-x895 (unbounded intermediate
-  # arrays, bypassing the CVE-2026-14257 mitigation — patched only in 5.0.9, which is why
-  # the 5.x floor moved up from 5.0.8). One entry per affected major, each a patch bump
-  # INSIDE that major — a wider range would force a dependency across two majors.
-  # Both targets track the newest release in their major: an override key is a PIN, not a floor,
-  # so a target left behind the newest patch turns into a downgrade lock.
+  # length -> OOM, patched in 5.0.8), GHSA-rgw5-rvv9-x895 (unbounded intermediate
+  # arrays, bypassing the CVE-2026-14257 mitigation — patched in 5.0.9), and three published
+  # 2026-09-29: GHSA-6j4f-fj2g-mc7p (HIGH, 2.1.5 / 5.0.10), GHSA-qhr7-859c-m2p7 (HIGH,
+  # 2.1.6 / 5.0.11) and GHSA-q2hr-2g5m-vwhr (MODERATE, 2.1.7 / 5.0.12). One entry per affected
+  # major, each a patch bump INSIDE that major — a wider range would force a dependency across
+  # two majors. Both targets track the newest release in their major: an override key is a PIN,
+  # not a floor, so a target left behind the newest patch turns into a downgrade lock.
   #
-  # Verified 2026-09-27 against the GitHub advisory database:
-  # - 2.x KEY widened `<2.1.2` -> `<2.1.4`. The old key encoded only GHSA-3jxr-9vmj-r5cp; the two
-  #   later advisories reach further in that major (GHSA-mh99-v99m-4gvg `<2.1.3`,
-  #   GHSA-rgw5-rvv9-x895 `<2.1.4`), so a 2.1.2 or 2.1.3 in the tree slipped past it. Target
-  #   2.1.4 -> 2.1.7 (newest 2.x). No 2.x copy is in this tree today (latent entry, mirrored).
-  # - 5.x key unchanged (all three advisories are fixed by 5.0.9). Target 5.0.9 -> 5.0.12
-  #   (newest 5.x): minimatch 10.2.6 requests ^5.0.8, which intersects the key, so the old target
-  #   was pinning brace-expansion below the newest patch.
-  'brace-expansion@>=2.0.0 <2.1.4': '2.1.7'
-  'brace-expansion@>=5.0.0 <5.0.9': '5.0.12'
+  # Verified 2026-10-03 against the GitHub advisory database:
+  # - Both KEYS widened to the window of GHSA-q2hr-2g5m-vwhr, the furthest-reaching of the three
+  #   new advisories: 2.x `<2.1.4` -> `<2.1.7`, 5.x `<5.0.9` -> `<5.0.12`. The old keys let a
+  #   2.1.4-2.1.6 or 5.0.9-5.0.11 copy slip past; audit stayed clean only because both targets
+  #   (2.1.7, 5.0.12 — published 2026-09-14) already were the fixed-in versions. Targets
+  #   unchanged: still the newest release in each major. No 2.x copy is in this tree today
+  #   (latent entry, mirrored); minimatch 10.2.6 requests ^5.0.8, which intersects the 5.x key.
+  # - The 4.x line (4.0.0, 4.0.1) is also affected but has NO fix inside its major — the
+  #   advisories name 5.0.12. No 4.x copy is in this tree; the key deliberately stays at
+  #   `>=5.0.0` so it never drags a 4.x consumer across a major.
+  'brace-expansion@>=2.0.0 <2.1.7': '2.1.7'
+  'brace-expansion@>=5.0.0 <5.0.12': '5.0.12'
   # The real lever for GHSA-mh99-v99m-4gvg: only brace-expansion 5.0.8 carries the fix, and
   # forcing it onto a minimatch@3 consumer throws "expand is not a function" (5.x exports a
   # namespace object, not a callable). minimatch 10.2.6 REQUESTS ^5.0.8, so lifting every
@@ -130,6 +133,14 @@ overrides:
   # shell-quote quadratic-complexity DoS in parse() (GHSA-395f-4hp3-45gv, HIGH / CWE-407,
   # patched >=1.9.0 — 1.8.5 never existed on the registry: versions jump 1.8.4 -> 1.9.0 -> 1.10.0,
   # so `<1.9.0` is the accurate lower bound and behaves identically to the vulnerable set `<=1.8.4`).
+  # Path: nuxt > @nuxt/devtools > launch-editor (requests ^1.8.4, which intersects the key).
+  #
+  # Verified 2026-10-03: no advisory newer than GHSA-395f-4hp3-45gv, key unchanged. Target held
+  # at 1.10.0 although 1.11.0 (2026-09-29) and 1.12.0 (2026-10-02) exist: neither carries an
+  # advisory fix (parse/quote correctness fixes and new parse syntax), and both are younger than
+  # the 7d `minimumReleaseAge` gate of the repos this block is mirrored into — the same call made
+  # for @tiptap below. Because launch-editor's range intersects the key, 1.10.0 is a PIN: raise
+  # it to the newest 1.x once that has cleared 7d (1.12.0 does on 2026-10-09).
   'shell-quote@<1.9.0': '1.10.0'
   # svgo — the removeScripts plugin left executable content intact: some scripts
   # (GHSA-2p49-hgcm-8545, patched 4.0.2), links smuggled through namespace and control-character
@@ -174,6 +185,10 @@ overrides:
   # so this deliberately steps outside its declared range — safe here because 0.28.2 is already
   # resolved in this tree for other consumers, and because esbuild is dev-tooling that never
   # reaches the published package.
+  #
+  # Verified 2026-10-03: still load-bearing. A fresh resolve without the overrides block puts
+  # esbuild 0.27.7 back via @nuxt/ui > @nuxt/fonts 0.14.0 (latest) > fontless 0.2.1 (still
+  # `^0.27.0`), and `pnpm audit` reports GHSA-g7r4-m6w7-qqqr again. 0.28.2 is the newest 0.28.x.
   'fontless>esbuild': '0.28.2'
   # @tiptap/core — mergeAttributes() promotes an own `__proto__` key into inherited,
   # executable DOM attributes (GHSA-cp6q-959q-f8rh, MODERATE, patched >=3.30.4), and a
@@ -185,13 +200,13 @@ overrides:
   # GHSA-j95f-988m-3j2f. The old key missed 3.30.4; audit stayed clean only because the old
   # target happened to be exactly 3.30.5.
   #
-  # Worth knowing before anyone "simplifies" this away: @nuxt/ui 4.11.2 asks for ^3.31.3 as a
-  # dependency but ALSO declares every @tiptap/* package as a non-optional peer `^3`, and pnpm
+  # Worth knowing before anyone "simplifies" this away: @nuxt/ui (4.11.2 and 4.11.3 alike) asks
+  # for ^3.31.3 as a dependency but ALSO declares every @tiptap/* package as a non-optional peer `^3`, and pnpm
   # resolves the peer. With a lockfile present it keeps whatever `^3` copy is already there
   # (the siblings sat on 3.30.2 through the @nuxt/ui bump), and every sibling @tiptap/*
   # package pins core to its own exact version — so core cannot move unless it is pushed.
   #
-  # Target 3.31.3 = newest release in the 3.x major (raised from 3.30.5; Verified 2026-09-27).
+  # Target 3.31.3 = newest 3.x release when it was raised from 3.30.5 (Verified 2026-09-27).
   # It is a PIN, not a floor, and the old target had become a downgrade lock: @nuxt/ui 4.11.2
   # declares @tiptap/* as a non-optional peer `^3`, that range intersects the key, and pnpm
   # rewrote the peer onto the target — holding core at 3.30.5 although @nuxt/ui 4.11.2 itself
@@ -200,6 +215,17 @@ overrides:
   # chosen on 2026-09-02, when 3.31.0 was one day old, no longer applies). The key keeps
   # encoding the advisory window; only the target moved. Path: @nuxt/ui (devDependency) >
   # @tiptap/* peers.
+  #
+  # Verified 2026-10-03: no new @tiptap/core or @tiptap/pm advisory, keys unchanged. 3.31.3 is
+  # no longer the newest 3.x — 3.31.4 shipped 2026-09-30 (crash fixes, plus "prevent extra CSS
+  # declarations from being rendered from editor content", with no advisory attached). Target
+  # deliberately held at 3.31.3: 3.31.4 is younger than the 7d gate of the mirrored repos, the
+  # same call as 2026-09-02. Through the @nuxt/ui 4.11.2 -> 4.11.3 bump the committed lockfile
+  # kept the whole @tiptap family on one 3.31.3 copy. A resolve WITHOUT a lockfile does split it
+  # (measured 2026-10-03): the siblings and @nuxt/ui's own `^3.31.3` dependencies take 3.31.4,
+  # while the `^3` peer stays pinned to 3.31.3 — the downgrade-lock tell. Raise both targets to
+  # the newest 3.x once it has cleared 7d (3.31.4 does on 2026-10-07), via the fresh-resolve
+  # procedure, since `pnpm update` cannot move the auto-installed peers.
   #
   # TWO entries, and the second is not optional: the @tiptap packages peer their siblings
   # at an EXACT version, so lifting core alone leaves `@tiptap/pm` behind as an unmet peer
@@ -217,10 +243,12 @@ overrides:
 #
 # The list is mirrored — together with the overrides — into nuxt-base-starter / lt-monorepo, where
 # a stricter age gate IS enforced and would otherwise block the freshest security fixes. Keep it in
-# sync with THEIR threshold. As of 2026-09-27 every override target has aged past a 7d gate (the
-# newest, brace-expansion@2.1.7 / 5.0.12, are ~13d), so the list is belt-and-braces rather than
+# sync with THEIR threshold. As of 2026-10-03 every override target has aged past a 7d gate (the
+# newest, brace-expansion@2.1.7 / 5.0.12, are ~19d), so the list is belt-and-braces rather than
 # load-bearing — it only matters again when a maintenance run raises a target to a just-published
-# patch. The postcss entry follows its override target (8.5.26 -> 8.5.28, ~24d old).
+# patch. The postcss entry follows its override target (8.5.26 -> 8.5.28, ~30d old). The 2026-10-03
+# run deliberately raised NO target to a release younger than 7d (shell-quote and @tiptap are held
+# for that reason, see their entries), so this list gained nothing.
 minimumReleaseAgeExclude:
   - minimatch@10.2.6
   - postcss@8.5.28
