@@ -236,6 +236,28 @@ overrides:
   # Raise both keys and both targets together, always.
   '@tiptap/core@<3.30.5': '3.31.3'
   '@tiptap/pm@<3.30.5': '3.31.3'
+  # simple-git — four advisories, two of them critical: the VISUAL environment variable slips
+  # past the unsafe-editor check (GHSA-v5rq-49vh-5v5c, reported against the @simple-git/argv-parser
+  # <2.0.1 that 3.36.0 brings along), the trailer-command configuration slips past the
+  # unsafe-operation guard (GHSA-x6jw-m9v5-85vh, >=3.15.0 <4.0.1), plus two high ones — git
+  # configuration includes (GHSA-g4wm-2vf7-vfgr) and abbreviated long options
+  # (GHSA-858h-whjf-mvg5), both <=3.36.0. Path (dev tooling only): nuxt > @nuxt/devtools 3.4.2,
+  # which requests ^3.36.0.
+  #
+  # A MAJOR step, 3.36.0 -> 4.0.2, and it is the only fix: the critical window ends at <4.0.1 and
+  # the 3.x line ends at 3.36.0, so no clean 3.x exists. The key encodes that window, so this
+  # entry stops applying by itself once @nuxt/devtools requests a 4.x. 4.0.2 is the newest
+  # release and pins @simple-git/argv-parser to the clean 2.0.1 exactly, so that critical needs no
+  # entry of its own. @nuxt/devtools calls git.branch, git.revparse and git.status, all core API
+  # in 4.x. The one break is that 4.x dropped the ESM default export @nuxt/devtools imports —
+  # restored by `patches/simple-git@4.0.2.patch`, see `patchedDependencies` below.
+  # Verified 2026-10-06.
+  'simple-git@<4.0.1': '4.0.2'
+  # source-map-js — event-loop DoS through indexed source-map section offsets
+  # (GHSA-68fv-2mgg-jv7q, HIGH, >=1.0.0 <1.2.2). Arrives via @nuxt/kit > c12 > magicast and via
+  # postcss everywhere vite is. A patch step inside 1.2.x; 1.2.2 is the newest release.
+  # Verified 2026-10-06.
+  'source-map-js@>=1.0.0 <1.2.2': '1.2.2'
 
 # No explicit `minimumReleaseAge` is set in THIS repo, so pnpm 11's built-in 24h default applies in
 # LOOSE mode: an immature pick is not blocked — pnpm appends it to the list below and carries on.
@@ -249,9 +271,13 @@ overrides:
 # patch. The postcss entry follows its override target (8.5.26 -> 8.5.28, ~30d old). The 2026-10-03
 # run deliberately raised NO target to a release younger than 7d (shell-quote and @tiptap are held
 # for that reason, see their entries), so this list gained nothing.
+# 2026-10-06: source-map-js@1.2.2 (published 2026-09-30) is the only fix for its advisory and
+# clears a 7d gate on 2026-10-07 — listed so the mirrors can take it now; drop it after that.
+# simple-git@4.0.2 (2026-09-26) is already past 7d.
 minimumReleaseAgeExclude:
   - minimatch@10.2.6
   - postcss@8.5.28
+  - source-map-js@1.2.2
 
 # ----------------------------------------------------------------------------------
 # Accepted peer drift.
@@ -277,3 +303,15 @@ peerDependencyRules:
     # the `build` step is green on it, and the fix belongs upstream in mkdist's range.
     # Drop this line once mkdist widens it.
     'mkdist>vue-sfc-transformer': '0.2.5'
+
+# ----------------------------------------------------------------------------------
+# Patched dependencies. Like `overrides`, these apply only to an install rooted HERE —
+# `patches/` is not in the published `files`, and a consumer's tree is never patched.
+#
+# simple-git@4.0.2: re-adds the ESM default export 4.x dropped, so @nuxt/devtools'
+# `import Git from 'simple-git'` resolves after the security override above. The reasoning,
+# and why the pin to this exact version is deliberate, is in the patch file itself. Delete
+# both the entry and the patch once @nuxt/devtools imports `{ simpleGit }`.
+# ----------------------------------------------------------------------------------
+patchedDependencies:
+  simple-git@4.0.2: patches/simple-git@4.0.2.patch

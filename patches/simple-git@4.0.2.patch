@@ -1,0 +1,27 @@
+diff --git a/dist/index.mjs b/dist/index.mjs
+index f434ec5f34672a37dbd0d6ae3ff3c4b27f6abed5..71b2431b100a1b941f2d62d0699a914331bb2055 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -2890,6 +2890,21 @@ export {
+   xe as TaskConfigurationError,
+   Sn as grepQueryBuilder,
+   ko as pathspec,
+-  wo as simpleGit
++  wo as simpleGit,
++  // Restores the ESM default export that simple-git 4 removed.
++  //
++  // @nuxt/devtools does `import Git from 'simple-git'`, and the override to 4.x exists to close
++  // two critical and two high advisories in 3.36.0 — the 3.x line ends there, so the major is the
++  // only fix. Without this entry `nuxt prepare` aborts with "does not provide an export named
++  // 'default'".
++  //
++  // Security-neutral: it is the same binding the line above exports as `simpleGit`, so the
++  // factory and its hardened guards are untouched — only the module's surface changes back.
++  //
++  // `wo` is the MINIFIED internal name of that factory in this exact build, which is why the
++  // patch is pinned to 4.0.2: any other version renames it and the patch fails loudly instead of
++  // silently targeting the wrong binding. That failure is the signal to check whether
++  // @nuxt/devtools has moved to the named import, at which point this patch can be deleted.
++  wo as default
+ };
+ //# sourceMappingURL=index.mjs.map
