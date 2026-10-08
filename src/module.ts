@@ -110,6 +110,21 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
       nuxt.options.nitro.alias = { ...nuxt.options.nitro.alias, '@better-auth/passkey/client': passkeyStub };
     }
 
+    // `@nuxt/ui` is an OPTIONAL peer too: `runtime/lib/toast.ts` imports its `useToast`
+    // at the top level — the only lookup that works, because Nuxt UI exposes it as an
+    // auto-import and puts it on neither `nuxtApp` nor `globalThis`. Alias it onto a
+    // no-op stub when the package is absent, so a project with a different UI layer
+    // still builds and toasts degrade to the callers' console fallback. Resolved from
+    // both locations for the same reason as the passkey check above: aliasing the stub
+    // while Nuxt UI IS installed would silently swallow every toast.
+    const uiToastAvailable = !!(await tryResolveModule('@nuxt/ui/composables/useToast', [new URL(import.meta.url), pathToFileURL(`${nuxt.options.rootDir}/`)]));
+    if (!uiToastAvailable) {
+      const uiToastStub = resolve('./runtime/lib/ui-toast-stub');
+      nuxt.options.alias['@nuxt/ui/composables/useToast'] = uiToastStub;
+      nuxt.options.nitro ??= {};
+      nuxt.options.nitro.alias = { ...nuxt.options.nitro.alias, '@nuxt/ui/composables/useToast': uiToastStub };
+    }
+
     // Passkeys need the package, no matter what the project asked for.
     const enablePasskey = (resolvedOptions.auth?.enablePasskey ?? true) && passkeyAvailable;
     if ((resolvedOptions.auth?.enablePasskey ?? true) && !passkeyAvailable) {

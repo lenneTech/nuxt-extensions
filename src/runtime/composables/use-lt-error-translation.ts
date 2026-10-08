@@ -14,6 +14,7 @@ import type { LtErrorTranslationResponse, LtParsedError, UseLtErrorTranslationRe
 
 import { computed, ref, useState, useNuxtApp, useRuntimeConfig } from '#imports';
 import { buildLtApiUrl } from '../lib/auth-state';
+import { ltAddToast } from '../lib/toast';
 
 // Regex to parse #CODE: Message format
 const ERROR_CODE_REGEX = /^#([A-Z_]+_\d+):\s*(.+)$/;
@@ -213,24 +214,19 @@ export function useLtErrorTranslation(): UseLtErrorTranslationReturn {
 
     const parsed = parseError(errorOrMessage);
 
-    // Use Nuxt UI useToast composable via nuxtApp context
-    try {
-      nuxtApp.runWithContext(() => {
-        const toastComposable = (nuxtApp as any).useToast || (globalThis as any).useToast;
-        if (typeof toastComposable === 'function') {
-          const toast = toastComposable();
-          toast.add({
-            color: 'error',
-            title: title || t('lt.error.title', 'Fehler'),
-            description: parsed.translatedMessage,
-          });
-        } else {
-          // Nuxt UI not available, fallback to console
-          console.error('[LtErrorTranslation]', parsed.translatedMessage);
-        }
-      });
-    } catch {
-      // Toast failed, log to console
+    // Show it via Nuxt UI's toaster. `runWithContext` keeps the Nuxt instance
+    // available when this is called from outside a component (e.g. after an
+    // awaited API call in a composable), which `useToast()` needs for `useState`.
+    const shown = nuxtApp.runWithContext(() =>
+      ltAddToast({
+        color: 'error',
+        description: parsed.translatedMessage,
+        title: title || t('lt.error.title', 'Fehler'),
+      }),
+    );
+
+    // No toaster in this app (Nuxt UI not installed) — never swallow the error.
+    if (!shown) {
       console.error('[LtErrorTranslation]', parsed.translatedMessage);
     }
   }

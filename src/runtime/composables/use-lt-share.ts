@@ -8,6 +8,7 @@
  */
 
 import { useNuxtApp, useRoute } from '#imports';
+import { ltAddToast } from '../lib/toast';
 
 /**
  * Return type for useLtShare composable
@@ -78,22 +79,18 @@ export function useLtShare(): UseLtShareReturn {
       try {
         await navigator.clipboard.writeText(url ?? window.location.origin);
 
-        // Try to use toast notification if available (Nuxt UI)
-        const useToast = (nuxtApp as any).$useToast || (globalThis as any).useToast;
-        if (typeof useToast === 'function') {
-          try {
-            const toast = useToast();
-            toast.add({
-              color: 'success',
-              description: t('lt.share.copiedDescription', 'Der Link wurde in die Zwischenablage kopiert.'),
-              title: t('lt.share.copied', 'Link kopiert'),
-            });
-          } catch {
-            // Toast failed, log to console
-            console.debug('Link copied to clipboard');
-          }
-        } else {
-          // Nuxt UI not installed
+        // Confirm via Nuxt UI's toaster; `runWithContext` keeps the Nuxt
+        // instance available after the awaited clipboard write.
+        const shown = nuxtApp.runWithContext(() =>
+          ltAddToast({
+            color: 'success',
+            description: t('lt.share.copiedDescription', 'Der Link wurde in die Zwischenablage kopiert.'),
+            title: t('lt.share.copied', 'Link kopiert'),
+          }),
+        );
+
+        // No toaster in this app (Nuxt UI not installed).
+        if (!shown) {
           console.debug('Link copied to clipboard');
         }
       } catch (error) {

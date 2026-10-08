@@ -42,6 +42,15 @@ export default defineConfig({
   test: {
     environment: 'happy-dom',
     include: ['test/**/*.test.ts'],
+    server: {
+      deps: {
+        // Nuxt UI's runtime imports Nuxt's virtual `#imports`. Externalised, Node would
+        // try to resolve that against @nuxt/ui's own package.json and throw; inlined, it
+        // goes through the `#imports` alias above. Lets `lt-toast.test.ts` run against
+        // the REAL `useToast` instead of an invented fake.
+        inline: ['@nuxt/ui'],
+      },
+    },
     // A test may only signal processes it spawned — see the header of the guard.
     setupFiles: ['test/support/signal-guard.setup.ts'],
     /**
