@@ -52,8 +52,9 @@ auditConfig:
   ignoreGhsas:
     # GHSA-86w9-cpqp-85rv (high): node-forge <=1.4.0 accepts extra nested DigestAlgorithm
     # elements when VERIFYING an RSA PKCS#1 v1.5 signature (signature forgery).
-    # Path (dev tooling only): @nuxt/module-builder > @nuxt/cli > listhen > node-forge, and
-    #   nuxt > @nuxt/cli | @nuxt/nitro-server > nitropack > listhen > node-forge.
+    # Path (dev tooling only): @nuxt/module-builder > @nuxt/cli@3 (its `^3.37.0` peer) > listhen
+    #   > node-forge, and nuxt > @nuxt/nitro-server > nitropack > listhen > node-forge. Since
+    #   nuxt 4.6.0 nuxt's own @nuxt/cli is 4.x, which no longer depends on listhen.
     # Why it cannot be fixed: no patched release exists. `pnpm audit` names ">=1.4.1", but
     #   registry.npmjs.org/node-forge/1.4.1 is a 404 and latest is 1.4.0; the GitHub advisory
     #   lists first_patched_version = null; listhen 1.10.1 (latest) still requires ^1.4.0. An
@@ -65,7 +66,7 @@ auditConfig:
     #   ends up in any build output.
     # Delete when: node-forge publishes a fixed version that listhen's range admits. Remove
     #   this entry, re-resolve, and `pnpm audit` must be clean without it.
-    # Verified 2026-10-02.
+    # Verified 2026-10-08 (node-forge latest still 1.4.0, listhen 1.10.1 still `^1.4.0`).
     - GHSA-86w9-cpqp-85rv
     # GHSA-vfj7-8cjw-p6xm (high, CVE-2026-93687): braces <=3.0.3 recurses through its AST
     # without a depth guard, so a deeply nested brace pattern exhausts the call stack and
@@ -141,6 +142,10 @@ overrides:
   # mirrored into. 1.12.0 (2026-10-02, parse syntax additions, no further advisory fix) clears
   # that gate on 2026-10-09 — raise the target to it then, or drop the entry once launch-editor
   # requests ^1.11.0 itself.
+  # Verified 2026-10-08: launch-editor 2.14.2 now requests ^1.10.0 — still inside the key, so the
+  # drop condition is not met. A fresh resolve without the overrides block picks 1.12.0, so the
+  # 1.11.0 target is a known downgrade lock until that raise; it is not a vulnerability (1.11.0 is
+  # the fixed-in version).
   'shell-quote@<1.11.0': '1.11.0'
   # svgo — the removeScripts plugin left executable content intact: some scripts
   # (GHSA-2p49-hgcm-8545, patched 4.0.2), links smuggled through namespace and control-character
@@ -163,6 +168,16 @@ overrides:
   # peer requests of autoprefixer and postcss-calc (both intersect the key) to 8.5.26 — two
   # copies, and an unmet peer that `pnpm peers check` rejects. The same two-copy tell as the
   # previous raise (8.5.24 -> 8.5.26).
+  #
+  # Verified 2026-10-08: no new postcss advisory, key unchanged. Target deliberately HELD at 8.5.28
+  # although 8.5.29 (2026-10-05, no advisory attached) is the newest 8.x: it is younger than the 7d
+  # gate of the repos this block is mirrored into. That makes 8.5.28 a downgrade lock today, and it
+  # has a visible consequence: nuxt 4.6.0's @nuxt/vite-builder requests `^8.5.28`, which does NOT
+  # intersect the key, so a resolve WITHOUT a lockfile takes 8.5.29 for it while autoprefixer's
+  # peer request (intersects the key) stays pinned to 8.5.28 — two copies and an unmet peer that
+  # `pnpm peers check` rejects. The committed lockfile carries ONE 8.5.28 copy (fresh resolve with
+  # postcss held at 8.5.28, then re-resolved against this block unchanged). Raise the target to the
+  # newest 8.5.x once 8.5.29 has cleared 7d (2026-10-12), via a fresh resolve.
   'postcss@<8.5.23': '8.5.28'
   # nanoid 3.x — GHSA-2v37-7h3g-55p8 (HIGH, custom generators loop indefinitely when size is 0,
   # patched 3.3.18), GHSA-28wg-ghj8-5hjv (HIGH, non-secure generators loop with a negative size,
@@ -174,6 +189,12 @@ overrides:
   # same defect is GHSA-2v37-7h3g-55p8, patched only in 3.3.18 — so 3.3.17 slipped past the
   # old key. Target 3.3.18 -> 3.3.19 (newest 3.x): the tree carried both, the old target
   # pinning a second copy next to the 3.3.19 postcss requests on its own.
+  #
+  # Verified 2026-10-08: latent in this tree. postcss 8.5.28 requests ^3.3.18, which no longer
+  # intersects the key, so the tree resolves nanoid 3.3.20 (2026-10-05, no advisory attached) on
+  # its own — identical with and without the overrides block. Kept for the mirrored repos, where an
+  # older postcss can still request into the window. Raise the target to 3.3.20 once it has
+  # cleared 7d (2026-10-12), so that a mirror's pinned copy matches the free one.
   'nanoid@<3.3.18': '3.3.19'
   # esbuild — the dev server accepts requests from any origin on Windows, letting a malicious
   # page read arbitrary files through it (GHSA-g7r4-m6w7-qqqr, patched >=0.28.1). Entered this
@@ -189,6 +210,9 @@ overrides:
   # Verified 2026-10-03: still load-bearing. A fresh resolve without the overrides block puts
   # esbuild 0.27.7 back via @nuxt/ui > @nuxt/fonts 0.14.0 (latest) > fontless 0.2.1 (still
   # `^0.27.0`), and `pnpm audit` reports GHSA-g7r4-m6w7-qqqr again. 0.28.2 is the newest 0.28.x.
+  # Re-verified 2026-10-08 with the same probe and result. fontless 1.x no longer depends on
+  # esbuild, but @nuxt/fonts 0.14.0 (still latest) requests fontless ^0.2.1 — drop this entry
+  # once @nuxt/fonts moves to fontless 1.x.
   'fontless>esbuild': '0.28.2'
   # @tiptap/core — mergeAttributes() promotes an own `__proto__` key into inherited,
   # executable DOM attributes (GHSA-cp6q-959q-f8rh, MODERATE, patched >=3.30.4), and a
@@ -227,15 +251,20 @@ overrides:
   # the newest 3.x once it has cleared 7d (3.31.4 does on 2026-10-07), via the fresh-resolve
   # procedure, since `pnpm update` cannot move the auto-installed peers.
   #
+  # Raised 2026-10-08: both targets 3.31.3 -> 3.31.4 (published 2026-09-30, 7.7d old, still the
+  # newest 3.x), keys unchanged — no new @tiptap/core or @tiptap/pm advisory. Done via a fresh
+  # resolve; the whole @tiptap family (37 packages) now sits on ONE 3.31.4 copy, and a fresh
+  # resolve without the overrides block yields the identical 3.31.4 — no longer a downgrade lock.
+  #
   # TWO entries, and the second is not optional: the @tiptap packages peer their siblings
   # at an EXACT version, so lifting core alone leaves `@tiptap/pm` behind as an unmet peer
-  # (core@3.31.3 peers "@tiptap/pm": "3.31.3"). `pnpm audit` does not look at peer
+  # (core@3.31.4 peers "@tiptap/pm": "3.31.4"). `pnpm audit` does not look at peer
   # conflicts, so the tree reports zero vulnerabilities while being internally inconsistent
   # — `pnpm peers check` is the one that says so. The other three dozen @tiptap packages
   # need no entry: pnpm rewrites their peer requirement onto the overridden version.
   # Raise both keys and both targets together, always.
-  '@tiptap/core@<3.30.5': '3.31.3'
-  '@tiptap/pm@<3.30.5': '3.31.3'
+  '@tiptap/core@<3.30.5': '3.31.4'
+  '@tiptap/pm@<3.30.5': '3.31.4'
   # simple-git — four advisories, two of them critical: the VISUAL environment variable slips
   # past the unsafe-editor check (GHSA-v5rq-49vh-5v5c, reported against the @simple-git/argv-parser
   # <2.0.1 that 3.36.0 brings along), the trailer-command configuration slips past the
@@ -274,10 +303,12 @@ overrides:
 # 2026-10-06: source-map-js@1.2.2 (published 2026-09-30) is the only fix for its advisory and
 # clears a 7d gate on 2026-10-07 — listed so the mirrors can take it now; drop it after that.
 # simple-git@4.0.2 (2026-09-26) is already past 7d.
+# 2026-10-08: source-map-js@1.2.2 dropped — its condition above is met (8d old). The @tiptap raise
+# to 3.31.4 (7.7d) needs no entry; postcss / nanoid / shell-quote targets were held instead of
+# being raised to <7d releases, so nothing was added.
 minimumReleaseAgeExclude:
   - minimatch@10.2.6
   - postcss@8.5.28
-  - source-map-js@1.2.2
 
 # ----------------------------------------------------------------------------------
 # Accepted peer drift.

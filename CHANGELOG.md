@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.5] - 2026-10-08
+
+Bug-fix release: `showErrorToast()` and the clipboard fallback of `useLtShare()` show a
+visible toast again. No API changes.
+
+### Fixed
+
+- **`showErrorToast()` and `useLtShare().share()` never showed a toast.** Both looked Nuxt UI's
+  `useToast` up on `nuxtApp` / `globalThis`, where Nuxt UI never puts it (it is an auto-import
+  only), so the lookup was always `undefined` and every message went to the console instead:
+  `[LtErrorTranslation] …` for errors, `Link copied to clipboard` for the share fallback. A new
+  internal helper imports `useToast` from `@nuxt/ui/composables/useToast` directly, so the toast
+  lands in the array `<UApp>` / `<UToaster>` renders.
+
+  `@nuxt/ui` stays optional. Without it, the module aliases that specifier onto a no-op stub
+  (the same pattern as the `@better-auth/passkey` stub) and both functions keep their console
+  fallback, so a project with a different UI layer builds and behaves as before.
+
+  **Action:** none required. If your project worked around the missing toast — calling
+  `translateError()` and building its own `useToast().add()` because `showErrorToast()` stayed
+  silent — that workaround keeps working, and you can switch back to `showErrorToast()`. Vendored
+  cores (`app/core/`) that patched this locally can drop the patch on their next sync.
+
+### Changed (repository only, not part of the published package)
+
+- `test/lt-toast.test.ts` runs against the real Nuxt UI `useToast` and asserts on the toast
+  state `<UToaster>` renders. `vitest.config.ts` inlines `@nuxt/ui` so its `#imports` goes
+  through the existing stub.
+- Dev dependencies refreshed: nuxt and @nuxt/schema 4.6.0, oxlint 1.87.0, oxfmt 0.72.0 (no
+  reformatting). The lockfile resolves `@nuxt/kit` 4.6.0; the declared range stays `^4.0.0`.
+  TypeScript stays on 5.9.3 (vue-tsc 3.3.12 still loads `typescript/lib/tsc`, which TS 7 no longer
+  ships, and @nuxt/module-builder 1.0.3 accepts only `^5.9.3`); reka-ui stays on the 2.10.5 that
+  @nuxt/ui 4.11.3 pins.
+- The `@tiptap/core` / `@tiptap/pm` override targets move to 3.31.4 now that it has cleared the
+  release-age gate, and the expired `source-map-js@1.2.2` entry leaves `minimumReleaseAgeExclude`.
+
+### Security (this repository's own install)
+
+- GHSA-pqg4-j6r4-53mv (critical, shell-quote `quote()` command injection, `>=1.8.4 <1.11.0`,
+  via `nuxt` > `@nuxt/devtools` > `launch-editor`, dev tree only): the existing
+  `shell-quote@<1.9.0` override pinned 1.10.0, which the new advisory covers, so `pnpm audit`
+  went red. The override is now `shell-quote@<1.11.0` → 1.11.0, the first patched release. The
+  published package never reaches shell-quote. The same override block is mirrored into
+  nuxt-base-starter and lt-monorepo.
+
 ## [1.18.4] - 2026-10-03
 
 Security release: the better-auth peer range moves to 1.7.7, in lock-step with
