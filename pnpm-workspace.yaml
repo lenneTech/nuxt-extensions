@@ -66,7 +66,8 @@ auditConfig:
     #   ends up in any build output.
     # Delete when: node-forge publishes a fixed version that listhen's range admits. Remove
     #   this entry, re-resolve, and `pnpm audit` must be clean without it.
-    # Verified 2026-10-08 (node-forge latest still 1.4.0, listhen 1.10.1 still `^1.4.0`).
+    # Verified 2026-10-09 (node-forge latest still 1.4.0, first_patched_version still null,
+    #   listhen 1.10.1 still `^1.4.0`).
     - GHSA-86w9-cpqp-85rv
     # GHSA-vfj7-8cjw-p6xm (high, CVE-2026-93687): braces <=3.0.3 recurses through its AST
     # without a depth guard, so a deeply nested brace pattern exhausts the call stack and
@@ -83,7 +84,9 @@ auditConfig:
     #   from a request, so there is nobody to send the nested pattern.
     # Delete when: braces publishes a fixed version that micromatch's range admits. Remove this
     #   entry, re-resolve, and `pnpm audit` must be clean without it.
-    # Verified 2026-10-03. nest-server suppresses the same advisory for its own dev path.
+    # Verified 2026-10-09 (braces latest still 3.0.3, first_patched_version still null,
+    #   micromatch 4.0.8 still `^3.0.3`). nest-server suppresses the same advisory for its own
+    #   dev path.
     - GHSA-vfj7-8cjw-p6xm
 
 # ----------------------------------------------------------------------------------
@@ -146,6 +149,10 @@ overrides:
   # drop condition is not met. A fresh resolve without the overrides block picks 1.12.0, so the
   # 1.11.0 target is a known downgrade lock until that raise; it is not a vulnerability (1.11.0 is
   # the fixed-in version).
+  # Re-checked 2026-10-09 02:25Z: no new shell-quote advisory, key unchanged. 1.12.0 (published
+  # 2026-10-02T14:58Z) is still short of 7d, so the target stays 1.11.0 — raise it on a run after
+  # 2026-10-09T15Z. launch-editor 2.14.2 (latest) still requests ^1.10.0; fresh resolve without
+  # the overrides block still picks 1.12.0.
   'shell-quote@<1.11.0': '1.11.0'
   # svgo — the removeScripts plugin left executable content intact: some scripts
   # (GHSA-2p49-hgcm-8545, patched 4.0.2), links smuggled through namespace and control-character
@@ -210,9 +217,9 @@ overrides:
   # Verified 2026-10-03: still load-bearing. A fresh resolve without the overrides block puts
   # esbuild 0.27.7 back via @nuxt/ui > @nuxt/fonts 0.14.0 (latest) > fontless 0.2.1 (still
   # `^0.27.0`), and `pnpm audit` reports GHSA-g7r4-m6w7-qqqr again. 0.28.2 is the newest 0.28.x.
-  # Re-verified 2026-10-08 with the same probe and result. fontless 1.x no longer depends on
-  # esbuild, but @nuxt/fonts 0.14.0 (still latest) requests fontless ^0.2.1 — drop this entry
-  # once @nuxt/fonts moves to fontless 1.x.
+  # Re-verified 2026-10-08 and 2026-10-09 (under pnpm 11.28.5) with the same probe and result.
+  # fontless 1.x no longer depends on esbuild, but @nuxt/fonts 0.14.0 (still latest) requests
+  # fontless ^0.2.1 — drop this entry once @nuxt/fonts moves to fontless 1.x.
   'fontless>esbuild': '0.28.2'
   # @tiptap/core — mergeAttributes() promotes an own `__proto__` key into inherited,
   # executable DOM attributes (GHSA-cp6q-959q-f8rh, MODERATE, patched >=3.30.4), and a
@@ -280,7 +287,9 @@ overrides:
   # entry of its own. @nuxt/devtools calls git.branch, git.revparse and git.status, all core API
   # in 4.x. The one break is that 4.x dropped the ESM default export @nuxt/devtools imports —
   # restored by `patches/simple-git@4.0.2.patch`, see `patchedDependencies` below.
-  # Verified 2026-10-06.
+  # Verified 2026-10-06. Re-verified 2026-10-09: still load-bearing — a fresh resolve without the
+  # overrides block puts simple-git 3.36.0 + @simple-git/argv-parser 1.1.1 back (2 critical,
+  # 2 high). @nuxt/devtools 3.4.2 still requests ^3.36.0; 4.0.2 is still the newest release.
   'simple-git@<4.0.1': '4.0.2'
   # source-map-js — event-loop DoS through indexed source-map section offsets
   # (GHSA-68fv-2mgg-jv7q, HIGH, >=1.0.0 <1.2.2). Arrives via @nuxt/kit > c12 > magicast and via
@@ -306,6 +315,8 @@ overrides:
 # 2026-10-08: source-map-js@1.2.2 dropped — its condition above is met (8d old). The @tiptap raise
 # to 3.31.4 (7.7d) needs no entry; postcss / nanoid / shell-quote targets were held instead of
 # being raised to <7d releases, so nothing was added.
+# 2026-10-09: no override target changed (shell-quote 1.12.0 still <7d at run time, postcss /
+# nanoid held to 2026-10-12), so this list is unchanged. The pnpm 11.28.5 installs added no entry.
 minimumReleaseAgeExclude:
   - minimatch@10.2.6
   - postcss@8.5.28

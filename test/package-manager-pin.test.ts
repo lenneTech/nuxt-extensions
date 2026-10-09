@@ -80,7 +80,13 @@ describe('packageManager pin contract', () => {
         // run the pnpm it just installed, never one found on PATH.
         const launchers = [join(prefix, 'bin', 'pnpm'), join(prefix, 'pnpm.cmd')].filter((path) => existsSync(path));
         expect(launchers).toHaveLength(1);
-        const version = runCommandSync(launchers[0]!, ['--version']).trim();
+        // Ask from inside the prefix, never from the repo: pnpm 11 honours the `packageManager`
+        // pin of the directory it runs in. Run from the repo, a wrongly provisioned pnpm@11.14.0
+        // switched to the pinned version and answered `--version` with 11.28.5, so this assertion
+        // was vacuous outside corepack — which is how CI provisions pnpm (pnpm/action-setup).
+        // Under corepack it refuses to switch and exits 1 instead (measured 2026-10-09). No
+        // package.json sits above os.tmpdir().
+        const version = runCommandSync(launchers[0]!, ['--version'], { cwd: prefix }).trim();
         expect(`pnpm@${version}`).toBe(pinned);
       } finally {
         rmSync(prefix, { force: true, recursive: true });

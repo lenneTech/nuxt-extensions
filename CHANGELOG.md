@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.6] - 2026-10-09
+
+Maintenance release: the repository's toolchain moves to pnpm 11.28.5, in step with
+nuxt-base-starter and lt-monorepo. No API or code changes, nothing to do in consuming projects.
+
+### Changed (repository only, not part of the published package)
+
+- `packageManager` is `pnpm@11.28.5` (was 11.14.0), the same pin and checksum as
+  nuxt-base-starter 2.31.4 and lt-monorepo. `engines.pnpm` stays `^11.0.0`; pnpm 12 is not
+  supported yet. The CI workflows read the version from `packageManager`, so nothing else moves.
+  A consuming project's package manager is not affected: pnpm and corepack only read
+  `packageManager` from the project's own root manifest.
+- `test/package-manager-pin.test.ts` asks the freshly provisioned pnpm for its version from
+  inside its install prefix. Asked from the repository, pnpm 11 switches to the version this
+  repository pins and reports that one, so in CI the check passed even for a wrongly
+  provisioned pnpm.
+- Dev dependencies refreshed: `@playwright/test` 1.64.0. The playground's `nuxt` follows the root
+  to 4.6.0 (it was left on 4.5.2 in 1.18.5). Transitive packages re-resolved within their ranges
+  (rolldown 1.2.13, rollup 4.64.2, vue-router 5.4.0, @babel/traverse 7.29.10, among others).
+- Held, with the reasons unchanged: TypeScript 5.9.3 (vue-tsc and @nuxt/module-builder do not
+  support 6 or 7 yet), reka-ui 2.10.5 (pinned by @nuxt/ui 4.11.3), and the `shell-quote`,
+  `postcss` and `nanoid` override targets until their newest releases clear the 7-day gate.
+  `shell-quote` 1.11.0 already contains the fix for GHSA-pqg4-j6r4-53mv.
+- The two audit suppressions (GHSA-86w9-cpqp-85rv in node-forge, GHSA-vfj7-8cjw-p6xm in braces)
+  were re-verified: neither package has a patched release yet.
+
 ## [1.18.5] - 2026-10-08
 
 Bug-fix release: `showErrorToast()` and the clipboard fallback of `useLtShare()` show a
