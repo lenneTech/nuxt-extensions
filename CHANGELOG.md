@@ -5,6 +5,73 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.19.0] - 2026-10-12
+
+TUS uploads work end to end: the upload reaches the API, the stored file's id is available after
+the upload, and uploads start in `nuxt dev`. **This minor contains a breaking change** for two
+setups (see below); the major digit tracks Nuxt, so it stays at 1. Migration guide:
+[1.18.x → 1.19.0](migration-guides/1.18.x-to-1.19.0.md).
+
+### Breaking
+
+- **A relative TUS endpoint is now a path on the API, not on the app.** It is resolved like the
+  auth and AI requests: `NUXT_PUBLIC_API_URL` + path, or `/api` + path while the dev proxy is on.
+  Before, it went to the app origin, where nothing serves TUS, so the upload answered 404 unless
+  the project had put its own proxy in front. Absolute endpoints are never rewritten.
+
+  **Action:** set `ltExtensions.tus.defaultEndpoint: '/tus'` (nest-server's TUS path). Projects
+  that route uploads through their own same-origin proxy set
+  `ltExtensions.tus.resolveAgainstApi: false`; an endpoint that carries the dev-proxy prefix
+  itself (`'/api/files/upload'`) drops it.
+
+### Added
+
+- `ltExtensions.tus.resolveAgainstApi` (default `true`) switches the endpoint resolution above.
+- `LtUploadItem.fileId`: the id of the stored file, from the `X-File-Id` header nest-server
+  11.42.13+ sends on the response that completes the upload. Use it for file links instead of the
+  last segment of `url` — that is the TUS upload id, and `/files/id/<it>` answers 404. It is read in
+  `onAfterResponse`, so it works across the whole `tus-js-client >=4.0.0` range (4.0 and 4.1 call
+  `onSuccess` without a payload), and it is set before `onSuccess` fires. Undefined against an
+  older nest-server.
+
+### Fixed
+
+- **`useLtTusUpload({ endpoint: undefined })` started no upload.** Options were spread over the
+  defaults as they came, so a key that was present but `undefined` — what a component forwards for
+  an unset prop, e.g. the starter's `TusFileUpload.vue` — erased the default endpoint, and
+  tus-js-client refused to start ("tus: neither an endpoint or an upload URL is provided").
+  `autoStart: undefined` turned auto-start off the same way. `undefined` options now fall back to
+  the defaults.
+- **Uploads failed in `nuxt dev` with "tus-js-client is not installed".** The module puts
+  tus-js-client into `build.transpile`, so Nuxt excludes it from Vite's dependency pre-bundling,
+  and its CommonJS dependency `url-parse` reached the browser unbundled ("does not provide an
+  export named 'default'"). The module now adds `tus-js-client > url-parse` to
+  `vite.optimizeDeps.include` when tus-js-client is installed. Production builds were not
+  affected.
+- **`useLtFile()` file URLs followed the TUS endpoint.** The base was derived by cutting `/upload`
+  out of `tus.defaultEndpoint`, so `'/tus'` pointed every file URL at `/tus/<id>`. The base is now
+  only derived from an endpoint ending in `/upload` (unchanged for `'/files/upload'`); any other
+  endpoint leaves it at `/files`.
+
+### Changed (repository only, not part of the published package)
+
+- New tests: `test/use-lt-tus-upload.test.ts` (option defaults, endpoint resolution incl. proxy
+  mode, `fileId` with and without an `onSuccess` payload), `test/use-lt-file.test.ts`,
+  `test/tus-module-options.test.ts` (the switch reaches the runtime config), and
+  `test/tus-optimize-deps.test.ts`, which derives the required nested includes from the installed
+  tus-js-client's browser build, so an upgrade that brings a new CommonJS dependency fails there
+  instead of in a consumer's dev server.
+- Dev dependencies refreshed: `nuxt` and `@nuxt/schema` 4.6.1 (the playground follows), `vue-tsc`
+  3.3.13, `happy-dom` 20.14.6, `@types/node` 26.6.5. The runtime dependency `@nuxt/kit` keeps its
+  `^4.0.0` range. Transitive packages re-resolved within their ranges (vite 8.3.4, rollup 4.64.5,
+  `@vitejs/plugin-vue` 6.0.10, among others).
+- Override targets raised: `shell-quote` 1.12.0, `postcss` 8.5.29 (nuxt 4.6.1 requires it; a lower
+  target would split postcss into two copies), `nanoid` 3.3.20. `postcss` 8.5.29 and `nanoid`
+  3.3.20 sit in `minimumReleaseAgeExclude` until they clear the 7-day gate.
+- Held, with the reasons unchanged: better-auth 1.7.7 and its peer range (lock-step with
+  nest-server, which also stays on 1.7.7), TypeScript 5.9.3, reka-ui 2.10.5. The two audit
+  suppressions were re-verified; neither package has a patched release yet.
+
 ## [1.18.6] - 2026-10-09
 
 Maintenance release: the repository's toolchain moves to pnpm 11.28.5, in step with

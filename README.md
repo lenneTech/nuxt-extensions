@@ -177,8 +177,9 @@ export default defineNuxtConfig({
 
     // TUS upload configuration
     tus: {
-      defaultEndpoint: '/files/upload',
+      defaultEndpoint: '/tus',            // nest-server's TUS path (module default: '/files/upload')
       defaultChunkSize: 5 * 1024 * 1024,  // 5MB
+      resolveAgainstApi: true,            // relative endpoint = path on the API, like auth/AI requests
     },
 
     // i18n configuration (optional)
@@ -536,8 +537,8 @@ const {
   resumeUpload,
   cancelUpload,
 } = useLtTusUpload({
-  endpoint: '/api/files/upload',
-  onSuccess: (item) => console.log('Uploaded:', item.url),
+  endpoint: '/tus', // optional — defaults to ltExtensions.tus.defaultEndpoint
+  onSuccess: (item) => console.log('Stored file:', item.fileId),
   onError: (item, error) => console.error('Failed:', error),
 });
 
@@ -574,6 +575,19 @@ function handleFileSelect(event: Event) {
   </div>
 </template>
 ```
+
+**Where the upload goes.** A relative endpoint is a path on the API: it is resolved like the auth
+requests — `NUXT_PUBLIC_API_URL` + path, or `/api` + path while the dev proxy is on
+(`NUXT_PUBLIC_API_PROXY=true`). So `'/tus'` works in every environment without per-stage config. An
+absolute URL is used as it is. If your project routes uploads through its own same-origin proxy
+instead, set `ltExtensions.tus.resolveAgainstApi: false` and the relative endpoint stays on the app
+origin.
+
+**Which id to keep.** After a successful upload, `item.fileId` is the id of the stored file, read
+from the `X-File-Id` response header (nest-server 11.42.13+). Use it for file links and references.
+`item.url` is the TUS upload resource; its last segment is the upload id, not the file id. `fileId`
+is undefined when the backend sends no such header (an older nest-server, or an `onUploadComplete()`
+override that never calls `super.onUploadComplete(upload)`).
 
 ### Transition Components
 

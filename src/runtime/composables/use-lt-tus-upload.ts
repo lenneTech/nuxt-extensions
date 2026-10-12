@@ -8,10 +8,35 @@
  */
 
 import { computed, ref, useRuntimeConfig } from '#imports';
+import { buildLtApiUrl } from '../lib/auth-state';
 import type { LtUploadItem, LtUploadOptions, LtUploadProgress, UseLtTusUploadReturn } from '../types';
 
 // Type for tus.Upload - import type only to avoid ESM issues
 type TusUpload = import('tus-js-client').Upload;
+
+/**
+ * Response header in which nest-server (11.42.13+, `TUS_FILE_ID_HEADER`) names the stored file.
+ * It is sent on the response that completes the upload and listed in `Access-Control-Expose-Headers`.
+ */
+const LT_TUS_FILE_ID_HEADER = 'X-File-Id';
+
+/** `https:`, `blob:` and friends, or protocol-relative `//host` — an endpoint that names its own origin. */
+const ABSOLUTE_URL = /^(?:[a-z][a-z\d+.-]*:|\/\/)/i;
+
+/**
+ * Resolve a relative upload endpoint against the API, the way auth and AI requests are resolved.
+ *
+ * A relative endpoint otherwise goes to the app origin, and nothing there serves TUS: the upload
+ * answers 404 unless the project put its own proxy in front — which is what `resolveAgainstApi:
+ * false` is for. Called when an upload is created, i.e. in the browser, so the server-only
+ * `NUXT_API_URL` never ends up in an upload URL.
+ */
+function resolveLtTusEndpoint(endpoint: string | undefined, resolveAgainstApi: boolean): string | undefined {
+  if (!endpoint || !resolveAgainstApi || ABSOLUTE_URL.test(endpoint)) {
+    return endpoint;
+  }
+  return buildLtApiUrl(endpoint.startsWith('/') ? endpoint : `/${endpoint}`);
+}
 
 // Lazy-loaded tus module
 let tusModule: typeof import('tus-js-client') | null = null;
@@ -39,8 +64,8 @@ async function getTusModule(): Promise<typeof import('tus-js-client')> {
  * @example
  * ```typescript
  * const { addFiles, uploads, totalProgress, isUploading } = useLtTusUpload({
- *   endpoint: '/api/files/upload',
- *   onSuccess: (item) => console.log('Uploaded:', item.url),
+ *   endpoint: '/tus', // a path on the API — resolved like the auth requests
+ *   onSuccess: (item) => console.log('Stored file:', item.fileId),
  * });
  *
  * // Add files from input
@@ -60,14 +85,18 @@ export function useLtTusUpload(defaultOptions: LtUploadOptions = {}): UseLtTusUp
   const uploadItems = ref<Map<string, LtUploadItem>>(new Map());
   const tusUploads = ref<Map<string, TusUpload>>(new Map());
 
-  // Default config from module options or provided options
+  // Default config from module options or provided options.
+  //
+  // Keys the caller set to `undefined` are dropped before the spread: a component forwarding
+  // an unset prop (`endpoint: props.endpoint`) would otherwise erase the default, and an upload
+  // without an endpoint is rejected by tus-js-client before any request is made.
   const defaultConfig: LtUploadOptions = {
     autoStart: true,
     chunkSize: tusConfig?.defaultChunkSize || 5 * 1024 * 1024, // 5MB chunks
     endpoint: tusConfig?.defaultEndpoint || '/files/upload',
     parallelUploads: 3,
     retryDelays: [0, 1000, 3000, 5000, 10000],
-    ...defaultOptions,
+    ...Object.fromEntries(Object.entries(defaultOptions).filter(([, value]) => value !== undefined)),
   };
 
   // Computed
@@ -135,16 +164,24 @@ export function useLtTusUpload(defaultOptions: LtUploadOptions = {}): UseLtTusUp
   async function createTusUpload(item: LtUploadItem, options: LtUploadOptions): Promise<TusUpload> {
     const tus = await getTusModule();
     const speedTracker = createSpeedTracker();
+    // Read in `onAfterResponse`, not from `onSuccess`'s payload: tus-js-client passes
+    // `{ lastResponse }` to `onSuccess` only from 4.2.0, and the peer range starts at 4.0.0.
+    let fileId: string | undefined;
 
     return new tus.Upload(item.file, {
       chunkSize: options.chunkSize || defaultConfig.chunkSize,
-      endpoint: options.endpoint || defaultConfig.endpoint,
+      endpoint: resolveLtTusEndpoint(options.endpoint || defaultConfig.endpoint, tusConfig?.resolveAgainstApi !== false),
       headers: options.headers,
       metadata: {
         filename: item.file.name,
         filetype: item.file.type,
         ...options.metadata,
         ...item.metadata,
+      },
+      onAfterResponse: (_req, res) => {
+        // Only the response that completes the upload carries it. XHR answers `null` for a
+        // header the backend did not send (or did not expose).
+        fileId = res.getHeader(LT_TUS_FILE_ID_HEADER) || fileId;
       },
       onBeforeRequest: (req) => {
         const xhr = req.getUnderlyingObject() as XMLHttpRequest;
@@ -184,6 +221,7 @@ export function useLtTusUpload(defaultOptions: LtUploadOptions = {}): UseLtTusUp
         const currentItem = uploadItems.value.get(item.id);
         updateItem(item.id, {
           completedAt: new Date(),
+          fileId,
           progress: { ...currentItem!.progress, percentage: 100 },
           status: 'completed',
           url: tusUpload?.url ?? undefined,

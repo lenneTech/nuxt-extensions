@@ -33,10 +33,14 @@ export function useLtFile(): UseLtFileReturn {
 
   /**
    * Get the base URL for file operations
+   *
+   * Derived from the TUS endpoint only when that ends in `/upload` (`'/files/upload'` → `'/files'`).
+   * nest-server serves TUS at `/tus`, which says nothing about where the file routes are — cutting
+   * `/upload` out of it left `'/tus'`, and every file link pointed into the upload route.
    */
   function getFileApiBase(): string {
-    // Try to get from runtime config, fall back to current host
-    return config.public.ltExtensions?.tus?.defaultEndpoint?.replace('/upload', '') || '/files';
+    const endpoint = config.public.ltExtensions?.tus?.defaultEndpoint;
+    return (endpoint?.endsWith('/upload') ? endpoint.slice(0, -'/upload'.length) : '') || '/files';
   }
 
   /**

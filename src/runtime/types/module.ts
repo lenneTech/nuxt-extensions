@@ -95,8 +95,22 @@ export interface LtAuthModuleOptions {
 export interface LtTusModuleOptions {
   /** Default chunk size in bytes (default: 5MB) */
   defaultChunkSize?: number;
-  /** Default TUS upload endpoint (default: '/files/upload') */
+  /**
+   * Default TUS upload endpoint (default: '/files/upload').
+   *
+   * nest-server serves TUS at `/tus` unless its `tus.path` is changed. A relative value is a path
+   * on the API while `resolveAgainstApi` is on; an absolute URL is used as it is.
+   */
   defaultEndpoint?: string;
+  /**
+   * Resolve a relative upload endpoint against the API base URL (default: true).
+   *
+   * Uses the same rule as the auth and AI requests: `NUXT_PUBLIC_API_URL` on the client, the
+   * `/api` dev-proxy prefix while `NUXT_PUBLIC_API_PROXY` is on. Without it, a relative endpoint
+   * goes to the app origin, where nothing serves TUS unless the project put its own proxy in
+   * front. Set it to `false` for exactly that setup. Absolute endpoints are never rewritten.
+   */
+  resolveAgainstApi?: boolean;
 }
 
 /**
@@ -322,6 +336,7 @@ export interface LtExtensionsPublicRuntimeConfig {
     tus: {
       defaultChunkSize: number;
       defaultEndpoint: string;
+      resolveAgainstApi: boolean;
     };
   };
 }

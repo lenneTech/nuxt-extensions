@@ -12,7 +12,7 @@ import type { LtExtensionsModuleOptions } from './runtime/types';
 
 // Module meta
 export const name = '@lenne.tech/nuxt-extensions';
-export const version = '1.18.6';
+export const version = '1.19.0';
 export const configKey = 'ltExtensions';
 
 // Default cookie names — re-exported from auth-state so consumers can read
@@ -64,6 +64,7 @@ const defaultOptions: LtExtensionsModuleOptions = {
   tus: {
     defaultChunkSize: 5 * 1024 * 1024, // 5MB
     defaultEndpoint: '/files/upload',
+    resolveAgainstApi: true,
   },
 };
 
@@ -214,6 +215,7 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
       tus: {
         defaultChunkSize: resolvedOptions.tus?.defaultChunkSize || 5 * 1024 * 1024,
         defaultEndpoint: resolvedOptions.tus?.defaultEndpoint || '/files/upload',
+        resolveAgainstApi: resolvedOptions.tus?.resolveAgainstApi ?? true,
       },
     };
 
@@ -344,6 +346,20 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
     // Transpile runtime directory and tus-js-client (ESM compatibility)
     nuxt.options.build.transpile.push(resolve('./runtime'));
     nuxt.options.build.transpile.push('tus-js-client');
+
+    // Nuxt turns every transpile entry into a Vite `optimizeDeps.exclude`, so in dev
+    // tus-js-client is served unbundled — and with it its CommonJS dependency `url-parse`,
+    // which the browser cannot import ("does not provide an export named 'default'").
+    // `useLtTusUpload` then reports "tus-js-client is not installed" and no upload starts.
+    // Vite's remedy for an excluded ESM package with a CommonJS child is a nested include.
+    // Only when the optional peer is installed: the entry resolves from the project root,
+    // and an unresolvable one makes Vite warn on every start.
+    // `test/tus-optimize-deps.test.ts` derives the list from the installed tus-js-client.
+    if (await tryResolveModule('tus-js-client', [pathToFileURL(`${nuxt.options.rootDir}/`)])) {
+      nuxt.options.vite.optimizeDeps ||= {};
+      nuxt.options.vite.optimizeDeps.include ||= [];
+      nuxt.options.vite.optimizeDeps.include.push('tus-js-client > url-parse');
+    }
 
     // One terse line, ALWAYS — `scripts/check-consumer-build.mjs` asserts that this
     // module's name appears in a consumer's `nuxt build` output, which is how it proves

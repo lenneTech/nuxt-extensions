@@ -35,6 +35,13 @@ export interface LtUploadItem {
   error?: string;
   /** The file being uploaded */
   file: File;
+  /**
+   * Id of the stored file, from the `X-File-Id` header of the response that completed the upload
+   * (nest-server 11.42.13+). Use it for file links and references — not the last segment of `url`,
+   * which is the TUS upload id. Undefined when the backend sends no such header: an older
+   * nest-server, or an `onUploadComplete()` override that never calls `super.onUploadComplete()`.
+   */
+  fileId?: string;
   /** Unique identifier for this upload */
   id: string;
   /** Custom metadata to include with the upload */
@@ -45,7 +52,7 @@ export interface LtUploadItem {
   startedAt?: Date;
   /** Current status of the upload */
   status: LtUploadStatus;
-  /** URL of the uploaded file (available after completion) */
+  /** URL of the TUS upload resource (available after completion) — not a file URL; see `fileId` */
   url?: string;
 }
 
@@ -57,7 +64,7 @@ export interface LtUploadOptions {
   autoStart?: boolean;
   /** Chunk size in bytes (default: 5MB) */
   chunkSize?: number;
-  /** TUS upload endpoint URL */
+  /** TUS upload endpoint URL; a relative path is resolved against the API (see `tus.resolveAgainstApi`) */
   endpoint?: string;
   /** Additional headers to include with requests */
   headers?: Record<string, string>;

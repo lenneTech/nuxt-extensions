@@ -153,7 +153,11 @@ overrides:
   # 2026-10-02T14:58Z) is still short of 7d, so the target stays 1.11.0 — raise it on a run after
   # 2026-10-09T15Z. launch-editor 2.14.2 (latest) still requests ^1.10.0; fresh resolve without
   # the overrides block still picks 1.12.0.
-  'shell-quote@<1.11.0': '1.11.0'
+  # Raised 2026-10-12: target 1.11.0 -> 1.12.0 (9.7d old, newest 1.x), key unchanged — no new
+  # shell-quote advisory since GHSA-pqg4-j6r4-53mv, 1.12.0 carries its fix. This ends the
+  # downgrade lock. launch-editor 2.14.2 (still latest) still requests ^1.10.0, so the drop
+  # condition (launch-editor requesting ^1.11.0) is still not met.
+  'shell-quote@<1.11.0': '1.12.0'
   # svgo — the removeScripts plugin left executable content intact: some scripts
   # (GHSA-2p49-hgcm-8545, patched 4.0.2), links smuggled through namespace and control-character
   # bypasses (GHSA-w27v-7q3p-w38r, HIGH) and HTML inside <foreignObject> (GHSA-4vpr-x523-8j87),
@@ -185,7 +189,14 @@ overrides:
   # `pnpm peers check` rejects. The committed lockfile carries ONE 8.5.28 copy (fresh resolve with
   # postcss held at 8.5.28, then re-resolved against this block unchanged). Raise the target to the
   # newest 8.5.x once 8.5.29 has cleared 7d (2026-10-12), via a fresh resolve.
-  'postcss@<8.5.23': '8.5.28'
+  #
+  # Raised 2026-10-12: target 8.5.28 -> 8.5.29 (newest 8.x), key unchanged — no new postcss
+  # advisory since GHSA-fxqj-rqcc-2cmp. The raise is no longer optional: nuxt 4.6.1's
+  # @nuxt/vite-builder requests `^8.5.29`, so 8.5.29 enters the tree with the nuxt bump whatever
+  # this entry says, and a target left at 8.5.28 would split postcss into two copies with an unmet
+  # autoprefixer peer. 8.5.29 (2026-10-05T09:28Z) clears the mirrors' 7d gate a few hours after
+  # this run; `minimumReleaseAgeExclude` below carries it until then.
+  'postcss@<8.5.23': '8.5.29'
   # nanoid 3.x — GHSA-2v37-7h3g-55p8 (HIGH, custom generators loop indefinitely when size is 0,
   # patched 3.3.18), GHSA-28wg-ghj8-5hjv (HIGH, non-secure generators loop with a negative size,
   # patched 3.3.16) and GHSA-xwg4-73v4-xw9w (HIGH, integer overflow, patched 3.3.12). Only the
@@ -202,7 +213,12 @@ overrides:
   # its own — identical with and without the overrides block. Kept for the mirrored repos, where an
   # older postcss can still request into the window. Raise the target to 3.3.20 once it has
   # cleared 7d (2026-10-12), so that a mirror's pinned copy matches the free one.
-  'nanoid@<3.3.18': '3.3.19'
+  #
+  # Raised 2026-10-12: target 3.3.19 -> 3.3.20 (newest 3.x), key unchanged — no new nanoid
+  # advisory since GHSA-xwg4-73v4-xw9w. Still latent here: postcss 8.5.29 requests ^3.3.19,
+  # outside the key, and resolves 3.3.20 on its own. 3.3.20 (2026-10-05T09:44Z) clears the mirrors'
+  # 7d gate a few hours after this run; `minimumReleaseAgeExclude` below carries it until then.
+  'nanoid@<3.3.18': '3.3.20'
   # esbuild — the dev server accepts requests from any origin on Windows, letting a malicious
   # page read arbitrary files through it (GHSA-g7r4-m6w7-qqqr, patched >=0.28.1). Entered this
   # tree with the @nuxt/ui devDependency, via @nuxt/fonts > fontless.
@@ -317,9 +333,14 @@ overrides:
 # being raised to <7d releases, so nothing was added.
 # 2026-10-09: no override target changed (shell-quote 1.12.0 still <7d at run time, postcss /
 # nanoid held to 2026-10-12), so this list is unchanged. The pnpm 11.28.5 installs added no entry.
+# 2026-10-12 (run at 07:15Z): postcss@8.5.28 -> postcss@8.5.29 follows its raised override target,
+# and nanoid@3.3.20 is added for its raised target. Both were published 2026-10-05 (09:28Z / 09:44Z)
+# and clear a 7d gate a few hours after this run; drop nanoid@3.3.20 on the next run, keep the
+# postcss entry following its target as before. shell-quote@1.12.0 (2026-10-02) is already past 7d.
 minimumReleaseAgeExclude:
   - minimatch@10.2.6
-  - postcss@8.5.28
+  - nanoid@3.3.20
+  - postcss@8.5.29
 
 # ----------------------------------------------------------------------------------
 # Accepted peer drift.
