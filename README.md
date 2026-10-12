@@ -583,6 +583,20 @@ absolute URL is used as it is. If your project routes uploads through its own sa
 instead, set `ltExtensions.tus.resolveAgainstApi: false` and the relative endpoint stays on the app
 origin.
 
+**Changing it per stage.** The `tus` options are part of the public runtime config, so a deployed
+stage can override them through the environment, without a rebuild:
+
+```bash
+# Send this stage's uploads to another host (absolute URLs are used as they are)
+NUXT_PUBLIC_LT_EXTENSIONS_TUS_DEFAULT_ENDPOINT=https://uploads.example.com/tus
+# Keep a relative endpoint on the app origin (own same-origin proxy)
+NUXT_PUBLIC_LT_EXTENSIONS_TUS_RESOLVE_AGAINST_API=false
+```
+
+Keep the relative default where you can: `NUXT_PUBLIC_API_URL` already differs per stage, so `'/tus'`
+follows it. Uploads are sent with credentials, so a host other than the API has to receive the
+session cookie, or every upload answers 401.
+
 **Which id to keep.** After a successful upload, `item.fileId` is the id of the stored file, read
 from the `X-File-Id` response header (nest-server 11.42.13+). Use it for file links and references.
 `item.url` is the TUS upload resource; its last segment is the upload id, not the file id. `fileId`
