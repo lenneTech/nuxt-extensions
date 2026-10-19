@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.19.1] - 2026-10-19
+
+### Fixed
+
+- **The first request after the JWT expired failed with 401.** Every login switches to JWT mode,
+  and from then on `fetchWithAuth` sends only the bearer. Better Auth's JWT expires after 15
+  minutes, the session behind it after 7 days, and nothing refreshes the token while the user
+  works. So after 15 minutes the next request failed, a save included. The auth interceptor
+  (1.11.2) kept the user signed in and minted a new token, but the failed request itself was
+  lost. Measured against nest-server: after expiry, a bearer-only request answers 401, while
+  `/iam/token` with the session cookie answers 200. `fetchWithAuth` now mints a fresh token from
+  the session cookie on a 401 in JWT mode and retries the request once. Parallel 401s share one
+  `/token` call. A 401 that survives the fresh token is returned as it is (a permission error, not
+  a stale bearer). If no token can be minted, the original 401 goes to the interceptor as before.
+
 ## [1.19.0] - 2026-10-12
 
 TUS uploads work end to end: the upload reaches the API, the stored file's id is available after

@@ -31,6 +31,12 @@ type LtUserOptionalKeys<T> = { [K in keyof T]-?: object extends Pick<T, K> ? K :
 const VALIDATE_SESSION_TIMEOUT_MS = 10_000;
 
 /**
+ * In-flight JWT refresh after a 401 in JWT mode (client only), shared across
+ * all `useLtAuth()` instances so a burst of parallel 401s costs one `/token` call.
+ */
+let staleJwtRefresh: null | Promise<boolean> = null;
+
+/**
  * Helper function for i18n with German fallback
  *
  * Two-stage fallback strategy:
@@ -349,7 +355,43 @@ export function useLtAuth(): UseLtAuthReturn {
       }
     }
 
+    // If we get 401 in JWT mode, the bearer is most likely stale: the JWT
+    // expires long before the session (Better Auth: 15 minutes vs. 7 days) and
+    // nothing refreshes it while the user works. The session cookie can mint a
+    // fresh one, so retry once with it. Cookie-carrying paths are skipped — the
+    // bearer was not what failed there.
+    if (response.status === 401 && isJwtMode.value && isAuthenticated.value && !needsCookies) {
+      const refreshed = await refreshStaleJwt();
+
+      if (refreshed && jwtToken.value) {
+        headers.set('Authorization', `Bearer ${jwtToken.value}`);
+        return fetch(url, {
+          ...options,
+          headers,
+          credentials: 'omit',
+        });
+      }
+    }
+
     return response;
+  }
+
+  /**
+   * Mint a fresh JWT after a 401, sharing one `/token` call between all
+   * requests that failed in the same burst. Client only: on the server the
+   * module scope is shared across requests, so a shared promise would hand one
+   * request another request's refresh.
+   */
+  function refreshStaleJwt(): Promise<boolean> {
+    if (!import.meta.client) {
+      return switchToJwtMode();
+    }
+    if (!staleJwtRefresh) {
+      staleJwtRefresh = switchToJwtMode().finally(() => {
+        staleJwtRefresh = null;
+      });
+    }
+    return staleJwtRefresh;
   }
 
   /**
