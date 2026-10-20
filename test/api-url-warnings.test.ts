@@ -60,7 +60,7 @@ describe('buildLtApiUrl — missing API URL warning', () => {
 
     const message = String(warnSpy.mock.calls[0]?.[0]);
     expect(message).toContain('Set NUXT_API_URL or NUXT_PUBLIC_API_URL');
-    // SSR has no app origin: $fetch 404s against Nitro, global fetch rejects the URL.
+    // SSR has no app origin: $fetch calls Nitro itself, global fetch rejects the URL.
     expect(message).not.toContain('app origin');
     expect(message).toContain('Nitro');
   });

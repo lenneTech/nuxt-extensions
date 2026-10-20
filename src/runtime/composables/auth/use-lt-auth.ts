@@ -33,8 +33,9 @@ const VALIDATE_SESSION_TIMEOUT_MS = 10_000;
 /**
  * In-flight JWT refresh after a 401 in JWT mode (client only), shared across
  * all `useLtAuth()` instances so a burst of parallel 401s costs one `/token` call.
+ * Resolves to the minted token itself, or `null` (see `refreshStaleJwt`).
  */
-let staleJwtRefresh: null | Promise<boolean> = null;
+let staleJwtRefresh: null | Promise<null | string> = null;
 
 /**
  * Helper function for i18n with German fallback
@@ -361,10 +362,10 @@ export function useLtAuth(): UseLtAuthReturn {
     // fresh one, so retry once with it. Cookie-carrying paths are skipped — the
     // bearer was not what failed there.
     if (response.status === 401 && isJwtMode.value && isAuthenticated.value && !needsCookies) {
-      const refreshed = await refreshStaleJwt();
+      const freshToken = await refreshStaleJwt();
 
-      if (refreshed && jwtToken.value) {
-        headers.set('Authorization', `Bearer ${jwtToken.value}`);
+      if (freshToken) {
+        headers.set('Authorization', `Bearer ${freshToken}`);
         return fetch(url, {
           ...options,
           headers,
@@ -381,17 +382,29 @@ export function useLtAuth(): UseLtAuthReturn {
    * requests that failed in the same burst. Client only: on the server the
    * module scope is shared across requests, so a shared promise would hand one
    * request another request's refresh.
+   *
+   * Resolves to the token itself, not to a success flag. Every `useLtAuth()`
+   * call owns its own `useCookie` ref, and Nuxt brings the other refs of the
+   * same name up to date only on a later task (cookieStore / BroadcastChannel).
+   * An instance that joined another instance's refresh would read its own ref
+   * in the same tick, find the expired token still in it, and retry with that.
+   * It adopts the token into its own ref, so its next request starts fresh too.
    */
-  function refreshStaleJwt(): Promise<boolean> {
+  async function refreshStaleJwt(): Promise<null | string> {
+    const mint = async (): Promise<null | string> => ((await switchToJwtMode()) ? jwtToken.value : null);
     if (!import.meta.client) {
-      return switchToJwtMode();
+      return mint();
     }
     if (!staleJwtRefresh) {
-      staleJwtRefresh = switchToJwtMode().finally(() => {
+      staleJwtRefresh = mint().finally(() => {
         staleJwtRefresh = null;
       });
     }
-    return staleJwtRefresh;
+    const token = await staleJwtRefresh;
+    if (token && jwtToken.value !== token) {
+      jwtToken.value = token;
+    }
+    return token;
   }
 
   /**

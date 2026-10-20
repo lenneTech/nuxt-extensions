@@ -13,7 +13,19 @@ import type { ComputedRef } from 'vue';
 
 import { computed, useState } from '#imports';
 import { ltSha256 } from '../../utils/crypto';
-import { buildLtApiUrl } from '../../lib/auth-state';
+import { buildLtApiUrl, resolveLtApiBaseUrl, warnMissingLtApiUrl } from '../../lib/auth-state';
+
+/**
+ * Whether no API URL is configured. Without a runtime-config context
+ * `buildLtApiUrl` falls back to the bare path too, so that counts as missing.
+ */
+function isApiUrlMissing(): boolean {
+  try {
+    return resolveLtApiBaseUrl().missing;
+  } catch {
+    return true;
+  }
+}
 
 export interface UseSystemSetupReturn {
   /** Whether the system needs initial setup (null = not checked yet) */
@@ -46,6 +58,16 @@ export function useSystemSetup(): UseSystemSetupReturn {
    * Check if the system needs initial setup
    */
   async function checkSetupStatus(): Promise<boolean> {
+    // Without an API URL the path stays relative, and on the server a relative
+    // `$fetch` goes to Nitro itself, not to the backend: Nitro renders it as a
+    // page, the global setup middleware runs again in that request and fetches
+    // again — a recursion that ends in out-of-memory. Leave the status undecided
+    // instead, so the client checks once it can resolve the URL.
+    if (import.meta.server && isApiUrlMissing()) {
+      warnMissingLtApiUrl('server');
+      return false;
+    }
+
     try {
       const url = buildLtApiUrl('/system-setup/status');
       const data = await $fetch<{ needsSetup: boolean }>(url);

@@ -47,10 +47,23 @@ export function setStubRuntimeConfigThrows(error: Error = new Error('no runtime 
   runtimeConfigError = error;
 }
 
+// When set, `useCookie` behaves like Nuxt's client implementation: every call
+// returns its OWN ref, seeded from `document.cookie`. Nuxt brings the other refs
+// of the same name up to date only on a later task (cookieStore / BroadcastChannel),
+// so code that writes one `useLtAuth()` instance's ref and reads another's in the
+// same tick sees the stale value. The shared-ref default hides exactly that.
+let cookieRefsPerCall = false;
+
+/** Give every `useCookie()` call its own ref, as Nuxt does on the client. Reset by `resetStubReactiveStores()`. */
+export function setStubCookieRefsPerCall(enabled: boolean): void {
+  cookieRefsPerCall = enabled;
+}
+
 /** Reset the in-memory cookie / state ref stores between tests. */
 export function resetStubReactiveStores(): void {
   cookieRefs.clear();
   stateRefs.clear();
+  cookieRefsPerCall = false;
 }
 
 export function useRuntimeConfig(): StubRuntimeConfig {
@@ -108,12 +121,32 @@ export function useRequestHeaders(keys?: string[]): Record<string, string> {
  * already runs in happy-dom and is what the tests assert against.
  */
 export function useCookie<T = unknown>(name: string, _options?: Record<string, unknown>): Ref<T | null> {
+  if (cookieRefsPerCall) {
+    return ref(readDocumentCookie(name)) as Ref<T | null>;
+  }
   let cookie = cookieRefs.get(name);
   if (!cookie) {
     cookie = ref<T | null>(null) as Ref<unknown>;
     cookieRefs.set(name, cookie);
   }
   return cookie as Ref<T | null>;
+}
+
+/** Decode a cookie the way Nuxt's `useCookie` does: URI-decode, then JSON if it parses, else the raw string. */
+function readDocumentCookie(name: string): unknown {
+  const raw = document.cookie
+    .split('; ')
+    .find((part) => part.startsWith(`${name}=`))
+    ?.slice(name.length + 1);
+  if (!raw) {
+    return null;
+  }
+  const decoded = decodeURIComponent(raw);
+  try {
+    return JSON.parse(decoded);
+  } catch {
+    return decoded;
+  }
 }
 
 /**

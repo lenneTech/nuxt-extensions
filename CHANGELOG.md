@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.19.1] - 2026-10-19
+## [1.19.1] - 2026-10-20
 
 ### Fixed
 
@@ -19,6 +19,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the session cookie on a 401 in JWT mode and retries the request once. Parallel 401s share one
   `/token` call. A 401 that survives the fresh token is returned as it is (a permission error, not
   a stale bearer). If no token can be minted, the original 401 goes to the interceptor as before.
+  This holds across components: every `useLtAuth()` instance in the burst retries with the fresh
+  token, not only the one that minted it. Nuxt gives each `useCookie()` call its own ref and
+  brings the others up to date only later, so the shared refresh hands out the token itself.
+  Known limit on the backend side: nest-server 11.10.3 up to 11.43.0 rejects every bearer JWT once
+  `BASE_URL` is set (issuer mismatch), the freshly minted one included, so the retry cannot help
+  there. The fix ships with the next nest-server release.
+- **A server without an API URL died of out-of-memory on its first request.** With the system
+  setup enabled and neither `NUXT_API_URL` nor `NUXT_PUBLIC_API_URL` set, `checkSetupStatus()`
+  fetched the bare path `/system-setup/status` during SSR. On the server that request goes to
+  Nitro itself, which renders it as a page, runs the setup middleware again, and fetches again
+  without end. During SSR the check now skips the fetch when no API URL is configured, logs the
+  known missing-URL warning once, and leaves the status to the client. Setting the API URL is
+  still required for SSR to reach the backend.
 
 ## [1.19.0] - 2026-10-12
 

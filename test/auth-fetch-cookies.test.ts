@@ -20,7 +20,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { clearAllCookies } from './stubs/cookies';
-import { resetStubReactiveStores, resetStubRuntimeConfig, setStubRuntimeConfig } from './stubs/imports';
+import { resetStubReactiveStores, resetStubRuntimeConfig, setStubCookieRefsPerCall, setStubRuntimeConfig } from './stubs/imports';
 
 vi.mock('../src/runtime/composables/use-lt-auth-client', () => ({
   useLtAuthClient: () => ({
@@ -190,5 +190,30 @@ describe('fetchWithAuth — stale JWT in JWT mode', () => {
 
     expect(responses.map((r) => r.status)).toEqual([200, 200, 200]);
     expect(callsTo(`${API_BASE}/token`)).toHaveLength(1);
+  });
+
+  /**
+   * The burst usually spans components, each with its own `useLtAuth()`. In
+   * Nuxt every `useCookie()` call owns its own ref, and the others learn about a
+   * write only on a later task — so an instance that joined another one's
+   * refresh found the expired token still in its own ref and retried with it.
+   */
+  it('hands the fresh token to every instance in the burst, not just the one that minted it', async () => {
+    setStubCookieRefsPerCall(true);
+    const { useLtAuth } = await import('../src/runtime/composables/auth/use-lt-auth');
+    signedInWithJwt();
+    backendWithStaleBearer({ ok: true, status: 200, token: 'fresh.jwt.token' });
+    const page = useLtAuth();
+    const widget = useLtAuth();
+
+    const responses = await Promise.all([
+      page.fetchWithAuth('https://api.example.com/measures', { method: 'GET' }),
+      widget.fetchWithAuth('https://api.example.com/measures', { body: '{"a":1}', method: 'POST' }),
+    ]);
+
+    expect(responses.map((r) => r.status)).toEqual([200, 200]);
+    expect(callsTo(`${API_BASE}/token`)).toHaveLength(1);
+    // Adopted, so the widget's next request does not start with the expired bearer.
+    expect(widget.jwtToken.value).toBe('fresh.jwt.token');
   });
 });
