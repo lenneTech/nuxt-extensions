@@ -22,9 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   This holds across components: every `useLtAuth()` instance in the burst retries with the fresh
   token, not only the one that minted it. Nuxt gives each `useCookie()` call its own ref and
   brings the others up to date only later, so the shared refresh hands out the token itself.
-  Known limit on the backend side: nest-server 11.10.3 up to 11.43.0 rejects every bearer JWT once
-  `BASE_URL` is set (issuer mismatch), the freshly minted one included, so the retry cannot help
-  there. The fix ships with the next nest-server release.
+  Known limit on the backend side: nest-server 11.10.3 up to and including 11.43.0 rejects every
+  bearer JWT once `BASE_URL` is set (issuer mismatch), the freshly minted one included, so the
+  retry cannot help there. Use JWT mode with `@lenne.tech/nest-server` 11.43.1 or later.
 - **A server without an API URL died of out-of-memory on its first request.** With the system
   setup enabled and neither `NUXT_API_URL` nor `NUXT_PUBLIC_API_URL` set, `checkSetupStatus()`
   fetched the bare path `/system-setup/status` during SSR. On the server that request goes to
