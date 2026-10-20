@@ -271,7 +271,7 @@ const MISSING_API_URL_WARNING: Record<'client' | 'server', string> = {
   server:
     '[LtExtensions] No API URL configured for SSR. Set NUXT_API_URL or NUXT_PUBLIC_API_URL. ' +
     'API paths stay relative, so server-side requests never reach the backend: $fetch ' +
-    'resolves them against Nitro (404) and global fetch rejects them as an invalid URL.',
+    'sends them to this Nitro server itself and global fetch rejects them as an invalid URL.',
 };
 
 /** Strip any trailing slashes so `${baseUrl}${path}` never produces a double slash. */

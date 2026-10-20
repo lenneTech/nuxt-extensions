@@ -20,7 +20,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { clearAllCookies } from './stubs/cookies';
-import { resetStubReactiveStores, resetStubRuntimeConfig, setStubRuntimeConfig } from './stubs/imports';
+import { resetStubReactiveStores, resetStubRuntimeConfig, setStubCookieRefsPerCall, setStubRuntimeConfig } from './stubs/imports';
 
 vi.mock('../src/runtime/composables/use-lt-auth-client', () => ({
   useLtAuthClient: () => ({
@@ -105,5 +105,115 @@ describe('fetchWithAuth — cookies in JWT mode', () => {
     await fetchWithAuth('https://api.example.com/measures', { method: 'GET' });
 
     expect(lastCredentials()).toBe('include');
+  });
+});
+
+/**
+ * A JWT expires long before the session behind it (Better Auth's JWT plugin
+ * defaults to 15 minutes, the session to 7 days), and nothing refreshes it
+ * while the user works inside the app. Without a retry, the first request after
+ * the expiry fails with 401 although the session cookie would mint a new token
+ * at once — once every 15 minutes a save is lost.
+ */
+describe('fetchWithAuth — stale JWT in JWT mode', () => {
+  /** Answer `/token` with a fresh token and `/measures` with 401 for the stale one. */
+  function backendWithStaleBearer(tokenResponse: { ok: boolean; status: number; token?: string }): void {
+    fetchSpy.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === `${API_BASE}/token`) {
+        return { json: async () => ({ token: tokenResponse.token }), ok: tokenResponse.ok, status: tokenResponse.status };
+      }
+      const bearer = new Headers(init?.headers).get('Authorization');
+      return bearer === 'Bearer fresh.jwt.token' ? { json: async () => ({}), ok: true, status: 200 } : { json: async () => ({}), ok: false, status: 401 };
+    });
+  }
+
+  function callsTo(url: string): RequestInit[] {
+    return fetchSpy.mock.calls.filter(([calledUrl]) => calledUrl === url).map(([, init]) => init as RequestInit);
+  }
+
+  it('mints a fresh token from the session cookie and retries the request once', async () => {
+    const { useLtAuth } = await import('../src/runtime/composables/auth/use-lt-auth');
+    signedInWithJwt();
+    backendWithStaleBearer({ ok: true, status: 200, token: 'fresh.jwt.token' });
+    const { fetchWithAuth } = useLtAuth();
+
+    const response = await fetchWithAuth('https://api.example.com/measures', { body: '{"a":1}', method: 'POST' });
+
+    expect(response.status).toBe(200);
+    expect(callsTo(`${API_BASE}/token`)).toHaveLength(1);
+    expect(callsTo(`${API_BASE}/token`)[0]?.credentials).toBe('include');
+    const attempts = callsTo('https://api.example.com/measures');
+    expect(attempts).toHaveLength(2);
+    expect(new Headers(attempts[1]?.headers).get('Authorization')).toBe('Bearer fresh.jwt.token');
+    expect(attempts[1]?.credentials).toBe('omit');
+    expect(attempts[1]?.body).toBe('{"a":1}');
+  });
+
+  it('returns the original 401 without a retry when no new token can be minted (session really gone)', async () => {
+    const { useLtAuth } = await import('../src/runtime/composables/auth/use-lt-auth');
+    signedInWithJwt();
+    backendWithStaleBearer({ ok: false, status: 401 });
+    const { fetchWithAuth } = useLtAuth();
+
+    const response = await fetchWithAuth('https://api.example.com/measures', { method: 'GET' });
+
+    expect(response.status).toBe(401);
+    expect(callsTo('https://api.example.com/measures')).toHaveLength(1);
+  });
+
+  it('retries only once — a 401 that survives a fresh token is a permission error, not a stale bearer', async () => {
+    const { useLtAuth } = await import('../src/runtime/composables/auth/use-lt-auth');
+    signedInWithJwt();
+    fetchSpy.mockImplementation(async (url: string) =>
+      url === `${API_BASE}/token` ? { json: async () => ({ token: 'fresh.jwt.token' }), ok: true, status: 200 } : { json: async () => ({}), ok: false, status: 401 },
+    );
+    const { fetchWithAuth } = useLtAuth();
+
+    const response = await fetchWithAuth('https://api.example.com/measures', { method: 'GET' });
+
+    expect(response.status).toBe(401);
+    expect(callsTo('https://api.example.com/measures')).toHaveLength(2);
+    expect(callsTo(`${API_BASE}/token`)).toHaveLength(1);
+  });
+
+  it('mints one token for a burst of parallel 401s, not one per request', async () => {
+    const { useLtAuth } = await import('../src/runtime/composables/auth/use-lt-auth');
+    signedInWithJwt();
+    backendWithStaleBearer({ ok: true, status: 200, token: 'fresh.jwt.token' });
+    const { fetchWithAuth } = useLtAuth();
+
+    const responses = await Promise.all([
+      fetchWithAuth('https://api.example.com/measures', { method: 'GET' }),
+      fetchWithAuth('https://api.example.com/measures', { method: 'GET' }),
+      fetchWithAuth('https://api.example.com/measures', { method: 'GET' }),
+    ]);
+
+    expect(responses.map((r) => r.status)).toEqual([200, 200, 200]);
+    expect(callsTo(`${API_BASE}/token`)).toHaveLength(1);
+  });
+
+  /**
+   * The burst usually spans components, each with its own `useLtAuth()`. In
+   * Nuxt every `useCookie()` call owns its own ref, and the others learn about a
+   * write only on a later task — so an instance that joined another one's
+   * refresh found the expired token still in its own ref and retried with it.
+   */
+  it('hands the fresh token to every instance in the burst, not just the one that minted it', async () => {
+    setStubCookieRefsPerCall(true);
+    const { useLtAuth } = await import('../src/runtime/composables/auth/use-lt-auth');
+    signedInWithJwt();
+    backendWithStaleBearer({ ok: true, status: 200, token: 'fresh.jwt.token' });
+    const page = useLtAuth();
+    const widget = useLtAuth();
+
+    const responses = await Promise.all([
+      page.fetchWithAuth('https://api.example.com/measures', { method: 'GET' }),
+      widget.fetchWithAuth('https://api.example.com/measures', { body: '{"a":1}', method: 'POST' }),
+    ]);
+
+    expect(responses.map((r) => r.status)).toEqual([200, 200]);
+    expect(callsTo(`${API_BASE}/token`)).toHaveLength(1);
+    // Adopted, so the widget's next request does not start with the expired bearer.
+    expect(widget.jwtToken.value).toBe('fresh.jwt.token');
   });
 });
