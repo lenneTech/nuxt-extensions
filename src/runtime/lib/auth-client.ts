@@ -234,7 +234,7 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
     plugins.push(
       twoFactorClient({
         onTwoFactorRedirect() {
-          navigateTo(twoFactorRedirectPath);
+          void navigateTo(twoFactorRedirectPath);
         },
       }),
     );

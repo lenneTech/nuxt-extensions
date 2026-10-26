@@ -8,7 +8,22 @@
   "rules": {
     "eqeqeq": "warn",
     "no-console": "off",
-    "no-unused-vars": "warn"
+    "no-unused-vars": "warn",
+
+    // Type-aware rules (`oxlint --type-aware`, needs oxlint-tsgolint), as in nest-server and NestJS 12's
+    // project template. A promise nobody awaits loses its rejection: in the browser it surfaces as an
+    // "Uncaught (in promise)" with no context, and in a Playwright helper it can leave a test hanging until
+    // its timeout (waitForElement did exactly that, found by this rule). Deliberate fire-and-forget is
+    // written `void promise`. tsgolint reads `.ts` files only: a floating promise inside a `.vue` SFC is not
+    // reported (measured 2026-10-26; the five transition components here contain no promise).
+    "typescript/no-floating-promises": "error",
+    // `--type-aware` also turns on every type-aware rule of the categories above. These flag deliberate
+    // idioms here, not defects (measured 2026-10-26, 5 findings, none a defect): `String(unknown)` on
+    // backend error bodies and runtime config, methods of @nuxt/kit's createResolver and better-auth's
+    // client that do not use `this`, and a number in a template string in scripts/check.mjs.
+    "typescript/no-base-to-string": "off",
+    "typescript/restrict-template-expressions": "off",
+    "typescript/unbound-method": "off"
   },
   "ignorePatterns": [
     "node_modules",

@@ -31,9 +31,6 @@ jobs:
       - name: Format check
         run: pnpm format:check
 
-      - name: Lint
-        run: pnpm lint
-
       # Gates the PUBLISH itself. `prepack` rewrites src/module.ts from package.json,
       # so a broken sync script would ship a wrong `meta.version` while exiting 0 —
       # exactly how 1.5.2 was published three times over.
@@ -42,6 +39,10 @@ jobs:
 
       - name: Prepare
         run: pnpm dev:prepare
+
+      # After Prepare: the type-aware lint reads tsconfig.json, which extends .nuxt/tsconfig.json.
+      - name: Lint
+        run: pnpm lint
 
       - name: Test
         run: pnpm test

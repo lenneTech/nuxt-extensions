@@ -1,5 +1,15 @@
-import { CheckboxRoot, NumberFieldRoot, PinInputRoot, SwitchRoot, VisuallyHidden } from 'reka-ui';
-import { createApp, defineComponent, h } from 'vue';
+import { renderToString } from '@vue/server-renderer';
+import {
+  CheckboxRoot,
+  Label,
+  ListboxContent,
+  ListboxRoot,
+  NumberFieldRoot,
+  PinInputRoot,
+  SwitchRoot,
+  VisuallyHidden,
+} from 'reka-ui';
+import { createApp, createSSRApp, createVNode, defineComponent, h } from 'vue';
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -130,7 +140,55 @@ describe('@nuxt/ui: the field contracts the plugin keys on', () => {
     // The label's `for` is a PROP on reka's Label component, so it reaches the <label> through
     // $attrs and is absent from the element's dynamicProps. That component boundary is what
     // exempts it from Vue's hydration force-patch — the entire reason this plugin exists.
-    expect(source).toMatch(/<Label\s+:for="id"/);
+    // Matched anywhere in the tag: @nuxt/ui 4.12.0 put `:id` in front of it, and the previous
+    // `<Label\s+:for` failed on attribute ORDER while the contract itself was unchanged.
+    expect(source).toMatch(/<Label\b[^>]*\s:for="id"[^>]*>/);
+  });
+
+  it('gives the label an id that UListbox names its content by (@nuxt/ui 4.12.0)', () => {
+    // New in 4.12.0: the label carries `${ariaId}-label`, and FormField provides it as
+    // `labelId`, which UListbox puts on ListboxContent as `aria-labelledby`. Both ends cross a
+    // reka component boundary (see the hydration test below), so they keep the same
+    // server-rendered value and agree with each other without any repair. `repairGroupLabels`
+    // reuses that id instead of minting `…-lt-label`, because it only mints one for an id-less
+    // label.
+    const field = readFromPackage('@nuxt/ui/dist/runtime/components/FormField.vue');
+    const listbox = readFromPackage('@nuxt/ui/dist/runtime/components/Listbox.vue');
+
+    expect(field).toMatch(/<Label\b[^>]*\s:id="`\$\{ariaId\}-label`"[^>]*>/);
+    expect(field).toContain('labelId: props.label || !!slots.label ? `${ariaId}-label` : void 0');
+    expect(listbox).toMatch(/<ListboxContent\b[^>]*:aria-labelledby="[^"]*labelId\)?"/);
+  });
+
+  it('hydration keeps reka-rendered ids and labels on the server value, but patches a compiled id', async () => {
+    // The premise of the whole plugin, measured with a real SSR + hydrate instead of asserted
+    // from memory (as `test/pre-hydration-input.test.ts` does for its stopgap). The server and
+    // the client render the same tree with a different id, which is what a `useId()` divergence
+    // amounts to. Vue 3.5 patches on hydration only what is in the ELEMENT's own compiled
+    // `dynamicProps`; reka renders through `Primitive` with `h()`, which has none.
+    const tree = (id: string) => () =>
+      h('div', [
+        h(Label, { for: id, id: `${id}-label` }, () => 'Name'),
+        // PatchFlags.PROPS with dynamicProps ['id'] — what `<input :id="id">` compiles to.
+        createVNode('input', { id }, null, 8, ['id']),
+        h(ListboxRoot, null, () => h(ListboxContent, { 'aria-labelledby': `${id}-label` }, () => 'x')),
+      ]);
+
+    const host = document.createElement('div');
+    document.body.append(host);
+    host.innerHTML = await renderToString(createSSRApp({ render: tree('server') }));
+    const app = createSSRApp({ render: tree('client') });
+    app.config.warnHandler = () => {}; // the mismatch is the point, not a failure
+    app.mount(host);
+
+    const label = host.querySelector('label')!;
+    // Non-vacuity: the compiled binding WAS patched, so the divergence really happened.
+    expect(host.querySelector('input')!.id).toBe('client');
+    // …while the label kept the server values: `for` now dangles — what repairDanglingLabels fixes.
+    expect(label.htmlFor).toBe('server');
+    expect(label.id).toBe('server-label');
+    // …and ListboxContent kept its server value too, so the 4.12.0 pair still agrees.
+    expect(host.querySelector('[role="listbox"]')!.getAttribute('aria-labelledby')).toBe(label.id);
   });
 
   it('renders UFileUpload’s REAL control as a fully-hidden VisuallyHidden carrying the field id', () => {

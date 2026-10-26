@@ -5,6 +5,102 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.20.0] - 2026-10-27
+
+The better-auth peer range moves to 1.7.12, in lock-step with `@lenne.tech/nest-server` 12.0.0,
+and the Playwright helper `waitForElement()` no longer hangs on a cancelled animation. **This minor
+contains a breaking change** at install level (the narrowed peer range); the major digit tracks
+Nuxt, so it stays at 1. Migration guide: [1.19.x → 1.20.0](migration-guides/1.19.x-to-1.20.0.md).
+
+### Breaking
+
+- **better-auth `>=1.7.12 <1.8.0`** (was `>=1.7.7 <1.8.0`), for both `better-auth` and
+  `@better-auth/passkey`. better-auth 1.7.12 verifies JWTs with the algorithm of the stored key
+  instead of the one the token header names
+  ([better-auth#11925](https://github.com/better-auth/better-auth/pull/11925)). That runs in the
+  API, but the range stays byte-identical to nest-server's, so the two ends cannot resolve
+  different versions. No advisory was published for it, so `pnpm audit` does not flag older
+  versions. `@better-auth/passkey@1.7.12` requires `better-auth ^1.7.12` itself.
+
+  **Action required:** pin `better-auth` and `@better-auth/passkey` to `1.7.12` (in a monorepo,
+  in the workspace `overrides`) and update `@lenne.tech/nest-server` to 12.0.0. A project still
+  resolving 1.7.7 to 1.7.11 gets a peer conflict from this release.
+
+### Fixed
+
+- **`waitForElement()` from `@lenne.tech/nuxt-extensions/testing` hung until the test timed out
+  when an animation was cancelled.** With `stable: true`, the default, it waited on
+  `Promise.all()` over every animation's `finished` promise. That promise rejects with an
+  `AbortError` when an animation is cancelled instead of finishing, for example a transition
+  interrupted by a class change or an element hidden mid-animation, and the wait then never
+  resolved. Measured in Chrome 158. It now uses `Promise.allSettled()`: a cancelled animation counts
+  as done, a running one is still waited for.
+- **An error inside the auth interceptor's 401 handling surfaced as an unhandled promise
+  rejection** (`Uncaught (in promise)`, no context), because both callers fire and forget it. It is
+  now caught and logged as `[LtAuth Interceptor] Handling a 401 failed:` with the error. The
+  handling itself is unchanged.
+
+### Changed (repository only, not part of the published package)
+
+- Type-aware lint, as in nest-server: `oxlint --type-aware` with the `oxlint-tsgolint` 7.0.2005
+  devDependency, and `typescript/no-floating-promises` as an error. It found the `waitForElement`
+  hang above. It reads `.ts` files only, so a floating promise in a `.vue` SFC goes unreported; the
+  five `.vue` files here (transition components) contain none. The other places it reported are deliberate fire-and-forget and are now written
+  `void promise`. Three rules that `--type-aware` also turns on only flagged deliberate idioms here
+  (5 findings, none a defect) and are off, with the reason in `.oxlintrc.json`.
+  The lint now reads `.nuxt/tsconfig.json`, so it runs after `dev:prepare` everywhere: in `check`,
+  `check:fix`, `check:naf` and `release`, in the build, publish and Windows workflows, and in the
+  pre-commit hook, which runs `dev:prepare` first when `.nuxt` is missing. Without it the lint stops
+  with `tsconfig-error` on a fresh checkout.
+- New `test/playwright-wait-for-element.test.ts`: a cancelled animation returns, a running one is
+  still waited for, `stable: false` skips the wait.
+- `test/peer-dependency-ranges.test.ts` fails if either peer floor admits a better-auth below
+  1.7.12, next to the existing GHSA-965c-763c-88jm guard.
+- New `test/git-hooks-wiring.test.ts` pins the `prepare` script that points git at `.githooks`.
+  Nothing else noticed when that line went missing: install, check, CI and the build stayed green.
+- Dev dependencies raised: `better-auth` and `@better-auth/passkey` 1.7.12, `nuxt` and
+  `@nuxt/schema` 4.6.2 (the playground follows; the lockfile resolves `@nuxt/kit` 4.6.2, the
+  declared range stays `^4.0.0`), `@nuxt/ui` 4.12.0 with the `reka-ui` 2.11.0 it pins, `vitest` and
+  `@vitest/coverage-v8` 5.0.5, `@vue/server-renderer` 3.5.44, `@playwright/test` 1.64.1, `oxlint`
+  1.89.0, `oxfmt` 0.74.0 (no reformatting). The lockfile was re-resolved from scratch.
+- `happy-dom` 20.14.6 → 21.0.4, a major. It closes
+  [GHSA-834v-8h66-3h79](https://github.com/advisories/GHSA-834v-8h66-3h79) (high, host code
+  execution through an unsanitized ESM import alias, `>=17.0.0 <=21.0.3`), which has no 20.x fix.
+  21.0 stops loading CSS files and iframes by default; no test here depends on either.
+- `test/upstream-dom-contract.test.ts` follows @nuxt/ui 4.12.0. Its `FormField` gives the label an
+  `id` (`${ariaId}-label`) in front of `:for`, which broke the order-sensitive `<Label\s+:for`
+  pattern while the contract was unchanged. The pattern now matches anywhere in the tag. A new
+  test pins that UListbox names its content by that label id, and another runs a real SSR +
+  hydrate with diverging ids: the label's `for` and `id` and ListboxContent's `aria-labelledby`
+  keep the server value, a compiled `<input :id>` is patched. So the new label/listbox pair agrees
+  by itself, and the plugin's premise is measured rather than asserted. The form-label plugin
+  needed no change.
+- Held: TypeScript 5.9.3. `@nuxt/module-builder` 1.0.3 (still the newest) accepts only `^5.9.3`.
+
+### Security (this repository's own install)
+
+- The audit suppression for GHSA-vfj7-8cjw-p6xm (braces) is gone: GitHub withdrew the advisory on
+  2026-10-23. The node-forge suppression (GHSA-86w9-cpqp-85rv) was re-verified and stays; there is
+  still no patched release.
+- Overrides re-verified with two fresh resolves, with and without the block:
+  - `simple-git@<4.0.1` and its patch (`patches/simple-git@4.0.2.patch`) are removed. simple-git
+    left the tree: `@nuxt/devtools` 3.4.3+ no longer depends on it, and nuxt 4.6.2 requests
+    `^3.4.3`. A project that carries the same override and still resolves `@nuxt/devtools` 3.4.2
+    needs both until it moves to nuxt 4.6.2.
+  - `minimatch@>=5.0.0 <10.2.6` is removed. It lifted minimatch 5.x/9.x consumers across majors
+    onto 10.x, because only brace-expansion 5.x used to carry the fix for GHSA-mh99-v99m-4gvg. The
+    advisory now names a 2.x fix, the existing `brace-expansion` 2.x entry pins 2.1.7, and the tree
+    audits clean with readdir-glob on minimatch 5.1.9 and glob on 9.0.9.
+  - `postcss` target 8.5.29 → 8.5.31 and `@tiptap/core` / `@tiptap/pm` targets 3.31.4 → 3.32.0.
+    Both old targets had become downgrade locks that held a second, older copy next to the version
+    nuxt 4.6.2 (`postcss ^8.5.30`) and @nuxt/ui 4.12.0 (`@tiptap/* ^3.31.4`) request.
+  - `fontless>esbuild` is still load-bearing (without it esbuild 0.27.7 and GHSA-g7r4-m6w7-qqqr
+    return). The other entries are latent: a resolve without them picks the same versions. They
+    stay as guards against a parent requesting into their windows again.
+- `minimumReleaseAgeExclude` is gone. Its entries were kept for a 7-day gate that
+  nuxt-base-starter and lt-monorepo were believed to enforce; none of them sets `minimumReleaseAge`, so they run on pnpm's 24h default,
+  and every remaining entry was past it.
+
 ## [1.19.1] - 2026-10-20
 
 ### Fixed

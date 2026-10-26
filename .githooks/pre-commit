@@ -2,6 +2,8 @@
 # Pre-commit hook: Format and lint before commit
 
 pnpm format || exit 1
+# The type-aware lint reads tsconfig.json, which extends .nuxt/tsconfig.json (written by dev:prepare).
+[ -f .nuxt/tsconfig.json ] || pnpm dev:prepare || exit 1
 pnpm lint || exit 1
 
 # Stage any formatting changes

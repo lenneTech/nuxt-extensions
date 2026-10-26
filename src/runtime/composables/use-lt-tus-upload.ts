@@ -279,7 +279,7 @@ export function useLtTusUpload(defaultOptions: LtUploadOptions = {}): UseLtTusUp
       updateItem(id, { startedAt: new Date(), status: 'uploading' });
 
       // Check for previous uploads to resume
-      tusUpload.findPreviousUploads().then((previousUploads) => {
+      void tusUpload.findPreviousUploads().then((previousUploads) => {
         const previousUpload = previousUploads[0];
         if (previousUpload) {
           tusUpload.resumeFromPreviousUpload(previousUpload);
@@ -300,7 +300,7 @@ export function useLtTusUpload(defaultOptions: LtUploadOptions = {}): UseLtTusUp
   function pauseUpload(id: string): void {
     const tusUpload = tusUploads.value.get(id);
     if (tusUpload) {
-      tusUpload.abort();
+      void tusUpload.abort();
       updateItem(id, { status: 'paused' });
     }
   }
@@ -320,7 +320,7 @@ export function useLtTusUpload(defaultOptions: LtUploadOptions = {}): UseLtTusUp
   function cancelUpload(id: string): void {
     const tusUpload = tusUploads.value.get(id);
     if (tusUpload) {
-      tusUpload.abort();
+      void tusUpload.abort();
     }
     tusUploads.value.delete(id);
 

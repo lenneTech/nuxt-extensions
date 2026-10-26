@@ -76,10 +76,6 @@ jobs:
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm run format:check
 
-      - name: Lint
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: pnpm run lint
-
       - name: Version sync check
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm run version:check
@@ -88,6 +84,11 @@ jobs:
         id: prepare
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm run dev:prepare
+
+      # After Prepare: the type-aware lint reads tsconfig.json, which extends .nuxt/tsconfig.json.
+      - name: Lint
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: pnpm run lint
 
       - name: Type check
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}

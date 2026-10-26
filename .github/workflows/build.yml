@@ -32,9 +32,6 @@ jobs:
       - name: Format check
         run: pnpm format:check
 
-      - name: Lint
-        run: pnpm lint
-
       # Release-critical guards that used to run on a maintainer's laptop only.
       # `version:check` protects the invariant whose failure mode froze the published
       # `meta.version` at 1.5.2 for three minor releases; `check:manifest` protects the
@@ -44,6 +41,10 @@ jobs:
 
       - name: Prepare
         run: pnpm dev:prepare
+
+      # After Prepare: the type-aware lint reads tsconfig.json, which extends .nuxt/tsconfig.json.
+      - name: Lint
+        run: pnpm lint
 
       - name: Test
         run: pnpm test

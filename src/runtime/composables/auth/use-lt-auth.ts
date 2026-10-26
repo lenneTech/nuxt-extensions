@@ -924,7 +924,7 @@ export function useLtAuth(): UseLtAuthReturn {
   // Auto-fetch features once on first client-side useLtAuth() call
   if (import.meta.client && !featuresFetched.value) {
     featuresFetched.value = true; // Set immediately to prevent duplicate fetches
-    fetchFeatures();
+    void fetchFeatures();
   }
 
   return {

@@ -422,7 +422,10 @@ export async function waitForElement(page: Page, selector: string, options: { ti
           resolve();
           return;
         }
-        Promise.all(el.getAnimations().map((a) => a.finished)).then(() => resolve());
+        // allSettled, not all: `finished` REJECTS (AbortError) when an animation is cancelled
+        // instead of finishing, and with `all` this promise then never resolved, so the test
+        // hung until Playwright's timeout. A cancelled animation is not running either.
+        void Promise.allSettled(el.getAnimations().map((a) => a.finished)).then(() => resolve());
       });
     });
   }

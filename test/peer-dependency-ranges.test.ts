@@ -165,6 +165,28 @@ describe('peer dependency ranges', () => {
     }
   });
 
+  it('does not bless a better-auth version whose JWT plugin trusts the token header algorithm', () => {
+    // better-auth before 1.7.12 verified JWTs (and session cookie-cache JWTs) with the algorithm
+    // named in the token's own header instead of the algorithm of the stored key
+    // (better-auth/better-auth#11925). No advisory was published for it, so `pnpm audit` never
+    // reports it — this test is the only guard.
+    //
+    // Like GHSA-965c-763c-88jm above, the verification runs in the server end. The floor is here
+    // because the lock-step rule keeps this range byte-identical to @lenne.tech/nest-server's,
+    // which moved to `>=1.7.12 <1.8.0` with nest-server 12.0.0. Both repos move together or not
+    // at all.
+    const fixedIn = '1.7.12';
+    for (const name of ['better-auth', '@better-auth/passkey']) {
+      const range: string = pkg.peerDependencies[name];
+      const floor = /(?:^|\s)>=\s*(\d+\.\d+\.\d+)/.exec(range)?.[1];
+      expect(floor, `expected a ">=" floor in ${name} "${range}"`).toBeTruthy();
+      expect(
+        satisfies(floor as string, `>=${fixedIn}`),
+        `${name} "${range}" admits versions whose JWT verification trusts the header alg; the fix is ${fixedIn}.`,
+      ).toBe(true);
+    }
+  });
+
   it('does not bless a better-auth version that @better-auth/passkey rejects', async () => {
     // @better-auth/passkey peer-requires a better-auth version of its own. Our range
     // must not admit a `better-auth` that the passkey package would refuse, or we

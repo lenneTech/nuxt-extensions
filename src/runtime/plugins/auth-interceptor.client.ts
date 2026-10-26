@@ -262,6 +262,10 @@ export default defineNuxtPlugin((nuxtApp: NuxtApp): void => {
 
       // Use window.location for redirect to avoid Nuxt router issues
       window.location.href = loginPath + redirectQuery;
+    } catch (error) {
+      // Both callers fire and forget, so an error escaping here would only ever surface as an
+      // unhandled rejection ("Uncaught (in promise)") with no context.
+      console.error('[LtAuth Interceptor] Handling a 401 failed:', error);
     } finally {
       if (loggingOut) {
         // Hold the guard until the navigation has had a chance to complete, so
@@ -303,7 +307,7 @@ export default defineNuxtPlugin((nuxtApp: NuxtApp): void => {
 
           // Handle 401 errors
           if (context.response?.status === 401) {
-            handleUnauthorized(url);
+            void handleUnauthorized(url);
           }
         },
       });
@@ -318,7 +322,7 @@ export default defineNuxtPlugin((nuxtApp: NuxtApp): void => {
       // Handle 401 errors from native fetch
       if (response.status === 401) {
         const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-        handleUnauthorized(url);
+        void handleUnauthorized(url);
       }
 
       return response;
