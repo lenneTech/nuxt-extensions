@@ -54,6 +54,7 @@
 
 import type { LtPreHydrationInputOptions } from '../types';
 
+import type { ObjectPlugin, Plugin } from '#app';
 import { defineNuxtPlugin, useRuntimeConfig } from '#imports';
 
 type EditableField = HTMLInputElement | HTMLTextAreaElement;
@@ -154,4 +155,4 @@ export default defineNuxtPlugin({
       }, maxRestoreMs);
     });
   },
-});
+}) as Plugin & ObjectPlugin;

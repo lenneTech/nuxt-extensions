@@ -69,6 +69,7 @@
 
 import type { LtExtensionsPublicRuntimeConfig } from '../types';
 
+import type { ObjectPlugin, Plugin } from '#app';
 import { defineNuxtPlugin, useRuntimeConfig } from '#imports';
 
 /**
@@ -529,4 +530,4 @@ export default defineNuxtPlugin({
       requestAnimationFrame(sweepFor);
     });
   },
-});
+}) as Plugin & ObjectPlugin;

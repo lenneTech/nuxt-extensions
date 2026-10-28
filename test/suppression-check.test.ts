@@ -146,9 +146,9 @@ describe('resolvedVersions', () => {
     expect(resolvedVersions(LOCK, 'absent')).toEqual([]);
   });
 
-  it('finds node-forge 1.4.0 in this repo\'s real lockfile', () => {
+  it('finds deepmerge 4.3.1 (the suppressed package) in this repo\'s real lockfile', () => {
     const lock = readFileSync(resolve(process.cwd(), 'pnpm-lock.yaml'), 'utf8');
-    expect(resolvedVersions(lock, 'node-forge')).toContain('1.4.0');
+    expect(resolvedVersions(lock, 'deepmerge')).toContain('4.3.1');
   });
 });
 
@@ -283,7 +283,7 @@ describe('createNpmVersionProbe', () => {
 describe('listSuppressions', () => {
   it('returns the ids this repo suppresses, in file order', () => {
     // `process.cwd()`, as in check-audit-wiring.test.ts (see the note in audit-report.test.ts).
-    expect(listSuppressions(process.cwd())).toEqual([ID]);
+    expect(listSuppressions(process.cwd())).toEqual(['GHSA-gcqx-w48m-w2h4']);
   });
 });
 
