@@ -5,14 +5,15 @@
  * for lenne.tech projects.
  */
 
-import { addComponent, addImports, addPlugin, addRouteMiddleware, createResolver, defineNuxtModule, tryResolveModule } from '@nuxt/kit';
+import { addComponent, addImports, addPlugin, addRouteMiddleware, addServerHandler, createResolver, defineNuxtModule, tryResolveModule } from '@nuxt/kit';
 import { pathToFileURL } from 'node:url';
 
+import { SECURITY_TXT_DEFAULT_CONTACT, SECURITY_TXT_DEFAULT_LANGUAGES, SECURITY_TXT_DEFAULT_VALID_DAYS, SECURITY_TXT_PATH } from './runtime/server/lib/security-txt';
 import type { LtExtensionsModuleOptions } from './runtime/types';
 
 // Module meta
 export const name = '@lenne.tech/nuxt-extensions';
-export const version = '1.20.1';
+export const version = '1.21.0';
 export const configKey = 'ltExtensions';
 
 // Default cookie names — re-exported from auth-state so consumers can read
@@ -61,6 +62,13 @@ const defaultOptions: LtExtensionsModuleOptions = {
   preHydrationInput: {
     enabled: true,
   },
+  securityTxt: {
+    contact: SECURITY_TXT_DEFAULT_CONTACT,
+    enabled: false,
+    hosts: [],
+    preferredLanguages: SECURITY_TXT_DEFAULT_LANGUAGES,
+    validDays: SECURITY_TXT_DEFAULT_VALID_DAYS,
+  },
   tus: {
     defaultChunkSize: 5 * 1024 * 1024, // 5MB
     defaultEndpoint: '/files/upload',
@@ -91,6 +99,7 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
       formLabelAssociation: { ...defaultOptions.formLabelAssociation, ...options.formLabelAssociation },
       i18n: { ...defaultOptions.i18n, ...options.i18n },
       preHydrationInput: { ...defaultOptions.preHydrationInput, ...options.preHydrationInput },
+      securityTxt: { ...defaultOptions.securityTxt, ...options.securityTxt },
       tus: { ...defaultOptions.tus, ...options.tus },
     };
 
@@ -341,6 +350,49 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
     // measurement, the upstream reference, and why the repair refuses to guess.
     if (resolvedOptions.formLabelAssociation.enabled !== false) {
       addPlugin(resolve('./runtime/plugins/form-label-association.client'));
+    }
+
+    // =========================================================================
+    // security.txt (RFC 9116)
+    // =========================================================================
+    // Opt-in: an address nobody reads does more harm than no file, and an internal app behind a
+    // login gains little from one. The values go into the SERVER-only runtime config, so a stage
+    // can override them without a rebuild (`NUXT_LT_EXTENSIONS_SECURITY_TXT_CONTACT`, …), while
+    // whether the route exists at all is decided at build time.
+    if (resolvedOptions.securityTxt.enabled === true) {
+      const securityTxt = resolvedOptions.securityTxt;
+      (nuxt.options.runtimeConfig as any).ltExtensions = {
+        ...(nuxt.options.runtimeConfig as any).ltExtensions,
+        securityTxt: {
+          contact: securityTxt.contact ?? SECURITY_TXT_DEFAULT_CONTACT,
+          encryption: securityTxt.encryption ?? '',
+          hosts: securityTxt.hosts ?? [],
+          policy: securityTxt.policy ?? '',
+          preferredLanguages: securityTxt.preferredLanguages ?? SECURITY_TXT_DEFAULT_LANGUAGES,
+          validDays: securityTxt.validDays ?? SECURITY_TXT_DEFAULT_VALID_DAYS,
+        },
+      };
+
+      addServerHandler({ handler: resolve('./runtime/server/routes/security-txt'), route: SECURITY_TXT_PATH });
+
+      // `Expires` is computed per request. Prerendered, it would be frozen at build time and the
+      // file would expire again with the deployment — exactly what the per-request route avoids.
+      nuxt.options.routeRules = {
+        ...nuxt.options.routeRules,
+        [SECURITY_TXT_PATH]: { ...nuxt.options.routeRules?.[SECURITY_TXT_PATH], prerender: false },
+      };
+      nuxt.options.nitro ??= {};
+      nuxt.options.nitro.prerender ??= {};
+      nuxt.options.nitro.prerender.ignore = [...(nuxt.options.nitro.prerender.ignore ?? []), SECURITY_TXT_PATH];
+
+      // A fully static site has no server to answer the route, so the file would simply be
+      // missing. Say so instead of shipping a site that silently lacks it.
+      if ((nuxt.options as any)._generate || nuxt.options.nitro.static) {
+        console.warn(
+          `[${name}] securityTxt is enabled, but this is a static build (nuxt generate): there is no server to answer ${SECURITY_TXT_PATH}, so the file will be missing. ` +
+            'Serve it with a server build, or place a static file yourself and keep its Expires current.',
+        );
+      }
     }
 
     // Transpile runtime directory and tus-js-client (ESM compatibility)

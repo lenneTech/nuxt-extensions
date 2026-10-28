@@ -158,6 +158,8 @@ export interface LtExtensionsModuleOptions {
   i18n?: LtI18nModuleOptions;
   /** Pre-hydration input preservation configuration */
   preHydrationInput?: LtPreHydrationInputOptions;
+  /** security.txt (RFC 9116) at `/.well-known/security.txt` */
+  securityTxt?: LtSecurityTxtOptions;
   /** TUS upload module configuration */
   tus?: LtTusModuleOptions;
 }
@@ -285,6 +287,68 @@ export interface LtPreHydrationInputOptions {
   maxRestoreMs?: number;
 }
 
+/**
+ * security.txt according to RFC 9116, served at `/.well-known/security.txt`.
+ *
+ * The file tells security researchers where to report a vulnerability. Off by default: only turn
+ * it on where somebody actually reads the contact address — a published address that nobody
+ * answers is worse than none.
+ *
+ * The file is built per request. `Expires` is always "now + `validDays`", cut to midnight UTC, so
+ * it never runs out between deployments. `Canonical` names `runtimeConfig.public.siteUrl`
+ * (`NUXT_PUBLIC_SITE_URL`) and, in addition, the requested host if it is listed in `hosts`.
+ *
+ * Everything except `enabled` can be overridden per stage at runtime, without a rebuild:
+ * `NUXT_LT_EXTENSIONS_SECURITY_TXT_CONTACT`, `…_ENCRYPTION`, `…_HOSTS`, `…_POLICY`,
+ * `…_PREFERRED_LANGUAGES`, `…_VALID_DAYS`. Blanking the contact that way makes the route answer
+ * 404, because a file without `Contact` is invalid.
+ *
+ * Not available with `nuxt generate`: a static site has no server to compute the file.
+ *
+ * @example
+ * ```ts
+ * export default defineNuxtConfig({
+ *   ltExtensions: {
+ *     securityTxt: {
+ *       enabled: true,
+ *       contact: 'mailto:security@customer.example',
+ *       hosts: ['customer.example', 'www.customer.example'],
+ *     },
+ *   },
+ * });
+ * ```
+ */
+export interface LtSecurityTxtOptions {
+  /**
+   * Contact URI(s), in order of preference: `mailto:`, `https:` or `tel:`.
+   * Defaults to `'mailto:security@lenne.tech'`. For a customer project, decide whether reports go
+   * to lenne.tech or to the customer, and set it explicitly.
+   */
+  contact?: string | string[];
+  /** Serve the file. Defaults to `false`. */
+  enabled?: boolean;
+  /**
+   * URI of an OpenPGP public key reports can be encrypted with. A path (`/.well-known/pgp-key.txt`)
+   * is resolved against the site URL and left out when no site URL is configured.
+   */
+  encryption?: string;
+  /**
+   * Hostnames the site is served from without a redirect (e.g. apex and `www`). A request for one
+   * of them adds a second `Canonical` line for that host. The host comes from a request header,
+   * so nothing outside this list ever reaches the file. Defaults to `[]`.
+   */
+  hosts?: string[];
+  /** URI of the vulnerability disclosure policy. A path is resolved like `encryption`. */
+  policy?: string;
+  /** Language tags reports may be written in, in order of preference. Defaults to `['de', 'en']`. */
+  preferredLanguages?: string[];
+  /**
+   * Days between the request and `Expires`. Defaults to `180`; clamped to `365` because RFC 9116
+   * recommends less than a year, and a value below `1` falls back to the default.
+   */
+  validDays?: number;
+}
+
 // =============================================================================
 // Runtime Config Types
 // =============================================================================
@@ -341,11 +405,29 @@ export interface LtExtensionsPublicRuntimeConfig {
   };
 }
 
+/**
+ * Server-only runtime config added by this module. Present only while `securityTxt` is enabled.
+ */
+export interface LtExtensionsRuntimeConfig {
+  ltExtensions?: {
+    securityTxt?: {
+      contact: string | string[];
+      encryption: string;
+      hosts: string | string[];
+      policy: string;
+      preferredLanguages: string | string[];
+      validDays: number | string;
+    };
+  };
+}
+
 // Extend Nuxt's runtime config types
 declare module 'nuxt/schema' {
   interface PublicRuntimeConfig extends LtExtensionsPublicRuntimeConfig {}
+  interface RuntimeConfig extends LtExtensionsRuntimeConfig {}
 }
 
 declare module '@nuxt/schema' {
   interface PublicRuntimeConfig extends LtExtensionsPublicRuntimeConfig {}
+  interface RuntimeConfig extends LtExtensionsRuntimeConfig {}
 }
