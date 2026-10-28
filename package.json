@@ -1,6 +1,6 @@
 {
   "name": "@lenne.tech/nuxt-extensions",
-  "version": "1.20.1",
+  "version": "1.21.0",
   "description": "Reusable Nuxt 4 composables, components, and Better-Auth integration for lenne.tech projects",
   "repository": {
     "type": "git",
@@ -69,7 +69,7 @@
     "test": "vitest run",
     "test:watch": "vitest watch",
     "test:coverage": "vitest run --coverage",
-    "test:types": "vue-tsc --noEmit && cd playground && vue-tsc --noEmit",
+    "test:types": "vue-tsc --noEmit && vue-tsc --noEmit -p src/runtime/server && cd playground && vue-tsc --noEmit",
     "release": "pnpm format:check && pnpm run dev:prepare && pnpm lint && pnpm run version:check && pnpm test:types && pnpm test && pnpm run check:consumer && pnpm prepack",
     "check:consumer": "node scripts/check-consumer-build.mjs",
     "check:manifest": "node scripts/check-package-manifest.mjs",

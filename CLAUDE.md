@@ -13,7 +13,7 @@ src/
 │   ├── lib/               # Library exports (auth-client, auth-state, ai)
 │   ├── middleware/        # Route middleware (system setup)
 │   ├── plugins/           # Nuxt plugins (auth interceptor, error translation, config check)
-│   ├── server/            # server-side tsconfig scope (no runtime routes; auth talks to the backend directly)
+│   ├── server/            # Nitro code: the opt-in security.txt route (auth talks to the backend directly, no proxy)
 │   ├── testing/           # Playwright test helpers
 │   ├── types/             # TypeScript type definitions
 │   └── utils/             # Auto-imported utility functions
@@ -337,6 +337,22 @@ fields at `app:beforeMount` and restores them at `app:mounted`, dispatching a sy
   `test/pre-hydration-input.test.ts` pins the current behaviour and will fail on the types Vue
   takes over.
 - Opt out with `ltExtensions.preHydrationInput.enabled: false`.
+
+## security.txt (RFC 9116)
+
+`ltExtensions.securityTxt.enabled: true` serves `/.well-known/security.txt`. Contact defaults to
+`mailto:security@lenne.tech`. Builder: `runtime/server/lib/security-txt.ts` (pure, tested in
+`test/security-txt.test.ts`). Route: `runtime/server/routes/security-txt.ts`.
+
+- **Do not replace it with a static file in `public/`.** `Expires` is computed per request so it
+  never runs out between deployments. A static file expires silently, and scanners drop it.
+- **Do not register it with a method.** `addServerHandler` without `method` answers HEAD too;
+  scanners probe with HEAD.
+- **Values live in the server-only runtime config** (`runtimeConfig.ltExtensions.securityTxt`), so
+  `NUXT_LT_EXTENSIONS_SECURITY_TXT_*` overrides them per stage. `enabled` is build-time only.
+- **`Canonical` from the request host only via the `hosts` allowlist.** The host is a request
+  header; anything not listed must never reach the file.
+- For a customer project, ask whether reports go to lenne.tech or the customer before enabling it.
 
 ## Development Rules
 

@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.21.0] - 2026-10-28
+
+### Added
+
+- **`ltExtensions.securityTxt`: an opt-in security.txt (RFC 9116)** at `/.well-known/security.txt`
+  (DEV-3608), ported from the lenne.tech website, where it has been live since 2026-10-13. Off by
+  default. Once enabled, the contact defaults to `mailto:security@lenne.tech`; set your own for a
+  customer project that wants reports itself. `Expires` is computed per request, so the file does
+  not run out between deployments. `Canonical` names `NUXT_PUBLIC_SITE_URL` plus the requested host
+  if it is listed in `hosts`. GET and HEAD answer `text/plain` with `no-store`. Every value except
+  `enabled` can be overridden per stage via `NUXT_LT_EXTENSIONS_SECURITY_TXT_*`. The route is
+  excluded from prerendering. No change for projects that do not enable it.
+
 ## [1.20.1] - 2026-10-28
 
 Maintenance release. No API changed. Apart from the version string, the runtime JavaScript in

@@ -16,9 +16,11 @@ export type {
   LtErrorTranslationModuleOptions,
   LtExtensionsModuleOptions,
   LtExtensionsPublicRuntimeConfig,
+  LtExtensionsRuntimeConfig,
   LtFormLabelAssociationOptions,
   LtI18nModuleOptions,
   LtPreHydrationInputOptions,
+  LtSecurityTxtOptions,
   LtSystemSetupModuleOptions,
   LtTusModuleOptions,
 } from './module';

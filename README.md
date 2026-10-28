@@ -81,6 +81,7 @@ overrides:
 - **TUS File Upload** - Resumable uploads with pause/resume
 - **Transition Components** - Ready-to-use Vue transition wrappers
 - **i18n Support** - English and German translations (works without i18n too)
+- **security.txt** - Opt-in RFC 9116 file that never expires between deployments
 - **Auto-imports** - All composables and components are auto-imported
 - **Pre-hydration input preservation** - text typed before hydration is kept, not erased
 - **Form label repair** - restores `<label for>` associations that hydration breaks
@@ -195,6 +196,12 @@ export default defineNuxtConfig({
     ai: {
       enabled: true,                // Enable AI composables / auto-imports
       basePath: '/ai',              // Must match the nest-server AI controller
+    },
+
+    // security.txt at /.well-known/security.txt (see "security.txt" below)
+    securityTxt: {
+      enabled: false,               // Opt-in
+      contact: 'mailto:security@lenne.tech',
     },
   },
 });
@@ -355,6 +362,61 @@ export default defineNuxtConfig({
   },
 });
 ```
+
+## security.txt (RFC 9116)
+
+A `security.txt` tells security researchers where to report a vulnerability. The module can serve
+one at `/.well-known/security.txt`. It is **off by default**: only turn it on where somebody
+actually reads the contact address. A published address that nobody answers is worse than none.
+
+```ts
+export default defineNuxtConfig({
+  ltExtensions: {
+    securityTxt: {
+      enabled: true,
+      // All optional:
+      contact: 'mailto:security@lenne.tech',   // default; string or array, mailto:/https:/tel:
+      hosts: ['example.com', 'www.example.com'], // hostnames served without a redirect
+      preferredLanguages: ['de', 'en'],          // default
+      validDays: 180,                            // default; clamped to 365
+      policy: 'https://example.com/security-policy',
+      encryption: '/.well-known/pgp-key.txt',    // a path is resolved against the site URL
+    },
+  },
+});
+```
+
+Response for `https://example.com`:
+
+```text
+Contact: mailto:security@lenne.tech
+Expires: 2027-04-26T00:00:00.000Z
+Preferred-Languages: de, en
+Canonical: https://example.com/.well-known/security.txt
+```
+
+**For a customer project, decide where reports go.** The default sends them to lenne.tech. If the
+customer wants reports themselves, set their address.
+
+How it behaves:
+
+- **`Expires` never runs out.** The file is built per request: "now + `validDays`", cut to
+  midnight UTC. A file written once at deploy time would expire on its own, and scanners such as
+  the BSI's drop an expired file without telling anyone.
+- **`Canonical`** names `runtimeConfig.public.siteUrl` (`NUXT_PUBLIC_SITE_URL`, declared by
+  nuxt-base-starter). If the site answers under more than one hostname without a redirect (apex
+  and `www`), list them in `hosts`. A request for one of them adds a second `Canonical` line,
+  because RFC 9116 expects the URL a file was fetched from to be listed. The host comes from a
+  request header, so only hosts on that list ever reach the file.
+- **GET and HEAD** both answer `200` with `text/plain; charset=utf-8` and `cache-control: no-store`.
+- **Overridable per stage at runtime**, without a rebuild:
+  `NUXT_LT_EXTENSIONS_SECURITY_TXT_CONTACT`, `…_HOSTS` (`"example.com,www.example.com"`),
+  `…_PREFERRED_LANGUAGES`, `…_VALID_DAYS`, `…_POLICY`, `…_ENCRYPTION`. Only `enabled` is fixed at
+  build time. Blanking the contact makes the route answer `404`, because a file without
+  `Contact` is invalid.
+- **Never prerendered.** The route is excluded from prerendering, so `Expires` is not frozen at
+  build time. A fully static site (`nuxt generate`) has no server to answer it at all. The module
+  warns about that at build time.
 
 ## Usage
 
