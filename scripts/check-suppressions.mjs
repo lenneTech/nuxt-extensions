@@ -5,8 +5,9 @@
  * `auditConfig.ignoreGhsas` in pnpm-workspace.yaml hides an advisory from `pnpm audit`
  * permanently, and pnpm drops it from the JSON report, so nothing ever says when the reason for
  * an entry has gone away. This step does: it fails as soon as a suppressed advisory gets an
- * installable fix, is withdrawn, or its package no longer resolves to a vulnerable version. The
- * verdicts are explained in `lib/suppression-check.mjs`.
+ * installable fix, is withdrawn, or its package no longer resolves to a vulnerable version. A fix
+ * younger than the workspace's `minimumReleaseAge` (pnpm 11 default: 24h) is reported as maturing,
+ * not as obsolete. The verdicts are explained in `lib/suppression-check.mjs`.
  *
  * Usage:
  *   node scripts/check-suppressions.mjs
@@ -26,8 +27,9 @@ import { listSuppressions } from "./lib/audit-report.mjs";
 import {
   assessSuppression,
   createAdvisoryFetcher,
-  createNpmVersionProbe,
+  createNpmPackumentFetcher,
   exitCodeFor,
+  minimumReleaseAgeOf,
   OBSOLETE,
   resolvedVersions,
   summaryLine,
@@ -39,6 +41,7 @@ const TAG = "[suppressions]";
 const LABEL = {
   "fix-available": "✗ FIX AVAILABLE",
   "not-present": "✗ NOT IN TREE   ",
+  "fix-in-quarantine": "✓ fix maturing  ",
   "fix-unpublished": "✓ still holds   ",
   unfixable: "✓ still holds   ",
   unverified: "! NOT verified  ",
@@ -56,10 +59,17 @@ if (ids.length === 0) {
   } catch {
     /* reported per entry as "could not read pnpm-lock.yaml" */
   }
+  let workspaceText = "";
+  try {
+    workspaceText = readFileSync(join(ROOT, "pnpm-workspace.yaml"), "utf8");
+  } catch {
+    /* no workspace file: pnpm's default gate applies */
+  }
   const deps = {
     fetchAdvisory: createAdvisoryFetcher({ token }),
     lockedVersions: (name) => (lockText === null ? null : resolvedVersions(lockText, name)),
-    npmHasVersion: createNpmVersionProbe(),
+    minimumReleaseAgeMinutes: minimumReleaseAgeOf(workspaceText),
+    npmPackument: createNpmPackumentFetcher(),
   };
   const results = await Promise.all(ids.map((id) => assessSuppression(id, deps)));
 
