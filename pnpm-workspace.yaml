@@ -124,6 +124,9 @@ overrides:
   # Verified 2026-10-28: no new brace-expansion advisory since the 2026-09-29 wave, both keys
   # still equal GHSA-q2hr-2g5m-vwhr's windows, 2.1.7 and 5.0.12 still the newest in their majors.
   # Still latent: fresh resolves with and without the overrides block pick the same 2.1.7 / 5.0.12.
+  # 2026-11-01: brace-expansion 2.x left this tree with minimatch 5.1.9 / 9.0.9 (see the glob and
+  # minimatch entries below); only 5.0.12 remains, via minimatch 11.0.3. The 2.x entry stays as the
+  # guard for a parent that requests into the window again.
   'brace-expansion@>=2.0.0 <2.1.7': '2.1.7'
   'brace-expansion@>=5.0.0 <5.0.12': '5.0.12'
   # `minimatch@>=5.0.0 <10.2.6` -> 10.2.6 was removed on 2026-10-24. It existed because only
@@ -131,6 +134,32 @@ overrides:
   # consumer was lifted ACROSS majors onto minimatch 10. The advisory now lists a 2.x fix
   # (2.1.3), the 2.x entry above pins 2.1.7, and a fresh resolve without the overrides block audits
   # clean with readdir-glob on minimatch 5.1.9 and glob 10.5.0 on 9.0.9 — the majors they declare.
+  # glob and minimatch across their majors (owner decision 2026-11-01: override rather than
+  # suppress). GHSA-3g3m-2fjr-6pw4 (glob >=9.0.0 <=14.0.1, moderate: an aborted walk keeps reading
+  # directories in the background, first patched 14.0.2) and GHSA-g3hv-75wg-m249 (minimatch
+  # <11.0.1, moderate: DoS through globparts amplification of an attacker-supplied pattern, first
+  # patched 11.0.1). Both fixes exist only in the new majors (2026-10-27), and each consumer here is
+  # on its newest release and still requests the old one: @vercel/nft 1.11.0 glob ^13 (via
+  # nitropack), archiver-utils 5.0.2 glob ^10 (via archiver, via nitropack), readdir-glob 1.1.3
+  # minimatch ^5 (via archiver). Lifting the two glob consumers to 14 takes glob's own minimatch to
+  # 11 as well, so readdir-glob is the only minimatch entry. One entry per consumer; without its
+  # entry, that consumer's copy stays in the vulnerable range.
+  #
+  # The calls survive the majors. glob 14 still exports `glob` and `sync`, the only calls nft
+  # (`glob()`) and archiver-utils (`glob.sync()`) make; minimatch 11 still exports the `Minimatch`
+  # class with `match()`, the only API readdir-glob uses. It dropped `makeRe()` and
+  # `Minimatch#regexp`, which none of them calls. nuxt-base-starter ran old and new major side by
+  # side with each consumer's exact calls and options (710 comparisons, 0 differences) and traced an
+  # identical `nuxt build` output with and without these entries; its consumers are the same
+  # versions as here, plus rimraf, which this tree does not have. All of it is nitropack build
+  # tooling and never reaches the published package.
+  #
+  # Scoped per consumer on purpose: a bare `minimatch@<11.0.1` key would also lift any consumer that
+  # needs the `makeRe()` 11 removed. Drop each entry once its consumer requests the patched major
+  # itself.
+  '@vercel/nft>glob@<14.0.2': '14.0.3'
+  'archiver-utils>glob@<14.0.2': '14.0.3'
+  'readdir-glob>minimatch@<11.0.1': '11.0.3'
   # tar — five advisories in one line (GHSA-23hp-3jrh-7fpw critical: decompression/parse DoS via
   # unlimited input; GHSA-8x88-c5mf-7j5w, GHSA-w8wr-v893-vjvp, GHSA-gvwx-54wh-qm9j,
   # GHSA-r292-9mhp-454m). The highest patch floor across them is 7.5.21.
