@@ -294,6 +294,10 @@ export function createLtSyncEngine<T extends Record<string, unknown> = Record<st
       await tx.addOutbox({ baseVersion: server.version, data: resolution.data as Record<string, unknown>, id: item.id, mutationId: ltSyncUuidV7(), op: 'upsert' });
       return;
     }
+    // Not stored, and never will be: the changes queued behind it carry a `baseVersion` that assumed
+    // it was applied. Sent on their own they could meet another writer's version with that very
+    // number and be applied on top of it (protocol §11 since nest-server 12.3.0), so they go too
+    for (const entry of later) await tx.removeOutbox(entry.mutationId);
     if (status === 'not_found') {
       await tx.deleteRecord(item.id);
       return;

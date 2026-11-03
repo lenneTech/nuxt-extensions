@@ -163,6 +163,25 @@ describe('scenario: two tabs', () => {
     expect(await tabB.list()).toMatchObject([{ id: a.id, version: 1 }]);
   });
 
+  it('holds back the changes behind one answered `retry` until it is settled', async () => {
+    const client = engine();
+    const a = await client.create({ title: 'A' });
+    await client.sync();
+    server.online = false;
+    await client.update(a.id, { title: 'first' });
+    await client.sync();
+    await client.update(a.id, { title: 'second' });
+    server.online = true;
+    const [first] = await outbox();
+    server.inProgress.add(first!.mutationId);
+
+    await client.sync();
+    // The second change assumes the first is applied; while that is open it must not go out alone
+    expect(server.pushes().flatMap((request) => request.body.items).map((item: { baseVersion?: number }) => item.baseVersion)).not.toContain(2);
+    await client.sync();
+    expect(server.records.get(a.id)).toMatchObject({ data: { title: 'second' }, version: 3 });
+  });
+
   it('keeps a change answered `retry` and sends it with its mutation id again', async () => {
     const client = engine();
     const a = await client.create({ title: 'A' });
@@ -331,6 +350,26 @@ describe('server answers', () => {
     expect(result.rejected).toMatchObject([{ code: 'VALIDATION_FAILED', id: a.id }]);
     // Never "saved" on the device while the server keeps the old value
     expect(await client.get(a.id)).toMatchObject({ data: { title: 'A' }, version: 1 });
+  });
+
+  it('drops the changes queued behind a refused one instead of sending them on their own', async () => {
+    const client = engine();
+    const a = await client.create({ title: 'A' });
+    await client.sync();
+    server.online = false;
+    await client.update(a.id, { title: '' });
+    // The failed push marks it carried: the next edit becomes its own change, baseVersion 2
+    await client.sync();
+    await client.update(a.id, { body: 'based on the refused title' });
+    server.online = true;
+    server.write(a.id, { title: 'theirs' });
+
+    await client.sync();
+    // Version 2 is the OTHER writer's: the follow-up must never reach the server on its own
+    expect(server.records.get(a.id)).toMatchObject({ data: { title: 'theirs' }, version: 2 });
+    expect(server.pushes().flatMap((request) => request.body.items).filter((item: { baseVersion?: number }) => item.baseVersion === 2)).toEqual([]);
+    expect(await client.pendingCount()).toBe(0);
+    expect(await client.get(a.id)).toMatchObject({ data: { title: 'theirs' }, version: 2 });
   });
 
   it('brings a record back when the server refuses its delete', async () => {

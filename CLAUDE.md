@@ -151,10 +151,12 @@ here, a sync model (`@PersistedModel({ sync })` + `@SyncService`) on the API.
 
 **Rules that keep the engine correct (`src/runtime/lib/sync.ts`):**
 
-- A push carries at most ONE change per record. The next change's `baseVersion` assumes the one
-  before it was applied; sent in the same request, a change based on a refused one meets another
-  writer's version with the same number and is applied on top of it. The nest-server reference
-  client does send them together — do not "simplify" back to that.
+- A push carries at most ONE change per record, and the next one goes out only once the one before
+  it is `applied` or `merged`. Its `baseVersion` assumes exactly that; sent while the first is open
+  (`retry`) or after it was refused (`rejected`, `not_found`, `conflict`), it can meet another
+  writer's version with the same number and be applied on top of it. So it waits behind a `retry`
+  and is dropped after a refusal (protocol §11 since nest-server 12.3.0, which also guards this
+  server-side within one request).
 - An outbox item a push has carried (`attempted`) is never edited again; a later edit becomes a new
   item. Read-and-mark happens in one IndexedDB transaction.
 - `onConflict` runs outside any IndexedDB transaction (an awaited hook would let the transaction
