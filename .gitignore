@@ -45,6 +45,9 @@ coverage
 
 # Claude Code (agent memory, local settings)
 .claude
+# Agent memory on its own, so it stays ignored if the line above is ever narrowed: it is a symlink
+# into the private notes repository (lt-memory). No trailing slash, or the symlink is not matched.
+**/.claude/agent-memory
 
 # OSX
 .DS_Store
