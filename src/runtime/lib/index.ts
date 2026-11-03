@@ -32,3 +32,7 @@ export {
 
 // AI client helpers (URL builder, JSON request, SSE parser)
 export { buildLtAiUrl, getLtAiBasePath, ltAiRequest, ltAiResponseError, parseLtAiSseStream } from './ai';
+
+// Offline sync helpers — for a sign-out flow that does not go through `useLtAuth().signOut()`
+export { buildLtSyncUrl, flushLtSyncBeforeSignOut, getLtSyncBasePath, ltSyncObjectId, ltSyncUuidV7 } from './sync';
+export { deleteLtSyncDatabase } from './sync-store';

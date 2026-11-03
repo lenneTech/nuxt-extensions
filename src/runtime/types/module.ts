@@ -1,3 +1,5 @@
+import type { LtSyncModuleOptions } from './sync';
+
 // =============================================================================
 // Module Configuration Types
 // =============================================================================
@@ -158,6 +160,8 @@ export interface LtExtensionsModuleOptions {
   i18n?: LtI18nModuleOptions;
   /** Pre-hydration input preservation configuration */
   preHydrationInput?: LtPreHydrationInputOptions;
+  /** Offline sync with the nest-server sync module (opt-in) */
+  sync?: LtSyncModuleOptions;
   /** TUS upload module configuration */
   tus?: LtTusModuleOptions;
 }
@@ -332,6 +336,10 @@ export interface LtExtensionsPublicRuntimeConfig {
     preHydrationInput: {
       enabled: boolean;
       maxRestoreMs: number;
+    };
+    sync: {
+      basePath: string;
+      enabled: boolean;
     };
     tus: {
       defaultChunkSize: number;

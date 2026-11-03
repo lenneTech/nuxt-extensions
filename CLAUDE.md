@@ -45,6 +45,12 @@ src/
 | `useLtAiPlaceholders()` | Loads the backend's `{{placeholder}}` registry for editor sidebars |
 | `useLtAiAdmin()` | Admin CRUD: connections, preferences, budget limits, slots, prompt hints, interactions — server-gated |
 
+### Offline sync (nest-server sync module, opt-in)
+
+| Composable | Purpose |
+|-----------|---------|
+| `useLtOfflineSync(model, options?)` | Offline read/write of one model in IndexedDB; push/pull against `/sync`, hints, conflicts, tabs, owner check |
+
 ## Module Configuration
 
 Configure in `nuxt.config.ts` (top-level key is `ltExtensions`):
@@ -75,6 +81,10 @@ export default defineNuxtConfig({
     ai: {
       enabled: true,
       basePath: '/ai',               // Must match the nest-server AI controller
+    },
+    sync: {
+      enabled: false,                // opt-in: useLtOfflineSync() + sign-out cleanup
+      basePath: '/sync',             // Must match the nest-server sync module
     },
     formLabelAssociation: {
       enabled: true,                 // repair <label for> broken by an SSR/client useId() divergence
@@ -111,6 +121,60 @@ The API base URL is resolved at runtime from `NUXT_PUBLIC_API_URL` (client + SSR
 - `useLtAi.promptStream()` and `useLtAiChat()` consume `POST /ai/stream` via `fetch` + `ReadableStream` (NOT `EventSource` — the endpoint is `POST` with auth). The SSE parser is robust against split chunks, keep-alive comments, malformed lines, and oversized lines (>1 MiB throws).
 - `useLtAiAdmin()` is exposed as a regular composable; admin gating is enforced server-side (`@Restricted(ADMIN)`). Render admin UI behind a frontend route guard for UX, but trust the backend for authorization.
 - The chat composable's `messages` ref is a shallow `Readonly<Ref<LtAiMessage[]>>` so child components can bind individual messages while preserving streaming reactivity.
+
+## Offline Sync
+
+`useLtOfflineSync()` is the client of the nest-server sync module (>= 12.2.0); the protocol is
+`docs/offline-sync-protocol.md` in nest-server. Both ends are opt-in: `ltExtensions.sync.enabled`
+here, a sync model (`@PersistedModel({ sync })` + `@SyncService`) on the API.
+
+**The local data belongs to the signed-in user, and only explicit sign-out deletes it:**
+
+- `useLtAuth().signOut()` sends what is unsent (at most 5 s), signs out, then deletes the whole
+  IndexedDB database `lt-offline-sync`. **A custom sign-out that bypasses it must call
+  `flushLtSyncBeforeSignOut(userId)` and `deleteLtSyncDatabase()` (from `/lib`) itself** — otherwise
+  the user's records stay on the device.
+- **The flush sends only the signing-out user's own changes.** After an expired session the outbox
+  of the PREVIOUS user is still there; pushed under the current session it would land in the
+  current user's account. `flushLtSyncBeforeSignOut` compares the stored owner with `userId`.
+- **An expired session deletes nothing.** The 401 interceptor calls `clearUser()`, not `signOut()`,
+  on purpose: the protocol promises that after signing in again the same changes go out without
+  duplicates. Never hook the sync cleanup into `clearUser()` — that would delete unsent work on
+  every expired session.
+- Another user wipes the data before anything is shown or pulled (`claimLtSyncOwner`, one
+  transaction); so does data WITHOUT an owner. Nobody signed in sees nothing.
+- **Every write of a sync run is fenced by the owner it started for** (`runLtSyncTx(…, { owner })`).
+  An answer arriving after sign-out deleted the database, or after another account claimed it,
+  would otherwise reopen the database and write the previous user's records for the next one.
+- Local data is kept per model AND tenant (`ltSyncScope`): the server stamps a create into the
+  tenant of its `X-Tenant-Id`, so one tenant's unsent change must never go out under another.
+
+**Rules that keep the engine correct (`src/runtime/lib/sync.ts`):**
+
+- A push carries at most ONE change per record, and the next one goes out only once the one before
+  it is `applied` or `merged`. Its `baseVersion` assumes exactly that; sent while the first is open
+  (`retry`) or after it was refused (`rejected`, `not_found`, `conflict`), it can meet another
+  writer's version with the same number and be applied on top of it. So it waits behind a `retry`
+  and is dropped after a refusal (protocol §11 since nest-server 12.3.0, which also guards this
+  server-side within one request).
+- An outbox item a push has carried (`attempted`) is never edited again; a later edit becomes a new
+  item. Read-and-mark happens in one IndexedDB transaction.
+- `onConflict` runs outside any IndexedDB transaction (an awaited hook would let the transaction
+  auto-commit). Nothing inside `runLtSyncTx()` may await anything but that transaction's requests.
+- Hints are read with `fetch`, not `EventSource` (no `Authorization` header in JWT mode). Every
+  reconnect pulls once: the server ends the stream on purpose and never replays the hint it missed.
+- ONE hint stream per tab and tenant (`subscribeLtSyncHints`), for every model in use. A stream per
+  composable call holds a connection each; over HTTP/1.1 six of them stall every API request.
+- A refused change (`rejected`) to a record the server has drops the cursor, so the pull right after
+  restores the server's state; otherwise the device would keep showing the refused value.
+
+**Tests:** `test/sync-engine.test.ts` runs the protocol's five client scenarios (offline
+create/change/delete, conflict, two tabs, expired session, cleared storage) against
+`test/fixtures/sync-server.ts` with `fake-indexeddb`. The browser E2E against a real nest-server
+lives in the nuxt-base-starter (DEV-3919).
+
+A service worker must never cache `/sync` or `/iam` responses (nest-server
+`src/core/modules/sync/SECURITY.md`).
 
 ## Testing Helpers
 

@@ -79,6 +79,7 @@ overrides:
 - **Better-Auth Integration** - Login, 2FA, Passkey/WebAuthn support
 - **Cookie/JWT Dual-Mode** - Automatic fallback from cookies to JWT
 - **TUS File Upload** - Resumable uploads with pause/resume
+- **Offline Sync** - Read and write offline, reconcile with the nest-server sync module (opt-in)
 - **Transition Components** - Ready-to-use Vue transition wrappers
 - **i18n Support** - English and German translations (works without i18n too)
 - **Auto-imports** - All composables and components are auto-imported
@@ -195,6 +196,12 @@ export default defineNuxtConfig({
     ai: {
       enabled: true,                // Enable AI composables / auto-imports
       basePath: '/ai',              // Must match the nest-server AI controller
+    },
+
+    // Offline sync (opt-in, see "Offline Sync" below)
+    sync: {
+      enabled: false,               // Enable useLtOfflineSync() and the sign-out cleanup
+      basePath: '/sync',            // Must match the nest-server sync module
     },
   },
 });
@@ -722,6 +729,79 @@ All AI DTOs are exported as `LtAi*` types. The streaming endpoint is consumed vi
 > is enforced server-side (`@Restricted(ADMIN)`). Render admin UI behind a frontend
 > route guard for UX, but trust the backend for authorization.
 
+## Offline Sync
+
+Read and write while disconnected, reconcile when back. `useLtOfflineSync()` is the client of the
+`@lenne.tech/nest-server` **sync module** (12.2.0 or later); the protocol is
+`docs/offline-sync-protocol.md` in nest-server. It is opt-in, both here and on the server:
+
+```typescript
+// nuxt.config.ts
+ltExtensions: {
+  sync: { enabled: true, basePath: '/sync' }, // basePath must match the nest-server sync module
+}
+```
+
+The API needs a sync model too: `@PersistedModel({ sync })` on the model and `@SyncService` on its
+CrudService (nest-server `src/core/modules/sync/README.md`).
+
+```vue
+<script setup lang="ts">
+const { create, needsLogin, offline, pendingCount, records, remove } = useLtOfflineSync<{ title: string }>('note');
+
+// Works offline: the change shows at once and waits in the outbox until the next sync
+const add = (title: string) => create({ title });
+</script>
+
+<template>
+  <p v-if="offline">Offline — {{ pendingCount }} changes waiting</p>
+  <p v-if="needsLogin">Please sign in again; nothing is lost</p>
+  <ul>
+    <li v-for="note in records" :key="note.id">
+      {{ note.data?.title }} <button @click="remove(note.id)">Delete</button>
+    </li>
+  </ul>
+</template>
+```
+
+**What it does:**
+
+- Keeps records, cursors and unsent changes in IndexedDB. Each change carries a `mutationId` and
+  the `baseVersion` it is based on, so a repeated send never duplicates and a stale one conflicts.
+- Syncs at start, on `online`, on focus, shortly after a local change, and after a server hint
+  (`GET <basePath>/hints`, read with `fetch` so it signs in with a cookie and a JWT alike). Every
+  reconnect of the hint stream pulls once: the server ends the stream on purpose and does not
+  replay what it missed. All instances of a tab share one stream per tenant, and a hidden tab
+  keeps none open.
+- Handles every item status and HTTP status of the protocol: `401` keeps everything (sign in again,
+  the same changes go out without duplicates), `410` drops the local records and pulls everything
+  again while keeping unsent changes, `403` on a pull drops the model's records, `429`/`503` and
+  network errors back off. A refused change is dropped and the record returns to the server's state.
+- Tabs share the data: one syncs at a time (Web Locks), the others show the result
+  (BroadcastChannel).
+
+**Options:** `idFormat` (`'objectId'` default, `'uuidv7'` for models declared with it),
+`onConflict` (default: the server wins; return `{ data }` to send your answer again on top of the
+server's version), `tenantId` (`X-Tenant-Id`; records and unsent changes are kept per tenant, so a
+change made under one tenant never goes out under another), `pageLimit`, `hints: false`,
+`auto: false` (only `sync()` syncs).
+
+**Whose data it is.** The local data belongs to the signed-in user:
+
+| Event | Local data |
+|-------|-----------|
+| `useLtAuth().signOut()` | The user's own unsent changes are sent (at most 5 s), then the whole database is deleted |
+| Another user signs in | Deleted before anything is shown or pulled |
+| Session expired, same user signs in again | Kept; the outbox goes out without duplicates |
+| Nobody signed in | Nothing shown, changes refused |
+
+A sync answer that arrives after the sign-out or the account switch is discarded, not stored. A
+sign-out flow that bypasses `useLtAuth().signOut()` must do the same itself:
+`flushLtSyncBeforeSignOut(userId)` and `deleteLtSyncDatabase()` from
+`@lenne.tech/nuxt-extensions/lib`. The flush sends only when the local data belongs to `userId`.
+`pendingCount` lets the app warn before signing out. A service worker must never cache responses
+of `/sync` or `/iam` (nest-server `src/core/modules/sync/SECURITY.md`).
+
 ## i18n Support
 
 The package works **with or without** `@nuxtjs/i18n`:
@@ -753,6 +833,7 @@ The package works **with or without** `@nuxtjs/i18n`:
 | `useLtAiPrompts()` | User-facing prompt snippet CRUD (`'user'` / `'tenant'` scope) |
 | `useLtAiPlaceholders()` | Loads the backend's `{{placeholder}}` registry |
 | `useLtAiAdmin()` | Admin CRUD for connections, preferences, budget limits, slots, prompt hints, interactions |
+| `useLtOfflineSync()` | Offline read/write of one model, synced with the nest-server sync module (opt-in) |
 
 ### Components
 
