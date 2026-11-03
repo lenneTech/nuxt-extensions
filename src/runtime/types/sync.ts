@@ -93,7 +93,7 @@ export interface UseLtOfflineSyncOptions<T = Record<string, unknown>> {
   onConflict?: (conflict: LtSyncConflict<T>) => LtSyncConflictResolution<T> | Promise<LtSyncConflictResolution<T>>;
   /** Records per pull page (default: 200; the server caps it, 1000 at most) */
   pageLimit?: number;
-  /** Restrict pull and push to one tenant (`X-Tenant-Id`, §4) */
+  /** Restrict pull and push to one tenant (`X-Tenant-Id`, §4); records and unsent changes are kept per tenant */
   tenantId?: string;
 }
 
@@ -119,7 +119,7 @@ export interface UseLtOfflineSyncReturn<T = Record<string, unknown>> {
   pendingCount: Readonly<Ref<number>>;
   /** The live local records, sorted by id. Empty while no user is signed in */
   records: Readonly<Ref<readonly LtSyncRecord<T>[]>>;
-  /** Changes the server rejected in the last sync; they are dropped (§7) */
+  /** Changes the server rejected in the last sync; they are dropped and the record returns to the server's state (§7) */
   rejected: Readonly<Ref<LtSyncPushResult[]>>;
   /** Delete a record: a tombstone on the server (a hard delete is not reachable through sync) */
   remove: (id: string) => Promise<void>;

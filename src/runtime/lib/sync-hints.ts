@@ -88,6 +88,74 @@ async function readEvents(body: ReadableStream<Uint8Array>, onEvent: (event: Sse
   }
 }
 
+/** One instance listening for the hints of its model */
+export interface LtSyncHintSubscriber {
+  model: string;
+  onConnect: () => void;
+  onHint: () => void;
+  onStop?: (reason: 'disabled' | 'unauthorized') => void;
+  tenantId?: string;
+}
+
+interface HintHub {
+  close?: () => void;
+  models: string;
+  subscribers: Set<LtSyncHintSubscriber>;
+}
+
+/** The ONE stream this tab keeps per tenant, by tenant ('' without one) */
+const hubs = new Map<string, HintHub>();
+
+/**
+ * Listen for the hints of a model on the ONE stream this tab keeps per tenant, for every model in
+ * use (`?models=` takes a list, §9). A stream per `useLtOfflineSync()` call would hold a connection
+ * each; over HTTP/1.1 a browser allows six per host, so six instances on one page would stall every
+ * other request to the API, sign-in and sign-out included. Answers the unsubscribe.
+ */
+export function subscribeLtSyncHints(subscriber: LtSyncHintSubscriber): () => void {
+  const key = subscriber.tenantId ?? '';
+  let hub = hubs.get(key);
+  if (!hub) {
+    hub = { models: '', subscribers: new Set() };
+    hubs.set(key, hub);
+  }
+  const joined = hub;
+  joined.subscribers.add(subscriber);
+  connectHub(key, joined);
+  return () => {
+    if (!joined.subscribers.delete(subscriber)) return;
+    if (joined.subscribers.size === 0) {
+      joined.close?.();
+      if (hubs.get(key) === joined) hubs.delete(key);
+      return;
+    }
+    connectHub(key, joined);
+  };
+}
+
+/** (Re)open the hub's stream for the models its subscribers use; a no-op while the set is unchanged */
+function connectHub(key: string, hub: HintHub): void {
+  const models = [...new Set([...hub.subscribers].map((subscriber) => subscriber.model))].sort().join(',');
+  if (hub.close && hub.models === models) return;
+  hub.close?.();
+  hub.models = models;
+  hub.close = openLtSyncHints({
+    models: models.split(','),
+    onConnect: () => {
+      for (const subscriber of [...hub.subscribers]) subscriber.onConnect();
+    },
+    onHint: (model) => {
+      for (const subscriber of [...hub.subscribers]) if (subscriber.model === model) subscriber.onHint();
+    },
+    onStop: (reason) => {
+      hub.close = undefined;
+      hub.models = '';
+      for (const subscriber of [...hub.subscribers]) subscriber.onStop?.(reason);
+    },
+    tenantId: key || undefined,
+  });
+}
+
 /**
  * Open the hint stream and keep it open — reconnecting after the server ends it, backing off after
  * failures — until the returned `close()` is called or the stream stops for good (`onStop`).

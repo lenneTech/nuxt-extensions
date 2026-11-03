@@ -132,14 +132,22 @@ here, a sync model (`@PersistedModel({ sync })` + `@SyncService`) on the API.
 
 - `useLtAuth().signOut()` sends what is unsent (at most 5 s), signs out, then deletes the whole
   IndexedDB database `lt-offline-sync`. **A custom sign-out that bypasses it must call
-  `flushLtSyncBeforeSignOut()` and `deleteLtSyncDatabase()` (from `/lib`) itself** — otherwise the
-  user's records stay on the device.
+  `flushLtSyncBeforeSignOut(userId)` and `deleteLtSyncDatabase()` (from `/lib`) itself** — otherwise
+  the user's records stay on the device.
+- **The flush sends only the signing-out user's own changes.** After an expired session the outbox
+  of the PREVIOUS user is still there; pushed under the current session it would land in the
+  current user's account. `flushLtSyncBeforeSignOut` compares the stored owner with `userId`.
 - **An expired session deletes nothing.** The 401 interceptor calls `clearUser()`, not `signOut()`,
   on purpose: the protocol promises that after signing in again the same changes go out without
   duplicates. Never hook the sync cleanup into `clearUser()` — that would delete unsent work on
   every expired session.
-- Another user wipes the data before anything is shown or pulled (`claimLtSyncOwner`); nobody
-  signed in sees nothing.
+- Another user wipes the data before anything is shown or pulled (`claimLtSyncOwner`, one
+  transaction); so does data WITHOUT an owner. Nobody signed in sees nothing.
+- **Every write of a sync run is fenced by the owner it started for** (`runLtSyncTx(…, { owner })`).
+  An answer arriving after sign-out deleted the database, or after another account claimed it,
+  would otherwise reopen the database and write the previous user's records for the next one.
+- Local data is kept per model AND tenant (`ltSyncScope`): the server stamps a create into the
+  tenant of its `X-Tenant-Id`, so one tenant's unsent change must never go out under another.
 
 **Rules that keep the engine correct (`src/runtime/lib/sync.ts`):**
 
@@ -153,6 +161,10 @@ here, a sync model (`@PersistedModel({ sync })` + `@SyncService`) on the API.
   auto-commit). Nothing inside `runLtSyncTx()` may await anything but that transaction's requests.
 - Hints are read with `fetch`, not `EventSource` (no `Authorization` header in JWT mode). Every
   reconnect pulls once: the server ends the stream on purpose and never replays the hint it missed.
+- ONE hint stream per tab and tenant (`subscribeLtSyncHints`), for every model in use. A stream per
+  composable call holds a connection each; over HTTP/1.1 six of them stall every API request.
+- A refused change (`rejected`) to a record the server has drops the cursor, so the pull right after
+  restores the server's state; otherwise the device would keep showing the refused value.
 
 **Tests:** `test/sync-engine.test.ts` runs the protocol's five client scenarios (offline
 create/change/delete, conflict, two tabs, expired session, cleared storage) against

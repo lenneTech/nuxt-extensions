@@ -8,7 +8,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { openLtSyncHints } from '../src/runtime/lib/sync-hints';
+import { openLtSyncHints, subscribeLtSyncHints } from '../src/runtime/lib/sync-hints';
 import { resetStubRuntimeConfig, setStubRuntimeConfig } from './stubs/imports';
 
 const encoder = new TextEncoder();
@@ -144,5 +144,104 @@ describe('openLtSyncHints', () => {
     close();
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('subscribeLtSyncHints — one stream per tab and tenant', () => {
+  /** A fetch that keeps every stream open and remembers which are still open, and for which models */
+  function streams() {
+    const opened: { models: string; signal: AbortSignal; tenant?: string; write: (text: string) => void }[] = [];
+    const fetch = vi.fn(async (input: string, init: RequestInit) => {
+      let write!: (text: string) => void;
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          write = (text) => controller.enqueue(encoder.encode(text));
+          init.signal!.addEventListener('abort', () => controller.error(new DOMException('aborted', 'AbortError')));
+        },
+      });
+      const headers = new Headers(init.headers);
+      opened.push({ models: new URL(input).searchParams.get('models')!, signal: init.signal!, tenant: headers.get('x-tenant-id') ?? undefined, write });
+      return new Response(body, { status: 200 });
+    });
+    const open = () => opened.filter((stream) => !stream.signal.aborted);
+    return { fetch, open };
+  }
+
+  const subscriber = (model: string, tenantId?: string) => ({ hints: 0, connects: 0, model, stops: [] as string[], tenantId });
+  const subscribe = (s: ReturnType<typeof subscriber>) =>
+    subscribeLtSyncHints({
+      model: s.model,
+      onConnect: () => s.connects++,
+      onHint: () => s.hints++,
+      onStop: (reason) => s.stops.push(reason),
+      tenantId: s.tenantId,
+    });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps ONE stream for every instance and model of a tenant, however many there are', async () => {
+    const { fetch, open } = streams();
+    vi.stubGlobal('fetch', fetch);
+    const list = subscriber('note');
+    const badge = subscriber('note');
+    const tasks = subscriber('task');
+    const unsubscribe = [subscribe(list), subscribe(badge), subscribe(tasks)];
+
+    // Over HTTP/1.1 six streams would take every connection to the API host; it stays one
+    await until(() => open().length === 1 && open()[0]!.models === 'note,task');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(open()).toHaveLength(1);
+    for (const off of unsubscribe) off();
+  });
+
+  it('routes a hint to the instances of its model only, and every connect to all', async () => {
+    const { fetch, open } = streams();
+    vi.stubGlobal('fetch', fetch);
+    const notes = subscriber('note');
+    const tasks = subscriber('task');
+    const off = [subscribe(notes), subscribe(tasks)];
+    await until(() => open().length === 1 && open()[0]!.models === 'note,task' && notes.connects > 0 && tasks.connects > 0);
+
+    open()[0]!.write('event: change\ndata: {"model":"task"}\n\n');
+    await until(() => tasks.hints === 1);
+    expect(notes.hints).toBe(0);
+    for (const unsubscribe of off) unsubscribe();
+  });
+
+  it('narrows the stream when an instance leaves and closes it with the last one', async () => {
+    const { fetch, open } = streams();
+    vi.stubGlobal('fetch', fetch);
+    const offNotes = subscribe(subscriber('note'));
+    const offTasks = subscribe(subscriber('task'));
+    await until(() => open().length === 1 && open()[0]!.models === 'note,task');
+
+    offTasks();
+    await until(() => open().length === 1 && open()[0]!.models === 'note');
+    offNotes();
+    // Closed with the last instance
+    await until(() => open().length === 0);
+  });
+
+  it('keeps a separate stream per tenant', async () => {
+    const { fetch, open } = streams();
+    vi.stubGlobal('fetch', fetch);
+    const off = [subscribe(subscriber('note', 't-1')), subscribe(subscriber('note', 't-2'))];
+
+    await until(() => open().length === 2);
+    expect(open().map((stream) => stream.tenant).sort()).toEqual(['t-1', 't-2']);
+    for (const unsubscribe of off) unsubscribe();
+  });
+
+  it('tells every instance when the stream stops for good', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 401 })));
+    const a = subscriber('note');
+    const b = subscriber('task');
+    const off = [subscribe(a), subscribe(b)];
+
+    await until(() => a.stops.length > 0 && b.stops.length > 0);
+    expect([...a.stops, ...b.stops].every((reason) => reason === 'unauthorized')).toBe(true);
+    for (const unsubscribe of off) unsubscribe();
   });
 });

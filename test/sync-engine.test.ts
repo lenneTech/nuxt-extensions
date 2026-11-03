@@ -10,7 +10,7 @@
 
 import 'fake-indexeddb/auto';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createLtSyncEngine, flushLtSyncBeforeSignOut, ltSyncObjectId, ltSyncUuidV7, resetLtSyncEngines } from '../src/runtime/lib/sync';
 import { claimLtSyncOwner, deleteLtSyncDatabase, runLtSyncTx } from '../src/runtime/lib/sync-store';
@@ -282,7 +282,69 @@ describe('pull', () => {
   });
 });
 
+describe('tenants', () => {
+  it('keeps a tenant’s records and unsent changes to that tenant', async () => {
+    const tenantA = engine({ tenantId: 'tenant-a' });
+    const tenantB = engine({ tenantId: 'tenant-b' });
+    server.online = false;
+    await tenantA.create({ title: 'internal note of tenant a' });
+    server.online = true;
+
+    // The server stamps a create into the tenant of its header: B must not send A's note
+    expect(await tenantB.list()).toEqual([]);
+    await tenantB.sync();
+    expect(server.pushes()).toEqual([]);
+
+    await tenantA.sync();
+    expect(server.pushes().map((request) => request.headers['x-tenant-id'])).toEqual(['tenant-a']);
+  });
+
+  it('sends each tenant’s unsent changes with its own header before sign-out', async () => {
+    vi.stubGlobal('fetch', server.fetch);
+    try {
+      await claimLtSyncOwner('user-1');
+      await engine({ tenantId: 'tenant-a' }).create({ title: 'A' });
+      await engine({ tenantId: 'tenant-b' }).create({ title: 'B' });
+      // No engine registered any more (the pages are gone): the flush rebuilds them from the stored scopes
+      resetLtSyncEngines();
+
+      await flushLtSyncBeforeSignOut('user-1', 1000);
+      const sent = server.pushes().map((request) => [request.headers['x-tenant-id'], request.body.items[0].data.title]);
+      expect(sent.sort()).toEqual([
+        ['tenant-a', 'A'],
+        ['tenant-b', 'B'],
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
 describe('server answers', () => {
+  it('restores the server’s state after a refused change to a record it has', async () => {
+    const client = engine();
+    const a = await client.create({ title: 'A' });
+    await client.sync();
+    await client.update(a.id, { title: '' });
+
+    const result = await client.sync();
+    expect(result.rejected).toMatchObject([{ code: 'VALIDATION_FAILED', id: a.id }]);
+    // Never "saved" on the device while the server keeps the old value
+    expect(await client.get(a.id)).toMatchObject({ data: { title: 'A' }, version: 1 });
+  });
+
+  it('brings a record back when the server refuses its delete', async () => {
+    const client = engine();
+    const a = await client.create({ title: 'A' });
+    await client.sync();
+    server.forbiddenIds.add(a.id);
+    await client.remove(a.id);
+
+    const result = await client.sync();
+    expect(result.rejected).toMatchObject([{ code: 'FORBIDDEN' }]);
+    expect((await client.list()).map((record) => record.id)).toEqual([a.id]);
+  });
+
   it('reports a backoff on 429 with the Retry-After it asked for, losing nothing', async () => {
     const client = engine();
     await client.create({ title: 'A' });
@@ -366,22 +428,104 @@ describe('ids', () => {
   });
 });
 
+/** A fetch whose answers the server has produced but the client receives only after `release()` */
+function gated() {
+  let release!: () => void;
+  const open = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let answered!: () => void;
+  const begun = new Promise<void>((resolve) => {
+    answered = resolve;
+  });
+  const fetch = async (input: string, init: RequestInit) => {
+    const response = await server.fetch(input, init);
+    answered();
+    await open;
+    return response;
+  };
+  return { begun, fetch, release };
+}
+
 describe('sign-out and account switch', () => {
   it('pushes what is unsent before sign-out', async () => {
+    await claimLtSyncOwner('user-1');
     const client = engine();
     await client.create({ title: 'A' });
 
-    await flushLtSyncBeforeSignOut(1000);
+    await flushLtSyncBeforeSignOut('user-1', 1000);
     expect(server.live()).toHaveLength(1);
   });
 
   it('gives up after the timeout when the server does not answer', async () => {
+    await claimLtSyncOwner('user-1');
     const hanging = createLtSyncEngine<Note>({ fetch: () => new Promise<Response>(() => undefined), model: 'note' });
     await hanging.create({ title: 'A' });
 
     const started = Date.now();
-    await flushLtSyncBeforeSignOut(50);
+    await flushLtSyncBeforeSignOut('user-1', 50);
     expect(Date.now() - started).toBeLessThan(1000);
+  });
+
+  it('never sends another user’s unsent changes under the signing-out user’s session', async () => {
+    // User 1's session expired: by design the outbox stays. User 2 signs in and out without a sync page
+    await claimLtSyncOwner('user-1');
+    await engine().create({ title: 'diary of user 1' });
+
+    await flushLtSyncBeforeSignOut('user-2', 1000);
+    await flushLtSyncBeforeSignOut(undefined, 1000);
+    expect(server.pushes()).toEqual([]);
+
+    await flushLtSyncBeforeSignOut('user-1', 1000);
+    expect(server.live()).toHaveLength(1);
+  });
+
+  it('writes nothing when a pull is answered after sign-out deleted the data', async () => {
+    server.write(ltSyncObjectId(), { title: 'private of user 1' });
+    await claimLtSyncOwner('user-1');
+    const { begun, fetch, release } = gated();
+    const running = createLtSyncEngine<Note>({ fetch, model: 'note' }).sync();
+
+    await begun;
+    await deleteLtSyncDatabase();
+    release();
+    await running;
+
+    // Nothing for the claim to wipe: the late answer was refused, not stored and wiped later
+    expect(await claimLtSyncOwner('user-2')).toBe(false);
+    expect(await engine().list()).toEqual([]);
+    expect(await runLtSyncTx('note', (tx) => tx.getMeta('cursor:note'))).toBeUndefined();
+  });
+
+  it('writes nothing when the sign-out flush is answered after its timeout and the deletion', async () => {
+    await claimLtSyncOwner('user-1');
+    const client = engine();
+    const a = await client.create({ title: 'A' });
+    await client.sync();
+    await client.update(a.id, { title: 'mine' });
+    server.write(a.id, { title: 'theirs of user 1' });
+    resetLtSyncEngines();
+    const { begun, fetch, release } = gated();
+    createLtSyncEngine<Note>({ fetch, model: 'note' });
+
+    const flushing = flushLtSyncBeforeSignOut('user-1', 20);
+    await begun;
+    await flushing;
+    await deleteLtSyncDatabase();
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    // The `conflict` answer carried user 1's server record; it must not land in the next user's database
+    expect(await claimLtSyncOwner('user-2')).toBe(false);
+    expect(await engine().list()).toEqual([]);
+  });
+
+  it('treats data without an owner as foreign and wipes it on the first claim', async () => {
+    await engine().create({ title: 'left behind' });
+
+    expect(await claimLtSyncOwner('user-2')).toBe(true);
+    expect(await engine().list()).toEqual([]);
+    expect(await engine().pendingCount()).toBe(0);
   });
 
   it('binds the data to the first user and wipes every model for another one', async () => {

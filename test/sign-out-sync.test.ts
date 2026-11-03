@@ -14,14 +14,14 @@ import { resetStubReactiveStores, resetStubRuntimeConfig, setStubRuntimeConfig }
 import { resetTestRenderScope, setTestRenderScope } from './stubs/render-scope';
 
 const calls: string[] = [];
-const flush = vi.fn(async (_timeoutMs: number) => {
+const flush = vi.fn(async (_userId: string | undefined, _timeoutMs: number) => {
   calls.push('flush');
 });
 const deleteDb = vi.fn(async () => {
   calls.push('delete');
 });
 
-vi.mock('../src/runtime/lib/sync', () => ({ flushLtSyncBeforeSignOut: (timeoutMs: number) => flush(timeoutMs) }));
+vi.mock('../src/runtime/lib/sync', () => ({ flushLtSyncBeforeSignOut: (userId: string | undefined, timeoutMs: number) => flush(userId, timeoutMs) }));
 vi.mock('../src/runtime/lib/sync-store', () => ({ deleteLtSyncDatabase: () => deleteDb() }));
 vi.mock('../src/runtime/composables/use-lt-auth-client', () => ({
   useLtAuthClient: () => ({
@@ -57,11 +57,14 @@ afterEach(() => {
 describe('signOut and the offline-sync data', () => {
   it('sends what is unsent, signs out, then deletes the local data — in that order', async () => {
     withSync(true);
-    await useLtAuth().signOut();
+    const auth = useLtAuth();
+    auth.setUser({ email: 'user-1@test.com', id: 'user-1', name: 'User 1' } as never);
+    await auth.signOut();
 
-    // Sending needs the session, so it comes first; deleting comes after the user is signed out
+    // Sending needs the session, so it comes first; deleting comes after the user is signed out.
+    // The flush is told who signs out, so it never sends a previous user's changes under this session
     expect(calls).toEqual(['flush', 'signOut', 'delete']);
-    expect(flush).toHaveBeenCalledWith(5000);
+    expect(flush).toHaveBeenCalledWith('user-1', 5000);
   });
 
   it('touches no sync data when the app did not enable sync', async () => {

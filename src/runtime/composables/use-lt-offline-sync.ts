@@ -21,7 +21,7 @@
 import { getCurrentScope, onScopeDispose, readonly, ref, shallowRef, watch } from '#imports';
 
 import { createLtSyncEngine } from '../lib/sync';
-import { openLtSyncHints } from '../lib/sync-hints';
+import { subscribeLtSyncHints } from '../lib/sync-hints';
 import { claimLtSyncOwner, LT_SYNC_CHANNEL_NAME, type LtSyncMessage } from '../lib/sync-store';
 import type { LtSyncPushResult, LtSyncRecord, LtSyncResult, UseLtOfflineSyncOptions, UseLtOfflineSyncReturn } from '../types/sync';
 import { useLtAuth } from './auth/use-lt-auth';
@@ -85,25 +85,30 @@ export function useLtOfflineSync<T extends Record<string, unknown> = Record<stri
   // --- owner: the local data belongs to the signed-in user ----------------------------------------
 
   let ownerId: null | string = null;
-  let claiming: null | Promise<boolean> = null;
+  let claiming: null | { id: string; done: Promise<boolean> } = null;
+  const currentUserId = () => (user.value?.id ? String(user.value.id) : null);
 
   /** Whether a signed-in user owns the local data; claims it first, wiping another user's (account switch) */
-  function ensureOwner(): Promise<boolean> {
-    const id = user.value?.id ? String(user.value.id) : null;
+  async function ensureOwner(): Promise<boolean> {
+    const id = currentUserId();
     if (!id) {
       ownerId = null;
-      return Promise.resolve(false);
+      return false;
     }
-    if (id === ownerId) return Promise.resolve(true);
-    claiming ??= claimLtSyncOwner(id)
-      .then(() => {
-        ownerId = id;
-        return true;
-      })
-      .finally(() => {
-        claiming = null;
+    if (id === ownerId) return true;
+    // A claim is per user: one still running for the previous user must not answer for this one
+    if (claiming?.id !== id) {
+      const pending = { done: claimLtSyncOwner(id), id };
+      claiming = pending;
+      void pending.done.finally(() => {
+        if (claiming === pending) claiming = null;
       });
-    return claiming;
+    }
+    await claiming.done;
+    // The user changed while the claim ran: claim for the one signed in now, never show the data to them as the other's
+    if (currentUserId() !== id) return ensureOwner();
+    ownerId = id;
+    return true;
   }
 
   async function refresh(): Promise<void> {
@@ -176,7 +181,7 @@ export function useLtOfflineSync<T extends Record<string, unknown> = Record<stri
     } finally {
       syncing.value = false;
       await refresh();
-      channel?.postMessage({ model, type: 'changed' } satisfies LtSyncMessage);
+      channel?.postMessage({ scope: engine.scope, type: 'changed' } satisfies LtSyncMessage);
     }
   }
 
@@ -185,7 +190,7 @@ export function useLtOfflineSync<T extends Record<string, unknown> = Record<stri
   };
 
   async function afterLocalChange(): Promise<void> {
-    channel?.postMessage({ model, type: 'changed' } satisfies LtSyncMessage);
+    channel?.postMessage({ scope: engine.scope, type: 'changed' } satisfies LtSyncMessage);
     await refresh();
     if (auto) schedule(LOCAL_CHANGE_DELAY_MS);
   }
@@ -196,15 +201,14 @@ export function useLtOfflineSync<T extends Record<string, unknown> = Record<stri
     if (!auto || options.hints === false || closeHints || hintsStopped || disposed) return;
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
     if (!user.value?.id) return;
-    closeHints = openLtSyncHints({
-      models: [model],
+    // One stream per tab and tenant, shared by every instance (see `subscribeLtSyncHints`)
+    closeHints = subscribeLtSyncHints({
+      model,
       // Hints sent while the stream was down are not replayed: every (re)connect pulls once
       onConnect: autoSync,
-      onHint: (changed) => {
-        if (changed === model) autoSync();
-      },
+      onHint: autoSync,
       onStop: (reason) => {
-        closeHints = undefined;
+        stopHints();
         hintsStopped = reason;
       },
       tenantId: options.tenantId,
@@ -240,7 +244,7 @@ export function useLtOfflineSync<T extends Record<string, unknown> = Record<stri
       // Signed out or another account in some tab: the database is gone, claim it anew
       ownerId = null;
       void refresh();
-    } else if (event.data?.type === 'changed' && event.data.model === model) {
+    } else if (event.data?.type === 'changed' && event.data.scope === engine.scope) {
       void refresh();
     }
   };

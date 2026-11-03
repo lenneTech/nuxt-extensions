@@ -88,8 +88,27 @@ function openDatabase(): Promise<IDBDatabase> {
   return opening;
 }
 
-/** Run `fn` in one read-write transaction over the model's records, outbox and meta values */
-export async function runLtSyncTx<R>(model: string, fn: (tx: LtSyncStoreTx) => Promise<R>): Promise<R> {
+/**
+ * The data no longer belongs to the user a sync run started for: signed out (database deleted) or
+ * another account claimed it. The run's write was refused, nothing of it was stored.
+ */
+export class LtSyncOwnerChangedError extends Error {
+  constructor() {
+    super('the local sync data changed owner');
+    this.name = 'LtSyncOwnerChangedError';
+  }
+}
+
+/**
+ * Run `fn` in one read-write transaction over the scope's records, outbox and meta values. `scope`
+ * is a model, or a model and tenant (`note#<tenantId>`).
+ *
+ * With `owner`, the transaction first checks that the data still belongs to that user and refuses
+ * otherwise (`LtSyncOwnerChangedError`). A sync answer can arrive after sign-out deleted the
+ * database, or after another account claimed it — in this tab or another one. Unfenced, it would
+ * reopen the database and write the previous user's records for the next user to see.
+ */
+export async function runLtSyncTx<R>(model: string, fn: (tx: LtSyncStoreTx) => Promise<R>, options: { owner?: string } = {}): Promise<R> {
   const db = await openDatabase();
   const transaction = db.transaction(STORES, 'readwrite');
   const finished = new Promise<void>((resolve, reject) => {
@@ -134,6 +153,7 @@ export async function runLtSyncTx<R>(model: string, fn: (tx: LtSyncStoreTx) => P
   };
   let result: R;
   try {
+    if (options.owner !== undefined && (await tx.getMeta<string>('owner')) !== options.owner) throw new LtSyncOwnerChangedError();
     result = await fn(tx);
   } catch (error) {
     transaction.abort();
@@ -144,7 +164,7 @@ export async function runLtSyncTx<R>(model: string, fn: (tx: LtSyncStoreTx) => P
   return result;
 }
 
-/** The models that hold unsent changes, in no particular order */
+/** The scopes (model, or model and tenant) that hold unsent changes, in no particular order */
 export async function listLtSyncPendingModels(): Promise<string[]> {
   const db = await openDatabase();
   const transaction = db.transaction(['outbox'], 'readonly');
@@ -152,22 +172,46 @@ export async function listLtSyncPendingModels(): Promise<string[]> {
   return [...new Set(items.map((item) => item.model))];
 }
 
-/**
- * Bind the local data to the signed-in user. The first user claims it; a different user wipes
- * every model before anything is shown or pulled — an account switch must not show the previous
- * user's records (nest-server `SECURITY.md`). Answers whether it wiped.
- */
-export async function claimLtSyncOwner(userId: string): Promise<boolean> {
-  const owner = await runLtSyncTx('', (tx) => tx.getMeta<string>('owner'));
-  if (owner === userId) return false;
-  if (owner !== undefined) await deleteLtSyncDatabase();
-  await runLtSyncTx('', (tx) => tx.setMeta('owner', userId));
-  return owner !== undefined;
+/** The user the local data belongs to, if any */
+export function getLtSyncOwner(): Promise<string | undefined> {
+  return runLtSyncTx('', (tx) => tx.getMeta<string>('owner'));
 }
 
 /**
- * Delete every record, cursor and unsent change of every model — on sign-out and on an account
- * switch. Other tabs close their connection on `versionchange` and are told via the channel.
+ * Bind the local data to the signed-in user, in ONE transaction. The same user keeps it. Anybody
+ * else — another user, or nobody at all while data is present — means it is not this user's: every
+ * model is wiped before anything is shown or pulled (nest-server `SECURITY.md`). Data without an
+ * owner can only be a write that outlived a sign-out, which is exactly what must not be inherited.
+ * Answers whether it wiped.
+ */
+export async function claimLtSyncOwner(userId: string): Promise<boolean> {
+  const db = await openDatabase();
+  const transaction = db.transaction(STORES, 'readwrite');
+  const finished = new Promise<void>((resolve, reject) => {
+    transaction.addEventListener('complete', () => resolve());
+    transaction.addEventListener('abort', () => reject(transaction.error ?? new Error('transaction aborted')));
+    transaction.addEventListener('error', () => reject(transaction.error));
+  });
+  const meta = transaction.objectStore('meta');
+  const owner = ((await done(meta.get('owner'))) as undefined | { value: string })?.value;
+  let wiped = false;
+  if (owner !== userId) {
+    const held = (await done(transaction.objectStore('records').count())) + (await done(transaction.objectStore('outbox').count())) + (await done(meta.count()));
+    if (held > 0) {
+      for (const name of STORES) await done(transaction.objectStore(name).clear());
+      wiped = true;
+    }
+    await done(meta.put({ key: 'owner', value: userId }));
+  }
+  await finished;
+  if (wiped) postLtSyncMessage({ type: 'cleared' });
+  return wiped;
+}
+
+/**
+ * Delete every record, cursor and unsent change of every model — on sign-out. Other tabs close
+ * their connection on `versionchange` and are told via the channel. A sync answer arriving later
+ * finds no owner and is refused (`runLtSyncTx` with `owner`).
  */
 export async function deleteLtSyncDatabase(): Promise<void> {
   if (typeof indexedDB === 'undefined') return;
@@ -185,7 +229,7 @@ export async function deleteLtSyncDatabase(): Promise<void> {
 }
 
 /** Messages the tabs exchange */
-export type LtSyncMessage = { model: string; type: 'changed' } | { type: 'cleared' };
+export type LtSyncMessage = { scope: string; type: 'changed' } | { type: 'cleared' };
 
 /**
  * Tell every listener of this origin, this tab's included (a fresh channel is not the receiver's

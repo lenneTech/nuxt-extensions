@@ -10,7 +10,7 @@
 import 'fake-indexeddb/auto';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { effectScope, nextTick, ref, type EffectScope } from 'vue';
+import { effectScope, nextTick, ref, watch, type EffectScope } from 'vue';
 
 import { useLtOfflineSync } from '../src/runtime/composables/use-lt-offline-sync';
 import { resetLtSyncEngines } from '../src/runtime/lib/sync';
@@ -32,10 +32,10 @@ let server: FakeSyncServer;
 let scopes: EffectScope[];
 
 /** Mount the composable in its own scope, as a component would */
-function mount(options: UseLtOfflineSyncOptions<Note> = {}): UseLtOfflineSyncReturn<Note> {
+function mount(options: UseLtOfflineSyncOptions<Note> = {}, model = 'note'): UseLtOfflineSyncReturn<Note> {
   const scope = effectScope();
   scopes.push(scope);
-  return scope.run(() => useLtOfflineSync<Note>('note', options))!;
+  return scope.run(() => useLtOfflineSync<Note>(model, options))!;
 }
 
 const until = async (condition: () => boolean, label = 'condition') => {
@@ -144,6 +144,23 @@ describe('useLtOfflineSync — whose data it is', () => {
     expect(await notes.get(notes.records.value[0]?.id ?? 'none')).toBeUndefined();
   });
 
+  it('never shows the previous user’s records while the claim for a new user is still running', async () => {
+    const first = mount({ auto: false });
+    await first.create({ title: 'private of user 1' });
+    scopes.pop()!.stop();
+
+    const seen: string[] = [];
+    const notes = mount({ auto: false });
+    watch(notes.records, (records) => seen.push(...records.map((record) => record.data?.title ?? '')), { flush: 'sync' });
+    // The account changes while the start-up claim for user 1 is still on its way
+    currentUser.value = { id: 'user-2' };
+
+    await until(() => notes.pendingCount.value === 0 && seen.length === 0, 'settled for user 2');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(seen).not.toContain('private of user 1');
+    expect(notes.records.value).toEqual([]);
+  });
+
   it('shows nothing and refuses changes while nobody is signed in', async () => {
     currentUser.value = null;
     const notes = mount({ auto: false });
@@ -204,6 +221,18 @@ describe('useLtOfflineSync — tabs and hints', () => {
     await until(() => notes.records.value.length === 2, 'pulled on reconnect');
     expect(server.pulls().length).toBeGreaterThan(pullsBefore);
     expect(pullsBefore).toBeGreaterThan(pullsAfterStart);
+  });
+
+  it('shares one stream between every instance on the page', async () => {
+    server.hintsEnabled = true;
+    mount();
+    mount();
+    mount({}, 'task');
+
+    await until(() => server.requests.filter((request) => request.url.pathname.endsWith('/hints')).at(-1)?.url.searchParams.get('models') === 'note,task');
+    await until(() => server.openHintStreams() === 1, 'one stream left open');
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(server.openHintStreams()).toBe(1);
   });
 
   it('closes the stream when the scope ends', async () => {

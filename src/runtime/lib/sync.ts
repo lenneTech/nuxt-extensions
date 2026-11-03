@@ -18,7 +18,7 @@ import { useRuntimeConfig } from '#imports';
 
 import type { LtSyncConflict, LtSyncConflictResolution, LtSyncIdFormat, LtSyncPushResult, LtSyncRecord, LtSyncResult } from '../types/sync';
 import { buildLtApiUrl, ltAuthFetch } from './auth-state';
-import { listLtSyncPendingModels, type LtSyncOutboxItem, type LtSyncStoreTx, runLtSyncTx } from './sync-store';
+import { getLtSyncOwner, listLtSyncPendingModels, LtSyncOwnerChangedError, type LtSyncOutboxItem, type LtSyncStoreTx, runLtSyncTx } from './sync-store';
 
 /** Push at most this many items per request: the server's default `maxPushItems` (§4) */
 const PUSH_CHUNK = 100;
@@ -134,6 +134,8 @@ export interface LtSyncEngine<T> {
   /** The live local records, sorted by id */
   list: () => Promise<LtSyncRecord<T>[]>;
   readonly model: string;
+  /** Where the engine keeps its data: the model, or the model and the tenant */
+  readonly scope: string;
   pendingCount: () => Promise<number>;
   /** Push the outbox only — the sign-out flush. Never throws */
   pushPending: () => Promise<void>;
@@ -143,8 +145,23 @@ export interface LtSyncEngine<T> {
   update: (id: string, data: Partial<T>) => Promise<LtSyncRecord<T>>;
 }
 
-/** The engines of this tab by model, so the sign-out flush pushes with the options the app gave */
+/** The engines of this tab by scope, so the sign-out flush pushes with the options the app gave */
 const engines = new Map<string, LtSyncEngine<any>>();
+
+/**
+ * Where a model's local data lives: per model, and per tenant when one is given. A change made
+ * under one tenant must never go out with another tenant's `X-Tenant-Id` — the server stamps a
+ * create into the tenant of the header — nor show in that tenant's list.
+ */
+export function ltSyncScope(model: string, tenantId?: string): string {
+  return tenantId ? `${model}#${tenantId}` : model;
+}
+
+/** The model and tenant of a scope (`ltSyncScope` in reverse) */
+function parseLtSyncScope(scope: string): { model: string; tenantId?: string } {
+  const at = scope.indexOf('#');
+  return at === -1 ? { model: scope } : { model: scope.slice(0, at), tenantId: scope.slice(at + 1) };
+}
 
 /** A pulled item or a server record as a local record */
 function localOf(item: NonNullable<LtSyncPushResult['record']>): LtSyncRecord {
@@ -184,8 +201,14 @@ function emptyResult(): LtSyncResult {
 export function createLtSyncEngine<T extends Record<string, unknown> = Record<string, unknown>>(options: LtSyncEngineOptions<T>): LtSyncEngine<T> {
   const { idFormat = 'objectId', model, onConflict, pageLimit = 200, tenantId } = options;
   const fetchImpl = options.fetch ?? ((input: string, init: RequestInit) => ltAuthFetch(input, init));
-  const cursorKey = `cursor:${model}`;
-  const run = <R>(fn: (tx: LtSyncStoreTx) => Promise<R>) => runLtSyncTx(model, fn);
+  const scope = ltSyncScope(model, tenantId);
+  const cursorKey = `cursor:${scope}`;
+  const run = <R>(fn: (tx: LtSyncStoreTx) => Promise<R>) => runLtSyncTx(scope, fn);
+  /**
+   * A write of a sync run, refused once the data no longer belongs to the user the run started for.
+   * Its answers can arrive after sign-out deleted the database or another account claimed it.
+   */
+  const runAs = <R>(owner: string | undefined, fn: (tx: LtSyncStoreTx) => Promise<R>) => runLtSyncTx(scope, fn, owner === undefined ? {} : { owner });
   const newId = () => (idFormat === 'uuidv7' ? ltSyncUuidV7() : ltSyncObjectId());
 
   /** One request; answers `{ status, body }`, throws offline, 401 and backoff */
@@ -277,7 +300,13 @@ export function createLtSyncEngine<T extends Record<string, unknown> = Record<st
     }
     // rejected: retrying the same change will not help; a record the server never had goes with it
     result.rejected.push(outcome);
-    if (record && !record.version) await tx.deleteRecord(item.id);
+    if (record && !record.version) {
+      await tx.deleteRecord(item.id);
+    } else if (record) {
+      // The device shows the refused change. The server's record did not change, so no delta would
+      // ever bring it back: drop the cursor, and the pull right after this push restores it
+      await tx.deleteMeta(cursorKey);
+    }
   }
 
   /** The app's conflict answer, asked outside any transaction (an IndexedDB transaction does not survive an awaited hook) */
@@ -288,7 +317,7 @@ export function createLtSyncEngine<T extends Record<string, unknown> = Record<st
     return answer === 'server' || !answer?.data ? 'server' : answer;
   }
 
-  async function push(result: LtSyncResult): Promise<void> {
+  async function push(result: LtSyncResult, owner: string | undefined): Promise<void> {
     const carried = new Set<string>();
     for (let round = 0; round < MAX_PUSH_ROUNDS; round++) {
       // Read and mark in ONE transaction, and send what that transaction read: an edit between a
@@ -296,7 +325,7 @@ export function createLtSyncEngine<T extends Record<string, unknown> = Record<st
       // At most ONE change per record per request: the next one's `baseVersion` assumes this one
       // is applied. Sent together, a change based on a refused one would meet another writer's
       // version with the same number and be applied on top of it; sent after, it is dropped first.
-      const chunk = await run(async (tx) => {
+      const chunk = await runAs(owner, async (tx) => {
         const records = new Set<string>();
         const items: LtSyncOutboxItem[] = [];
         for (const item of await tx.listOutbox()) {
@@ -315,13 +344,13 @@ export function createLtSyncEngine<T extends Record<string, unknown> = Record<st
       for (let index = 0; index < chunk.length; index++) {
         const item = chunk[index]!;
         const resolution = await resolveConflict(item, results[index]);
-        await run((tx) => settle(tx, item, results[index], result, resolution));
+        await runAs(owner, (tx) => settle(tx, item, results[index], result, resolution));
       }
     }
   }
 
   /** Pull every page after the stored cursor; answers whether a resync dropped the local records */
-  async function pull(result: LtSyncResult): Promise<boolean> {
+  async function pull(result: LtSyncResult, owner: string | undefined): Promise<boolean> {
     let cursor = await run((tx) => tx.getMeta<string>(cursorKey));
     for (let page = 0; page < 10_000; page++) {
       const query = new URLSearchParams({ limit: String(pageLimit) });
@@ -331,7 +360,7 @@ export function createLtSyncEngine<T extends Record<string, unknown> = Record<st
         // The caller may no longer pull this model (pull roles withdrawn, tenant left): the copies go,
         // like on `410 access`. Unsent changes stay, but cannot be pushed under this account (§10)
         result.forbidden = true;
-        await run(async (tx) => {
+        await runAs(owner, async (tx) => {
           await tx.clearRecords(new Set((await tx.listOutbox()).map((item) => item.id)));
           await tx.deleteMeta(cursorKey);
         });
@@ -341,7 +370,7 @@ export function createLtSyncEngine<T extends Record<string, unknown> = Record<st
         if (result.resynced) throw new Error(`resync loop: ${JSON.stringify(response.body)}`);
         // Keep the unsent changes, delete every local record, pull without a cursor (§8)
         result.resynced = true;
-        await run(async (tx) => {
+        await runAs(owner, async (tx) => {
           await tx.clearRecords(new Set((await tx.listOutbox()).map((item) => item.id)));
           await tx.deleteMeta(cursorKey);
         });
@@ -350,7 +379,7 @@ export function createLtSyncEngine<T extends Record<string, unknown> = Record<st
       }
       const body = response.body as { cursor: string; hasMore: boolean; items: NonNullable<LtSyncPushResult['record']>[] };
       // A page's items and its cursor in one local transaction: a crash after it resumes with the next page (§5.2)
-      await run(async (tx) => {
+      await runAs(owner, async (tx) => {
         const pending = new Set((await tx.listOutbox()).map((item) => item.id));
         for (const item of body.items ?? []) {
           // An unsent local change wins locally until its push settles; the push meets the newer version then
@@ -372,10 +401,14 @@ export function createLtSyncEngine<T extends Record<string, unknown> = Record<st
   async function syncOnce(): Promise<LtSyncResult> {
     const result = emptyResult();
     try {
-      await push(result);
+      // Every write of this run is bound to the user the data belongs to now (see `runAs`)
+      const owner = await getLtSyncOwner();
+      await push(result, owner);
       // A resync drops the local records but keeps the unsent changes; they meet the new state now (§8)
-      if (await pull(result)) await push(result);
+      if (await pull(result, owner)) await push(result, owner);
     } catch (error) {
+      // Signed out or another account mid-run: what this run would have written is not theirs to keep
+      if (error instanceof LtSyncOwnerChangedError) return result;
       if (error instanceof LtSyncUnauthorizedError) result.needsLogin = true;
       else if (error instanceof LtSyncOfflineError) result.offline = true;
       else if (error instanceof LtSyncBackoffError) result.retryAfterMs = error.retryAfterMs ?? 0;
@@ -388,7 +421,7 @@ export function createLtSyncEngine<T extends Record<string, unknown> = Record<st
   async function syncLocked(): Promise<LtSyncResult> {
     const locks = typeof navigator === 'undefined' ? undefined : navigator.locks;
     if (!locks) return syncOnce();
-    return await locks.request(`lt-offline-sync:${model}`, syncOnce);
+    return await locks.request(`lt-offline-sync:${scope}`, syncOnce);
   }
 
   // Calls during a running sync collapse into ONE follow-up run, so a burst of triggers costs two runs at most
@@ -428,11 +461,13 @@ export function createLtSyncEngine<T extends Record<string, unknown> = Record<st
     pendingCount: () => run(async (tx) => (await tx.listOutbox()).length),
     async pushPending() {
       try {
-        await push(emptyResult());
+        // Bound to the owner like a sync: an answer arriving after the sign-out deleted the data writes nothing
+        await push(emptyResult(), await getLtSyncOwner());
       } catch {
         // Best effort: whatever did not go out is deleted with the rest on sign-out
       }
     },
+    scope,
     async remove(id) {
       await run(async (tx) => {
         const record = await tx.getRecord(id);
@@ -469,7 +504,7 @@ export function createLtSyncEngine<T extends Record<string, unknown> = Record<st
       });
     },
   };
-  engines.set(model, engine);
+  engines.set(scope, engine);
   return engine;
 }
 
@@ -477,16 +512,22 @@ export function createLtSyncEngine<T extends Record<string, unknown> = Record<st
  * Before sign-out: send what is still unsent, for at most `timeoutMs`, never failing. Whatever
  * did not go out is deleted with the rest afterwards — after signing out it could not be pushed
  * under this account anyway (nest-server `SECURITY.md`).
+ *
+ * Only when the local data belongs to `userId`, the user signing out. After an expired session
+ * the outbox of the PREVIOUS user is still on the device; sent now, it would be created and
+ * changed under the current user's session and account. It is deleted unsent instead.
  */
-export async function flushLtSyncBeforeSignOut(timeoutMs = 5000): Promise<void> {
-  if (typeof indexedDB === 'undefined') return;
+export async function flushLtSyncBeforeSignOut(userId: string | undefined, timeoutMs = 5000): Promise<void> {
+  if (typeof indexedDB === 'undefined' || !userId) return;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<void>((resolve) => {
     timer = setTimeout(resolve, timeoutMs);
   });
   const flush = (async () => {
-    const models = await listLtSyncPendingModels().catch(() => [] as string[]);
-    await Promise.all(models.map((model) => (engines.get(model) ?? createLtSyncEngine({ model })).pushPending()));
+    if ((await getLtSyncOwner().catch(() => undefined)) !== userId) return;
+    const scopes = await listLtSyncPendingModels().catch(() => [] as string[]);
+    // Each scope with its own tenant header: the engine the app created, or one rebuilt from the scope
+    await Promise.all(scopes.map((scope) => (engines.get(scope) ?? createLtSyncEngine(parseLtSyncScope(scope))).pushPending()));
   })();
   try {
     await Promise.race([flush, timeout]);

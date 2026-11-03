@@ -54,6 +54,8 @@ export class FakeSyncServer {
   readonly inProgress = new Set<string>();
   /** Apply the next push, then drop the connection before the answer arrives */
   loseNextPushResponse = false;
+  /** Records the caller may see but not change: every change of them is `rejected` / `FORBIDDEN` */
+  readonly forbiddenIds = new Set<string>();
   /** `true`: `/hints` answers an open event stream that `hint()` writes into; otherwise `404` (SSE off) */
   hintsEnabled = false;
   private readonly hintStreams = new Set<ReadableStreamDefaultController<Uint8Array>>();
@@ -173,7 +175,9 @@ export class FakeSyncServer {
     const existing = this.records.get(id);
     const conflict = (): LtSyncPushResult => ({ id, mutationId, record: this.view(existing!), status: 'conflict', version: existing!.version });
     let outcome: LtSyncPushResult;
-    if (item.op === 'upsert' && item.data?.title === '') {
+    if (this.forbiddenIds.has(id)) {
+      outcome = { code: 'FORBIDDEN', id, mutationId, status: 'rejected' };
+    } else if (item.op === 'upsert' && item.data?.title === '') {
       outcome = { code: 'VALIDATION_FAILED', details: [{ field: 'title' }], id, mutationId, status: 'rejected' };
     } else if (item.op === 'upsert') {
       if (item.baseVersion === undefined) {

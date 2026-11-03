@@ -667,7 +667,8 @@ export function useLtAuth(): UseLtAuthReturn {
     try {
       // Loaded on demand: an app without offline sync carries none of it
       const sync = isLtSyncEnabled() ? await import('../../lib/sync') : null;
-      await sync?.flushLtSyncBeforeSignOut(LT_SYNC_SIGN_OUT_FLUSH_MS);
+      // Only the signing-out user's own changes: a previous user's are deleted unsent, never pushed under this session
+      await sync?.flushLtSyncBeforeSignOut(user.value?.id ? String(user.value.id) : undefined, LT_SYNC_SIGN_OUT_FLUSH_MS);
       const result = await authClient.signOut(options);
       // Clear user data on logout
       clearUser();

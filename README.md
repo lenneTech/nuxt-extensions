@@ -771,30 +771,34 @@ const add = (title: string) => create({ title });
 - Syncs at start, on `online`, on focus, shortly after a local change, and after a server hint
   (`GET <basePath>/hints`, read with `fetch` so it signs in with a cookie and a JWT alike). Every
   reconnect of the hint stream pulls once: the server ends the stream on purpose and does not
-  replay what it missed. A hidden tab keeps no stream open.
+  replay what it missed. All instances of a tab share one stream per tenant, and a hidden tab
+  keeps none open.
 - Handles every item status and HTTP status of the protocol: `401` keeps everything (sign in again,
   the same changes go out without duplicates), `410` drops the local records and pulls everything
   again while keeping unsent changes, `403` on a pull drops the model's records, `429`/`503` and
-  network errors back off.
+  network errors back off. A refused change is dropped and the record returns to the server's state.
 - Tabs share the data: one syncs at a time (Web Locks), the others show the result
   (BroadcastChannel).
 
 **Options:** `idFormat` (`'objectId'` default, `'uuidv7'` for models declared with it),
 `onConflict` (default: the server wins; return `{ data }` to send your answer again on top of the
-server's version), `tenantId` (`X-Tenant-Id`), `pageLimit`, `hints: false`, `auto: false` (only
-`sync()` syncs).
+server's version), `tenantId` (`X-Tenant-Id`; records and unsent changes are kept per tenant, so a
+change made under one tenant never goes out under another), `pageLimit`, `hints: false`,
+`auto: false` (only `sync()` syncs).
 
 **Whose data it is.** The local data belongs to the signed-in user:
 
 | Event | Local data |
 |-------|-----------|
-| `useLtAuth().signOut()` | Unsent changes are sent (at most 5 s), then the whole database is deleted |
+| `useLtAuth().signOut()` | The user's own unsent changes are sent (at most 5 s), then the whole database is deleted |
 | Another user signs in | Deleted before anything is shown or pulled |
 | Session expired, same user signs in again | Kept; the outbox goes out without duplicates |
 | Nobody signed in | Nothing shown, changes refused |
 
-A sign-out flow that bypasses `useLtAuth().signOut()` must do the same itself:
-`flushLtSyncBeforeSignOut()` and `deleteLtSyncDatabase()` from `@lenne.tech/nuxt-extensions/lib`.
+A sync answer that arrives after the sign-out or the account switch is discarded, not stored. A
+sign-out flow that bypasses `useLtAuth().signOut()` must do the same itself:
+`flushLtSyncBeforeSignOut(userId)` and `deleteLtSyncDatabase()` from
+`@lenne.tech/nuxt-extensions/lib`. The flush sends only when the local data belongs to `userId`.
 `pendingCount` lets the app warn before signing out. A service worker must never cache responses
 of `/sync` or `/iam` (nest-server `src/core/modules/sync/SECURITY.md`).
 
