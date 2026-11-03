@@ -26,6 +26,20 @@ export type {
 // Error Translation Types
 export type { LtErrorTranslationResponse, LtParsedError, UseLtErrorTranslationReturn } from './error';
 
+// Offline Sync Types
+export type {
+  LtSyncConflict,
+  LtSyncConflictResolution,
+  LtSyncIdFormat,
+  LtSyncItemStatus,
+  LtSyncModuleOptions,
+  LtSyncPushResult,
+  LtSyncRecord,
+  LtSyncResult,
+  UseLtOfflineSyncOptions,
+  UseLtOfflineSyncReturn,
+} from './sync';
+
 // AI Types
 export type {
   LtAiAction,
