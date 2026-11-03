@@ -69,6 +69,7 @@ auditConfig:
     #   Remove this entry, re-resolve, and `pnpm audit` must be clean without it.
     # Verified 2026-10-28 (deepmerge latest 4.3.1, first_patched_version null, not withdrawn,
     #   plugin-node-resolve 16.0.3 still `^4.2.2`).
+    # Re-verified 2026-11-03: unchanged on all four points.
     - GHSA-gcqx-w48m-w2h4
     # GHSA-86w9-cpqp-85rv (node-forge <=1.4.0, via listhen) was removed on 2026-10-28: node-forge
     # 1.4.1 (2026-10-27) lies outside the advisory's range, listhen's `^1.4.0` admits it, and
@@ -127,6 +128,9 @@ overrides:
   # 2026-11-01: brace-expansion 2.x left this tree with minimatch 5.1.9 / 9.0.9 (see the glob and
   # minimatch entries below); only 5.0.12 remains, via minimatch 11.0.3. The 2.x entry stays as the
   # guard for a parent that requests into the window again.
+  # Verified 2026-11-03: no new advisory, 2.1.7 / 5.0.12 still the newest in their majors. Fresh
+  # resolve with the block: one 5.0.12 (via minimatch 11.0.4); without it: 2.1.7 and 5.0.12, both
+  # outside every window. Still latent.
   'brace-expansion@>=2.0.0 <2.1.7': '2.1.7'
   'brace-expansion@>=5.0.0 <5.0.12': '5.0.12'
   # `minimatch@>=5.0.0 <10.2.6` -> 10.2.6 was removed on 2026-10-24. It existed because only
@@ -157,9 +161,20 @@ overrides:
   # Scoped per consumer on purpose: a bare `minimatch@<11.0.1` key would also lift any consumer that
   # needs the `makeRe()` 11 removed. Drop each entry once its consumer requests the patched major
   # itself.
+  #
+  # Raised 2026-11-03: minimatch target 11.0.3 -> 11.0.4 (published 2026-11-02T04:50Z, the newest
+  # 11.x; its only change is dropping Node 18 from `engines`), key unchanged — no new glob or
+  # minimatch advisory. 11.0.3 had become a downgrade lock: glob 14.0.3 requests minimatch `^11.0.2`,
+  # outside the key, so a resolve without the lockfile takes 11.0.4 for glob while readdir-glob stays
+  # pinned — two copies. glob targets unchanged, 14.0.3 is still the newest 14.x. Drop conditions
+  # unchanged: @vercel/nft 1.11.0 (latest, glob ^13), archiver-utils 5.0.2 (latest, glob ^10) and
+  # readdir-glob 1.1.3 (archiver's pick; even readdir-glob 3.0.0 asks for minimatch ^10.2.2) still
+  # request the old majors. Still load-bearing: a fresh resolve without the overrides block brings
+  # back glob 10.5.0 / 13.0.6 and minimatch 5.1.9 / 9.0.9 / 10.2.6, and `pnpm audit` reports
+  # GHSA-3g3m-2fjr-6pw4 and GHSA-g3hv-75wg-m249 again.
   '@vercel/nft>glob@<14.0.2': '14.0.3'
   'archiver-utils>glob@<14.0.2': '14.0.3'
-  'readdir-glob>minimatch@<11.0.1': '11.0.3'
+  'readdir-glob>minimatch@<11.0.1': '11.0.4'
   # tar — five advisories in one line (GHSA-23hp-3jrh-7fpw critical: decompression/parse DoS via
   # unlimited input; GHSA-8x88-c5mf-7j5w, GHSA-w8wr-v893-vjvp, GHSA-gvwx-54wh-qm9j,
   # GHSA-r292-9mhp-454m). The highest patch floor across them is 7.5.21.
@@ -167,6 +182,8 @@ overrides:
   # fresh resolve without the overrides block picks the same 7.5.22; kept as a guard in case a
   # parent requests into the window again.
   # Verified 2026-10-28: unchanged — no new advisory, 7.5.22 still the newest 7.x, still latent.
+  # Verified 2026-11-03: unchanged — 7.5.22 still the newest 7.x, fresh resolves with and without
+  # the block identical; still latent.
   'tar@<7.5.21': '7.5.22'
   # shell-quote — two advisories in one line, both via nuxt > @nuxt/devtools > launch-editor
   # (requests ^1.8.4, which intersects the key, so the target is a PIN, not a floor):
@@ -195,6 +212,8 @@ overrides:
   # here — a fresh resolve without the overrides block picks 1.12.0 as well.
   # Verified 2026-10-28: unchanged — no new advisory since GHSA-pqg4-j6r4-53mv, 1.12.0 still the
   # newest 1.x, launch-editor 2.14.2 still latest and still `^1.10.0`; still latent.
+  # Verified 2026-11-03: unchanged — 1.12.0 still the newest 1.x, launch-editor 2.14.2 still latest
+  # and `^1.10.0`; fresh resolves with and without the block identical, still latent.
   'shell-quote@<1.11.0': '1.12.0'
   # svgo — the removeScripts plugin left executable content intact: some scripts
   # (GHSA-2p49-hgcm-8545, patched 4.0.2), links smuggled through namespace and control-character
@@ -208,6 +227,7 @@ overrides:
   # fresh resolve without the overrides block picks the same 4.1.0; kept as a guard in case a
   # parent requests into the window again.
   # Verified 2026-10-28: unchanged — no new advisory, 4.1.0 still the newest 4.x, still latent.
+  # Verified 2026-11-03: unchanged — 4.1.0 still the newest 4.x, still latent.
   'svgo@>=4.0.0 <4.1.0': '4.1.0'
   # postcss — arbitrary .map file disclosure through an attacker-controlled sourceMappingURL:
   # GHSA-6g55-p6wh-862q (HIGH, patched 8.5.12), GHSA-r28c-9q8g-f849 (HIGH, path traversal in
@@ -253,6 +273,8 @@ overrides:
   # (inside the key) stays pinned. Measured with fresh resolves: the old target carried 8.5.31 next
   # to 8.5.32 and `pnpm peers check` reported autoprefixer@10.6.2's peer unmet; the new target and
   # a resolve WITHOUT the block both yield one 8.5.32 copy.
+  # Verified 2026-11-03: unchanged — no new postcss advisory, 8.5.32 still the newest 8.x; fresh
+  # resolves with and without the block both yield one 8.5.32 copy (no downgrade lock).
   'postcss@<8.5.23': '8.5.32'
   # nanoid 3.x — GHSA-2v37-7h3g-55p8 (HIGH, custom generators loop indefinitely when size is 0,
   # patched 3.3.18), GHSA-28wg-ghj8-5hjv (HIGH, non-secure generators loop with a negative size,
@@ -278,6 +300,7 @@ overrides:
   # Verified 2026-10-24: unchanged, 3.3.20 still the newest 3.x; postcss 8.5.31 requests ^3.3.20.
   # Verified 2026-10-28: unchanged — no new advisory, 3.3.20 still the newest 3.x, postcss 8.5.32
   # requests ^3.3.20; still latent.
+  # Verified 2026-11-03: unchanged — 3.3.20 still the newest 3.x, still latent.
   'nanoid@<3.3.18': '3.3.20'
   # esbuild — the dev server accepts requests from any origin on Windows, letting a malicious
   # page read arbitrary files through it (GHSA-g7r4-m6w7-qqqr, patched >=0.28.1). Entered this
@@ -304,6 +327,10 @@ overrides:
   # load-bearing — without it esbuild 0.27.7 returns via fontless 0.2.1 and `pnpm audit` reports
   # GHSA-g7r4-m6w7-qqqr. 0.28.2 still the newest 0.28.x; @nuxt/ui 4.12.0 (still latest) still
   # requests @nuxt/fonts ^0.14.0 (latest 1.2.0), so the drop condition is not met.
+  # Re-verified 2026-11-03 (fresh resolves with and without the block, pnpm 11.28.10): still
+  # load-bearing — without it esbuild 0.27.7 returns via fontless 0.2.1 and `pnpm audit` reports
+  # GHSA-g7r4-m6w7-qqqr. 0.28.2 still the newest 0.28.x; @nuxt/ui 4.12.0 (still latest) still
+  # requests @nuxt/fonts ^0.14.0, so the drop condition is not met.
   'fontless>esbuild': '0.28.2'
   # @tiptap/core — mergeAttributes() promotes an own `__proto__` key into inherited,
   # executable DOM attributes (GHSA-cp6q-959q-f8rh, MODERATE, patched >=3.30.4), and a
@@ -362,8 +389,16 @@ overrides:
   # Verified 2026-10-28: unchanged — no @tiptap/core or @tiptap/pm advisory since
   # GHSA-j95f-988m-3j2f, 3.32.0 still the newest 3.x for both. Fresh resolves with and without the
   # block both put the whole @tiptap family on one 3.32.0 copy (latent, no downgrade lock).
-  '@tiptap/core@<3.30.5': '3.32.0'
-  '@tiptap/pm@<3.30.5': '3.32.0'
+  #
+  # Raised 2026-11-03: both targets 3.32.0 -> 3.32.2 (published 2026-10-30T13:20Z, npm `latest` for
+  # the whole family; 3.32.2 carries tiptap's own re2js dependency-security patch), keys unchanged —
+  # no new @tiptap/core or @tiptap/pm advisory. 3.32.0 had become a downgrade lock: @nuxt/ui 4.12.0's
+  # `^3.31.4` dependencies take 3.32.2 on a resolve without the lockfile, while the `^3` peer (inside
+  # the key) stays pinned. Done via a fresh resolve (`pnpm update` leaves the siblings on 3.32.0 as
+  # unmet exact peers); fresh resolves with and without the block now both put the whole family on
+  # one 3.32.2 copy.
+  '@tiptap/core@<3.30.5': '3.32.2'
+  '@tiptap/pm@<3.30.5': '3.32.2'
   # `simple-git@<4.0.1` -> 4.0.2 (two critical, two high advisories in the 3.x line) was removed on
   # 2026-10-24, together with its patch: simple-git left the tree. Its only parent was
   # @nuxt/devtools 3.4.2; 3.4.3 and later no longer depend on it, and nuxt 4.6.2 requests
@@ -378,6 +413,7 @@ overrides:
   # parent requests into the window again.
   # Verified 2026-10-28: unchanged — no new advisory, 1.2.2 still the newest 1.x (postcss 8.5.32
   # requests ^1.2.2), still latent.
+  # Verified 2026-11-03: unchanged — 1.2.2 still the newest 1.x, still latent.
   'source-map-js@>=1.0.0 <1.2.2': '1.2.2'
 
 # No `minimumReleaseAge` is set in this repo, so pnpm 11's built-in 24h default applies in LOOSE

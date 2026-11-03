@@ -5,6 +5,61 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.21.0] - 2026-11-03
+
+Feature release: offline sync for the `@lenne.tech/nest-server` sync module. It is opt-in; a
+project that leaves `ltExtensions.sync` off gets no new code and no changed behaviour. No breaking
+change, no peer range changed.
+
+### Added
+
+- `useLtOfflineSync(model, options?)`, the client of the nest-server sync module (>= 12.2.0,
+  protocol in its `docs/offline-sync-protocol.md`). Records of one model live in IndexedDB, local
+  changes wait in an outbox and go out with `POST /sync/:model`, `GET /sync/:model` pulls with a
+  cursor. Read-only refs: `records`, `pendingCount`, `offline`, `syncing`, `needsLogin`,
+  `forbidden`, `conflicts`, `rejected`, `error`, `lastSyncedAt`; methods `create`, `update`,
+  `remove`, `get`, `sync`. Options: `auto`, `hints`, `idFormat` (`'objectId'` / `'uuidv7'`),
+  `onConflict`, `pageLimit`, `tenantId`. Syncs at start, on `online`, on focus, shortly after a
+  local change and on a server hint; backs off on offline, 429, 503 and `retry`. Hints come over
+  `GET /sync/hints`, read with `fetch` (works in cookie and JWT mode), one stream per tab and
+  tenant. Tabs share changes through `BroadcastChannel`. On the server it returns an inert API.
+- The local data belongs to the signed-in user: another user's data (or data without an owner) is
+  wiped before anything is shown or pulled, nobody signed in sees nothing, and every write of a
+  sync run is checked against the user it started for. Data is kept per model and tenant.
+- Module option `ltExtensions.sync: { enabled: false, basePath: '/sync' }`. The composable is
+  auto-imported only when enabled.
+- `useLtAuth().signOut()` with sync enabled sends the signing-out user's unsent changes (at most
+  5 s), signs out, then deletes the local database `lt-offline-sync`. An expired session (401)
+  deletes nothing, so the same changes go out after signing in again.
+- `@lenne.tech/nuxt-extensions/lib` exports `flushLtSyncBeforeSignOut` and `deleteLtSyncDatabase`
+  for a custom sign-out flow, plus `buildLtSyncUrl`, `getLtSyncBasePath`, `ltSyncObjectId` and
+  `ltSyncUuidV7`.
+
+### Changed (repository only, not part of the published package)
+
+- `check:suppressions` derives an advisory's fix from the npm registry instead of trusting
+  `first_patched_version` alone, and reports a fix younger than `minimumReleaseAge` as
+  `fix-in-quarantine` instead of failing. It honours `auditConfig.unusableFixConsumers`, counts
+  only lockfile edges into affected versions, and matches npm-aliased edges by their target.
+- Tests: passkey registration (`excludeCredentials` reaches the authenticator, a duplicate passkey
+  ends with the explanatory message and stores nothing, the name reaches the server; DEV-1368),
+  plus the five client scenarios of the sync protocol against an in-memory server with
+  `fake-indexeddb` 6.2.7 (new dev dependency).
+- Dev dependencies: `@types/node` 26.6.6, `vue-tsc` 3.3.14, pnpm 11.28.10 as `packageManager`.
+  Other lockfile movement is in-range transitive patches.
+- Held: `better-auth` and `@better-auth/passkey` at 1.7.12 (lock-step with
+  `@lenne.tech/nest-server`); `vitest` 5.1.0, `nuxt` 4.6.4, `oxfmt` 0.76.0 and `oxlint` 1.91.0
+  (younger than pnpm's 24h release-age gate); TypeScript 5.9.3 (`@nuxt/module-builder` 1.0.3 still
+  accepts only `^5.9.3`).
+
+### Security (this repository's own install)
+
+- GHSA-3g3m-2fjr-6pw4 (glob) and GHSA-g3hv-75wg-m249 (minimatch) reach this tree only through
+  nitropack's build tooling. Scoped overrides lift the glob of `@vercel/nft` and `archiver-utils`
+  to 14.0.3 and the minimatch of `readdir-glob` to 11.0.4.
+- `@tiptap/core` and `@tiptap/pm` override targets 3.32.0 → 3.32.2, so the override no longer
+  holds a second, older copy next to the one `@nuxt/ui` requests.
+
 ## [1.20.1] - 2026-10-28
 
 Maintenance release. No API changed. Apart from the version string, the runtime JavaScript in

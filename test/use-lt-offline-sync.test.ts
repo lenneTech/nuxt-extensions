@@ -181,6 +181,21 @@ describe('useLtOfflineSync — whose data it is', () => {
     expect(notes.pendingCount.value).toBe(1);
   });
 
+  it('keeps each tenant’s records and unsent changes to that tenant', async () => {
+    const tenantA = mount({ auto: false, tenantId: 'tenant-a' });
+    const tenantB = mount({ auto: false, tenantId: 'tenant-b' });
+    await tenantA.create({ title: 'internal note of tenant a' });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    expect(tenantB.records.value).toEqual([]);
+    expect(tenantB.pendingCount.value).toBe(0);
+    // The server stamps a create into the tenant of its header: B must not send A's note
+    await tenantB.sync();
+    expect(server.pushes()).toEqual([]);
+    await tenantA.sync();
+    expect(server.pushes().map((request) => request.headers['x-tenant-id'])).toEqual(['tenant-a']);
+  });
+
   it('empties when another tab deletes the database (sign-out there)', async () => {
     const notes = mount({ auto: false });
     await notes.create({ title: 'A' });

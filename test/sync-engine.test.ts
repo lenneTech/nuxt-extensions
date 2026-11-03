@@ -13,7 +13,7 @@ import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createLtSyncEngine, flushLtSyncBeforeSignOut, ltSyncObjectId, ltSyncUuidV7, resetLtSyncEngines } from '../src/runtime/lib/sync';
-import { claimLtSyncOwner, deleteLtSyncDatabase, runLtSyncTx } from '../src/runtime/lib/sync-store';
+import { claimLtSyncOwner, deleteLtSyncDatabase, getLtSyncOwner, LT_SYNC_DB_NAME, runLtSyncTx } from '../src/runtime/lib/sync-store';
 import { FakeSyncServer } from './fixtures/sync-server';
 import { resetStubRuntimeConfig, setStubRuntimeConfig } from './stubs/imports';
 
@@ -557,6 +557,20 @@ describe('sign-out and account switch', () => {
     // The `conflict` answer carried user 1's server record; it must not land in the next user's database
     expect(await claimLtSyncOwner('user-2')).toBe(false);
     expect(await engine().list()).toEqual([]);
+  });
+
+  it('lets another tab delete the database while this one holds it open (sign-out there)', async () => {
+    await claimLtSyncOwner('user-1');
+
+    // The other tab: a deletion waits until every open connection is closed. Without this tab
+    // closing its connection, sign-out there would never return and the data would stay
+    const deleted = await new Promise<'blocked' | 'deleted'>((resolve) => {
+      indexedDB.deleteDatabase(LT_SYNC_DB_NAME).addEventListener('success', () => resolve('deleted'));
+      setTimeout(() => resolve('blocked'), 1000);
+    });
+    expect(deleted).toBe('deleted');
+    // And this tab opens a fresh, empty database on its next access
+    expect(await getLtSyncOwner()).toBeUndefined();
   });
 
   it('treats data without an owner as foreign and wipes it on the first claim', async () => {
