@@ -61,6 +61,11 @@ const defaultOptions: LtExtensionsModuleOptions = {
   preHydrationInput: {
     enabled: true,
   },
+  // Opt-in: an app without offline sync gets no auto-import and no sign-out cleanup
+  sync: {
+    basePath: '/sync',
+    enabled: false,
+  },
   tus: {
     defaultChunkSize: 5 * 1024 * 1024, // 5MB
     defaultEndpoint: '/files/upload',
@@ -91,6 +96,7 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
       formLabelAssociation: { ...defaultOptions.formLabelAssociation, ...options.formLabelAssociation },
       i18n: { ...defaultOptions.i18n, ...options.i18n },
       preHydrationInput: { ...defaultOptions.preHydrationInput, ...options.preHydrationInput },
+      sync: { ...defaultOptions.sync, ...options.sync },
       tus: { ...defaultOptions.tus, ...options.tus },
     };
 
@@ -212,6 +218,10 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
         enabled: resolvedOptions.preHydrationInput?.enabled ?? true,
         maxRestoreMs: resolvedOptions.preHydrationInput?.maxRestoreMs ?? 1500,
       },
+      sync: {
+        basePath: resolvedOptions.sync?.basePath || '/sync',
+        enabled: resolvedOptions.sync?.enabled ?? false,
+      },
       tus: {
         defaultChunkSize: resolvedOptions.tus?.defaultChunkSize || 5 * 1024 * 1024,
         defaultEndpoint: resolvedOptions.tus?.defaultEndpoint || '/files/upload',
@@ -272,6 +282,11 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
         { name: 'ltAiRequest', from: resolve('./runtime/lib/ai') },
         { name: 'parseLtAiSseStream', from: resolve('./runtime/lib/ai') },
       ]);
+    }
+
+    // Offline sync (only when enabled; `useLtAuth().signOut()` reads the same flag for its cleanup)
+    if (resolvedOptions.sync?.enabled) {
+      addImports([{ name: 'useLtOfflineSync', from: resolve('./runtime/composables/use-lt-offline-sync') }]);
     }
 
     // Register transition components

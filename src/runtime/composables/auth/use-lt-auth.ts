@@ -12,7 +12,7 @@
 
 import type { LtAuthMode, LtAuthState, LtPasskeyAuthResult, LtPasskeyRegisterResult, LtUser, LtUserInput, UseLtAuthReturn } from '../../types';
 
-import { useNuxtApp, useCookie, useState, useRequestHeaders, ref, computed, watch } from '#imports';
+import { useNuxtApp, useCookie, useState, useRequestHeaders, useRuntimeConfig, ref, computed, watch } from '#imports';
 import { ltArrayBufferToBase64Url, ltBase64UrlToUint8Array } from '../../utils/crypto';
 import { clearLtAuthCookies, getLtApiBase, getLtAuthCookieNames, resolveLtAuthState } from '../../lib/auth-state';
 import { useLtAuthClient } from '../use-lt-auth-client';
@@ -29,6 +29,22 @@ type LtUserOptionalKeys<T> = { [K in keyof T]-?: object extends Pick<T, K> ? K :
  * Upper bound for `validateSession()` waiting on Better Auth's session request.
  */
 const VALIDATE_SESSION_TIMEOUT_MS = 10_000;
+
+/**
+ * How long `signOut()` tries to send unsent offline-sync changes before it deletes them with the
+ * rest (decision E3 of DEV-3917): long enough for a connected device, short enough never to hang.
+ */
+const LT_SYNC_SIGN_OUT_FLUSH_MS = 5000;
+
+/** Whether the app enabled offline sync (`ltExtensions.sync.enabled`); always false on the server */
+function isLtSyncEnabled(): boolean {
+  if (!import.meta.client) return false;
+  try {
+    return !!(useRuntimeConfig().public as { ltExtensions?: { sync?: { enabled?: boolean } } }).ltExtensions?.sync?.enabled;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * In-flight JWT refresh after a 401 in JWT mode (client only), shared across
@@ -640,13 +656,25 @@ export function useLtAuth(): UseLtAuthReturn {
 
   /**
    * Sign out
+   *
+   * With offline sync enabled (`ltExtensions.sync.enabled`) it first sends what is still unsent,
+   * for at most a few seconds, and once signed out deletes every local sync record, cursor and
+   * unsent change: the device holds personal data the server no longer controls (nest-server
+   * `SECURITY.md`). An expired session does NOT come through here and deletes nothing.
    */
   const signOut = async (options?: any) => {
     isLoading.value = true;
     try {
+      // Loaded on demand: an app without offline sync carries none of it
+      const sync = isLtSyncEnabled() ? await import('../../lib/sync') : null;
+      await sync?.flushLtSyncBeforeSignOut(LT_SYNC_SIGN_OUT_FLUSH_MS);
       const result = await authClient.signOut(options);
       // Clear user data on logout
       clearUser();
+      if (sync) {
+        const { deleteLtSyncDatabase } = await import('../../lib/sync-store');
+        await deleteLtSyncDatabase().catch((error: unknown) => console.error('[LtAuth] Could not delete the local offline-sync data on sign-out:', error));
+      }
       return result;
     } finally {
       isLoading.value = false;
