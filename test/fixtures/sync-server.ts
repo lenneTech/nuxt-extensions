@@ -54,7 +54,25 @@ export class FakeSyncServer {
   readonly inProgress = new Set<string>();
   /** Apply the next push, then drop the connection before the answer arrives */
   loseNextPushResponse = false;
+  /** `true`: `/hints` answers an open event stream that `hint()` writes into; otherwise `404` (SSE off) */
+  hintsEnabled = false;
+  private readonly hintStreams = new Set<ReadableStreamDefaultController<Uint8Array>>();
   private seq = 0;
+
+  /** Send a hint to every open stream (§9) */
+  hint(model: string): void {
+    for (const stream of this.hintStreams) stream.enqueue(new TextEncoder().encode(`event: change\ndata: {"model":"${model}","at":"${new Date().toISOString()}"}\n\n`));
+  }
+
+  /** End every open stream, as the server does after its re-check interval */
+  endHintStreams(): void {
+    for (const stream of this.hintStreams) stream.close();
+    this.hintStreams.clear();
+  }
+
+  openHintStreams(): number {
+    return this.hintStreams.size;
+  }
 
   /** A change somebody else made, straight on the server */
   write(id: string, data: Record<string, unknown>): ServerRecord {
@@ -88,7 +106,7 @@ export class FakeSyncServer {
   }
 
   pulls(): LoggedRequest[] {
-    return this.requests.filter((request) => request.method === 'GET');
+    return this.requests.filter((request) => request.method === 'GET' && !request.url.pathname.endsWith('/hints'));
   }
 
   readonly fetch = async (input: string, init: RequestInit = {}): Promise<Response> => {
@@ -98,6 +116,7 @@ export class FakeSyncServer {
     this.requests.push({ body, headers: Object.fromEntries(new Headers(init.headers).entries()), method, url });
     if (!this.online) throw new TypeError('Failed to fetch');
     if (!this.authorized) return json(401, { message: 'Unauthorized' });
+    if (url.pathname.endsWith('/hints')) return this.hints(init.signal ?? undefined);
     if (method === 'GET') {
       const forced = this.nextPull.shift();
       return forced ? json(forced.status, forced.body, forced.headers) : this.pull(url);
@@ -115,6 +134,23 @@ export class FakeSyncServer {
   private view(record: ServerRecord): NonNullable<LtSyncPushResult['record']> {
     const { seq: _seq, ...rest } = record;
     return record.deletedAt ? { deletedAt: rest.deletedAt, id: rest.id, updatedAt: rest.updatedAt, version: rest.version } : rest;
+  }
+
+  private hints(signal: AbortSignal | undefined): Response {
+    if (!this.hintsEnabled) return json(404, { message: 'Not Found' });
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const body = new ReadableStream<Uint8Array>({
+      start: (streamController) => {
+        controller = streamController;
+        this.hintStreams.add(controller);
+        controller.enqueue(new TextEncoder().encode('retry: 10\n\n'));
+      },
+    });
+    signal?.addEventListener('abort', () => {
+      this.hintStreams.delete(controller);
+      controller.error(new DOMException('aborted', 'AbortError'));
+    });
+    return new Response(body, { headers: { 'content-type': 'text/event-stream' }, status: 200 });
   }
 
   private pull(url: URL): Response {
