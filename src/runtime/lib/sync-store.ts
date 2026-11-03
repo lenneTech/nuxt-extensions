@@ -187,8 +187,11 @@ export async function deleteLtSyncDatabase(): Promise<void> {
 /** Messages the tabs exchange */
 export type LtSyncMessage = { model: string; type: 'changed' } | { type: 'cleared' };
 
-/** Tell the other tabs of this origin; a no-op where BroadcastChannel is missing */
-export function postLtSyncMessage(message: LtSyncMessage): void {
+/**
+ * Tell every listener of this origin, this tab's included (a fresh channel is not the receiver's
+ * own); a no-op where BroadcastChannel is missing
+ */
+function postLtSyncMessage(message: LtSyncMessage): void {
   if (typeof BroadcastChannel === 'undefined') return;
   const channel = new BroadcastChannel(LT_SYNC_CHANNEL_NAME);
   try {
@@ -196,10 +199,4 @@ export function postLtSyncMessage(message: LtSyncMessage): void {
   } finally {
     channel.close();
   }
-}
-
-/** Close this tab's connection without deleting anything (tests, hot reload) */
-export function closeLtSyncDatabase(): void {
-  connection?.close();
-  connection = undefined;
 }
