@@ -644,6 +644,7 @@ function metricSuffix(r) {
     if (s.state === "verified") return `  ${C.dim(`${s.total} verified`)}`;
     if (s.state === "none") return `  ${C.dim("none declared")}`;
     if (s.state === "unverified") return `  ${C.yellow(`${s.count} of ${s.total} NOT verified`)}`;
+    if (s.state === "retest") return `  ${C.red(`${s.count} to re-test`)}`;
     return `  ${C.red(`${s.count} obsolete`)}`;
   }
   if (r.kind === "lint" && r.lint) {
