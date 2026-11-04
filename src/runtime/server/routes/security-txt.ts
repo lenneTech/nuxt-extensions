@@ -11,7 +11,7 @@ import { resolveSecurityTxt } from '../lib/security-txt';
  */
 export default defineEventHandler((event) => {
   const config = useRuntimeConfig(event);
-  // Declared by nuxt-base-starter (`NUXT_PUBLIC_SITE_URL`); without it, Canonical comes from `hosts` only.
+  // `NUXT_PUBLIC_SITE_URL`; the module declares the key. Without a value, Canonical comes from `hosts` only.
   const siteUrl = config.public?.siteUrl;
   const body = resolveSecurityTxt({
     config: config.ltExtensions?.securityTxt,

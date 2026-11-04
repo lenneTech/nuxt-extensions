@@ -300,12 +300,13 @@ export interface LtPreHydrationInputOptions {
  *
  * The file is built per request. `Expires` is always "now + `validDays`", cut to midnight UTC, so
  * it never runs out between deployments. `Canonical` names `runtimeConfig.public.siteUrl`
- * (`NUXT_PUBLIC_SITE_URL`) and, in addition, the requested host if it is listed in `hosts`.
+ * (`NUXT_PUBLIC_SITE_URL`, the module declares the key) and, in addition, the requested host if it
+ * is listed in `hosts`.
  *
  * Everything except `enabled` can be overridden per stage at runtime, without a rebuild:
- * `NUXT_LT_EXTENSIONS_SECURITY_TXT_CONTACT`, `…_ENCRYPTION`, `…_HOSTS`, `…_POLICY`,
- * `…_PREFERRED_LANGUAGES`, `…_VALID_DAYS`. Blanking the contact that way makes the route answer
- * 404, because a file without `Contact` is invalid.
+ * `NUXT_LT_EXTENSIONS_SECURITY_TXT_CONTACT`, `…_HOSTS`, `…_POLICY`, `…_PREFERRED_LANGUAGES`,
+ * `…_VALID_DAYS`. Blanking the contact that way makes the route answer 404, because a file without
+ * `Contact` is invalid.
  *
  * Not available with `nuxt generate`: a static site has no server to compute the file.
  *
@@ -324,7 +325,8 @@ export interface LtPreHydrationInputOptions {
  */
 export interface LtSecurityTxtOptions {
   /**
-   * Contact URI(s), in order of preference: `mailto:`, `https:` or `tel:`.
+   * Contact URI(s), in order of preference: `mailto:`, `https://` or `tel:`. Anything else, such
+   * as a bare address, counts as no contact, and the route answers 404.
    * Defaults to `'mailto:security@lenne.tech'`. For a customer project, decide whether reports go
    * to lenne.tech or to the customer, and set it explicitly.
    */
@@ -332,17 +334,15 @@ export interface LtSecurityTxtOptions {
   /** Serve the file. Defaults to `false`. */
   enabled?: boolean;
   /**
-   * URI of an OpenPGP public key reports can be encrypted with. A path (`/.well-known/pgp-key.txt`)
-   * is resolved against the site URL and left out when no site URL is configured.
-   */
-  encryption?: string;
-  /**
    * Hostnames the site is served from without a redirect (e.g. apex and `www`). A request for one
    * of them adds a second `Canonical` line for that host. The host comes from a request header,
    * so nothing outside this list ever reaches the file. Defaults to `[]`.
    */
   hosts?: string[];
-  /** URI of the vulnerability disclosure policy. A path is resolved like `encryption`. */
+  /**
+   * URI of the vulnerability disclosure policy. A path (`/security-policy`) is resolved against the
+   * site URL and left out when no site URL is configured.
+   */
   policy?: string;
   /** Language tags reports may be written in, in order of preference. Defaults to `['de', 'en']`. */
   preferredLanguages?: string[];
@@ -420,7 +420,6 @@ export interface LtExtensionsRuntimeConfig {
   ltExtensions?: {
     securityTxt?: {
       contact: string | string[];
-      encryption: string;
       hosts: string | string[];
       policy: string;
       preferredLanguages: string | string[];

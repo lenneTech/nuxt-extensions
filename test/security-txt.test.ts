@@ -12,6 +12,7 @@ import {
   SECURITY_TXT_DEFAULT_VALID_DAYS,
   toSecurityTxtOrigin,
 } from '../src/runtime/server/lib/security-txt';
+import ltExtensions from '../src/module';
 
 /**
  * `/.well-known/security.txt` must stay valid according to RFC 9116.
@@ -74,19 +75,18 @@ describe('buildSecurityTxt', () => {
     expect(distance).toBeLessThan(365 * DAY_MS);
   });
 
-  it('leaves Encryption and Policy out unless configured', () => {
-    expect(fields(txt, 'Encryption')).toEqual([]);
+  it('leaves Policy out unless configured', () => {
     expect(fields(txt, 'Policy')).toEqual([]);
   });
 
-  it('resolves Encryption and Policy paths against the first origin, and keeps absolute URIs', () => {
-    const withBoth = buildSecurityTxt({ ...OPTIONS, encryption: '/.well-known/pgp-key.txt', origins: ['https://lenne.tech', 'https://www.lenne.tech'], policy: 'https://example.com/policy' });
-    expect(fields(withBoth, 'Encryption')).toEqual(['https://lenne.tech/.well-known/pgp-key.txt']);
-    expect(fields(withBoth, 'Policy')).toEqual(['https://example.com/policy']);
+  it('resolves a Policy path against the first origin, and keeps an absolute URI', () => {
+    const origins = ['https://lenne.tech', 'https://www.lenne.tech'];
+    expect(fields(buildSecurityTxt({ ...OPTIONS, origins, policy: '/security-policy' }), 'Policy')).toEqual(['https://lenne.tech/security-policy']);
+    expect(fields(buildSecurityTxt({ ...OPTIONS, origins, policy: 'https://example.com/policy' }), 'Policy')).toEqual(['https://example.com/policy']);
   });
 
-  it('drops a path-only Encryption when there is no origin to resolve it against', () => {
-    expect(fields(buildSecurityTxt({ ...OPTIONS, encryption: '/.well-known/pgp-key.txt', origins: [] }), 'Encryption')).toEqual([]);
+  it('drops a path-only Policy when there is no origin to resolve it against', () => {
+    expect(fields(buildSecurityTxt({ ...OPTIONS, origins: [], policy: '/security-policy' }), 'Policy')).toEqual([]);
   });
 
   it('lists the preferred languages', () => {
@@ -125,6 +125,14 @@ describe('normalisation', () => {
     expect(normalizeSecurityTxtContacts(undefined)).toEqual([]);
   });
 
+  it('keeps only what RFC 9116 allows as a contact: a URI, and on the web only https', () => {
+    expect(normalizeSecurityTxtContacts(['mailto:a@example.com', 'https://example.com/report', 'tel:+49-30-1234'])).toEqual(['mailto:a@example.com', 'https://example.com/report', 'tel:+49-30-1234']);
+    expect(normalizeSecurityTxtContacts('MAILTO:a@example.com')).toEqual(['MAILTO:a@example.com']);
+    for (const contact of ['security@customer.example', 'http://example.com/report', 'https://', 'mailto:', 'javascript:alert(1)']) {
+      expect(normalizeSecurityTxtContacts(contact)).toEqual([]);
+    }
+  });
+
   it('reads a list from an environment string', () => {
     expect(normalizeSecurityTxtList('de, en')).toEqual(['de', 'en']);
     expect(normalizeSecurityTxtList(['example.com', 'www.example.com'])).toEqual(['example.com', 'www.example.com']);
@@ -160,7 +168,7 @@ describe('normalisation', () => {
 });
 
 describe('resolveSecurityTxt', () => {
-  const defaults = { contact: 'mailto:security@lenne.tech', encryption: '', hosts: [], policy: '', preferredLanguages: ['de', 'en'], validDays: 180 };
+  const defaults = { contact: 'mailto:security@lenne.tech', hosts: [], policy: '', preferredLanguages: ['de', 'en'], validDays: 180 };
 
   it('builds the file from the module defaults and the site URL', () => {
     const txt = resolveSecurityTxt({ config: defaults, now: NOW, requestHost: 'example.com', siteUrl: 'https://example.com' })!;
@@ -191,9 +199,39 @@ describe('resolveSecurityTxt', () => {
     expect(fields(txt, 'Expires')).toEqual(['2026-11-12T00:00:00.000Z']);
   });
 
+  it('yields nothing for a contact that is not a URI, so a typo cannot publish an invalid file', () => {
+    expect(resolveSecurityTxt({ config: { ...defaults, contact: 'security@customer.example' }, now: NOW, requestHost: undefined, siteUrl: 'https://example.com' })).toBeUndefined();
+  });
+
   it('yields nothing when the contact was blanked, so the route answers 404', () => {
     expect(resolveSecurityTxt({ config: { ...defaults, contact: '' }, now: NOW, requestHost: undefined, siteUrl: 'https://example.com' })).toBeUndefined();
     expect(resolveSecurityTxt({ config: undefined, now: NOW, requestHost: undefined, siteUrl: 'https://example.com' })).toBeUndefined();
+  });
+});
+
+/**
+ * `defineNuxtModule` merges a project's options over the module defaults with `defu`, and `defu`
+ * CONCATENATES arrays. A list default would be appended to the project's own list: `['en']` became
+ * `Preferred-Languages: en, de, en`, naming languages the project had just removed. This runs the
+ * real merge, because reading the source cannot show it.
+ */
+describe('securityTxt option merging', () => {
+  async function merged(securityTxt?: Record<string, unknown>) {
+    const options = await ltExtensions.getOptions?.(securityTxt ? { securityTxt } : {}, { options: {} } as never);
+    return options?.securityTxt;
+  }
+
+  it('is off until a project enables it', async () => {
+    expect((await merged())?.enabled).toBe(false);
+    expect((await merged({ enabled: true }))?.enabled).toBe(true);
+  });
+
+  it('replaces the default languages instead of appending to them', async () => {
+    expect((await merged({ preferredLanguages: ['en'] }))?.preferredLanguages).toEqual(['en']);
+  });
+
+  it('leaves a list option alone when a project lists its hosts', async () => {
+    expect((await merged({ hosts: ['example.com'] }))?.hosts).toEqual(['example.com']);
   });
 });
 
@@ -204,9 +242,14 @@ describe('resolveSecurityTxt', () => {
 describe('securityTxt module wiring', () => {
   const moduleSource = readFileSync(resolve(process.cwd(), 'src/module.ts'), 'utf8');
 
-  it('is off by default and defaults the contact to security@lenne.tech', () => {
-    expect(moduleSource).toMatch(/securityTxt: \{[^}]*contact: SECURITY_TXT_DEFAULT_CONTACT,[^}]*enabled: false,[^}]*\}/);
+  it('defaults the contact to security@lenne.tech once enabled', () => {
+    expect(moduleSource).toMatch(/contact: securityTxt\.contact \?\? SECURITY_TXT_DEFAULT_CONTACT,/);
     expect(readFileSync(resolve(process.cwd(), 'src/runtime/server/lib/security-txt.ts'), 'utf8')).toContain("SECURITY_TXT_DEFAULT_CONTACT = 'mailto:security@lenne.tech'");
+  });
+
+  it('declares public.siteUrl while enabled, or NUXT_PUBLIC_SITE_URL would never reach Canonical', () => {
+    const block = moduleSource.match(/if \(resolvedOptions\.securityTxt\.enabled === true\) \{[\s\S]*?\n {4}\}\n/)?.[0];
+    expect(block).toMatch(/\(rc\.public as any\)\.siteUrl \?\?= ''/);
   });
 
   it('registers the route only when enabled, and without a method so HEAD is answered too', () => {

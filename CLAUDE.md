@@ -96,6 +96,10 @@ export default defineNuxtConfig({
       enabled: true,                 // keep text typed before hydration instead of losing it
       maxRestoreMs: 1500,            // how long to keep repairing deferred subtrees
     },
+    securityTxt: {
+      enabled: false,                // opt-in: /.well-known/security.txt (RFC 9116)
+      contact: 'mailto:security@lenne.tech',
+    },
   },
 });
 ```
@@ -418,6 +422,12 @@ fields at `app:beforeMount` and restores them at `app:mounted`, dispatching a sy
   `NUXT_LT_EXTENSIONS_SECURITY_TXT_*` overrides them per stage. `enabled` is build-time only.
 - **`Canonical` from the request host only via the `hosts` allowlist.** The host is a request
   header; anything not listed must never reach the file.
+- **No list defaults in `defaultOptions`.** `defineNuxtModule` merges them with `defu`, which
+  concatenates arrays: a default `['de', 'en']` turned a project's `['en']` into `en, de, en`. Set
+  list defaults where the option is read. `test/security-txt.test.ts` runs the real merge.
+- **A contact that is not a `mailto:`, `https://` or `tel:` URI counts as blank**, so a bare address
+  ends in a 404 rather than a file scanners reject. If a project reports a 404 with the option on,
+  check the contact first.
 - For a customer project, ask whether reports go to lenne.tech or the customer before enabling it.
 
 ## Development Rules

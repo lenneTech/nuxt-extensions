@@ -62,12 +62,11 @@ const defaultOptions: LtExtensionsModuleOptions = {
   preHydrationInput: {
     enabled: true,
   },
+  // Only the switch. `defineNuxtModule` merges these defaults with `defu`, which concatenates arrays,
+  // so a list here would be appended to the project's own. The other defaults are set where the
+  // option is read, in the `securityTxt` block of `setup`.
   securityTxt: {
-    contact: SECURITY_TXT_DEFAULT_CONTACT,
     enabled: false,
-    hosts: [],
-    preferredLanguages: SECURITY_TXT_DEFAULT_LANGUAGES,
-    validDays: SECURITY_TXT_DEFAULT_VALID_DAYS,
   },
   // Opt-in: an app without offline sync gets no auto-import and no sign-out cleanup
   sync: {
@@ -378,11 +377,15 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
     // whether the route exists at all is decided at build time.
     if (resolvedOptions.securityTxt.enabled === true) {
       const securityTxt = resolvedOptions.securityTxt;
+
+      // Same reason as `cookiePrefix` above: Nitro overrides only keys that exist, so a project that
+      // does not declare `siteUrl` itself would never see `NUXT_PUBLIC_SITE_URL` and lose `Canonical`.
+      (rc.public as any).siteUrl ??= '';
+
       (nuxt.options.runtimeConfig as any).ltExtensions = {
         ...(nuxt.options.runtimeConfig as any).ltExtensions,
         securityTxt: {
           contact: securityTxt.contact ?? SECURITY_TXT_DEFAULT_CONTACT,
-          encryption: securityTxt.encryption ?? '',
           hosts: securityTxt.hosts ?? [],
           policy: securityTxt.policy ?? '',
           preferredLanguages: securityTxt.preferredLanguages ?? SECURITY_TXT_DEFAULT_LANGUAGES,

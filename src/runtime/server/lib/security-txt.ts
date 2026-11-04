@@ -15,11 +15,12 @@ export const SECURITY_TXT_MAX_VALID_DAYS = 365;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** RFC 9116 §2.5.3: a contact is a URI, and a web URI must be https. */
+const CONTACT_URI = /^(?:mailto:|tel:|https:\/\/)\S/i;
+
 export interface SecurityTxtOptions {
   /** Contact URIs (`mailto:`, `https:` or `tel:`), in order of preference. */
   contacts: string[];
-  /** URI of the OpenPGP public key, or a path resolved against the first origin. */
-  encryption?: string;
   /** Point in time the file is built for; `Expires` is derived from it. */
   now: Date;
   /** Origins the file is served from; each becomes one `Canonical` line. */
@@ -43,10 +44,16 @@ function isSingleToken(value: unknown): value is string {
 /**
  * Normalises the configured contact(s). Accepts a string or an array, because a runtime override
  * via `NUXT_LT_EXTENSIONS_SECURITY_TXT_CONTACT` arrives as a plain string.
+ *
+ * Whatever is not a usable URI is dropped. `security@example.com` is the obvious typo, and scanners
+ * treat the file it would produce as invalid; with no contact left, the route answers 404 instead.
  */
 export function normalizeSecurityTxtContacts(contact: unknown): string[] {
   const values = Array.isArray(contact) ? contact : [contact];
-  return values.map((value) => (typeof value === 'string' ? value.trim() : value)).filter(isSingleToken);
+  return values
+    .map((value) => (typeof value === 'string' ? value.trim() : value))
+    .filter(isSingleToken)
+    .filter((value) => CONTACT_URI.test(value));
 }
 
 /**
@@ -115,17 +122,13 @@ function resolveAgainstOrigin(value: string | undefined, origin: string | undefi
  * to a day less than `validDays` and keeps it byte-identical for a whole day.
  */
 export function buildSecurityTxt(options: SecurityTxtOptions): string {
-  const { contacts, encryption, now, origins, policy, preferredLanguages = [] } = options;
+  const { contacts, now, origins, policy, preferredLanguages = [] } = options;
   const validDays = normalizeSecurityTxtValidDays(options.validDays ?? SECURITY_TXT_DEFAULT_VALID_DAYS);
   const expires = new Date(Math.floor((now.getTime() + validDays * DAY_MS) / DAY_MS) * DAY_MS);
   const canonicals = [...new Set(origins.map((origin) => origin.replace(/\/+$/, '')).filter(Boolean))];
   const languages = preferredLanguages.map((language) => language.trim()).filter(isSingleToken);
 
   const lines = [...contacts.filter(isSingleToken).map((contact) => `Contact: ${contact}`), `Expires: ${expires.toISOString()}`];
-  const encryptionUri = resolveAgainstOrigin(encryption, canonicals[0]);
-  if (encryptionUri) {
-    lines.push(`Encryption: ${encryptionUri}`);
-  }
   const policyUri = resolveAgainstOrigin(policy, canonicals[0]);
   if (policyUri) {
     lines.push(`Policy: ${policyUri}`);
@@ -143,7 +146,6 @@ export function buildSecurityTxt(options: SecurityTxtOptions): string {
 /** The server-only runtime config the module writes to `runtimeConfig.ltExtensions.securityTxt`. */
 export interface SecurityTxtRuntimeConfig {
   contact?: string | string[];
-  encryption?: string;
   hosts?: string | string[];
   policy?: string;
   preferredLanguages?: string | string[];
@@ -175,7 +177,6 @@ export function resolveSecurityTxt(input: {
 
   return buildSecurityTxt({
     contacts,
-    encryption: config.encryption,
     now: input.now,
     origins: [siteOrigin, requestOrigin].filter((origin): origin is string => !!origin),
     policy: config.policy,
