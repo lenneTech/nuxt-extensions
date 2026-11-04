@@ -416,7 +416,7 @@ Preferred-Languages: de, en
 Canonical: https://example.com/.well-known/security.txt
 ```
 
-**For a customer project, decide where reports go.** The default sends them to lenne.tech. If the
+**For a customer project, decide where reports go.** The default sends them to lenne.Tech. If the
 customer wants reports themselves, set their address.
 
 How it behaves:

@@ -428,7 +428,7 @@ fields at `app:beforeMount` and restores them at `app:mounted`, dispatching a sy
 - **A contact that is not a `mailto:`, `https://` or `tel:` URI counts as blank**, so a bare address
   ends in a 404 rather than a file scanners reject. If a project reports a 404 with the option on,
   check the contact first.
-- For a customer project, ask whether reports go to lenne.tech or the customer before enabling it.
+- For a customer project, ask whether reports go to lenne.Tech or the customer before enabling it.
 
 ## Development Rules
 

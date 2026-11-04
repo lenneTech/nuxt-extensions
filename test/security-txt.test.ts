@@ -20,7 +20,7 @@ import ltExtensions from '../src/module';
  * Scanners such as the BSI's treat a file without `Contact`, with more than one `Expires` or with
  * an `Expires` in the past as untrustworthy and drop it silently. `Expires` is therefore derived
  * from the request time instead of being written down once, and these tests pin that it stays
- * inside the window the RFC recommends. Ported from the lenne.tech website (DEV-3602), where the
+ * inside the window the RFC recommends. Ported from the lenne.Tech website (DEV-3602), where the
  * same builder has been live since 2026-10-13.
  */
 

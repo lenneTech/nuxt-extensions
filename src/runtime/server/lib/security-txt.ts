@@ -1,7 +1,7 @@
 /**
  * security.txt according to RFC 9116, built per request.
  *
- * Ported from the lenne.tech website (DEV-3602), where it has been live since 2026-10-13.
+ * Ported from the lenne.Tech website (DEV-3602), where it has been live since 2026-10-13.
  * Pure functions only, so the route stays a thin adapter and everything that decides the
  * file's content is unit-testable without a Nitro context.
  */
@@ -11,7 +11,7 @@ export const SECURITY_TXT_DEFAULT_CONTACT = 'mailto:security@lenne.tech';
 export const SECURITY_TXT_DEFAULT_LANGUAGES = ['de', 'en'];
 export const SECURITY_TXT_DEFAULT_VALID_DAYS = 180;
 /** RFC 9116 recommends an `Expires` less than a year away. */
-export const SECURITY_TXT_MAX_VALID_DAYS = 365;
+const SECURITY_TXT_MAX_VALID_DAYS = 365;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

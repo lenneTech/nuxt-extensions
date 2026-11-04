@@ -328,7 +328,7 @@ export interface LtSecurityTxtOptions {
    * Contact URI(s), in order of preference: `mailto:`, `https://` or `tel:`. Anything else, such
    * as a bare address, counts as no contact, and the route answers 404.
    * Defaults to `'mailto:security@lenne.tech'`. For a customer project, decide whether reports go
-   * to lenne.tech or to the customer, and set it explicitly.
+   * to lenne.Tech or to the customer, and set it explicitly.
    */
   contact?: string | string[];
   /** Serve the file. Defaults to `false`. */
