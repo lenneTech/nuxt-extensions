@@ -12,7 +12,7 @@ import type { LtExtensionsModuleOptions } from './runtime/types';
 
 // Module meta
 export const name = '@lenne.tech/nuxt-extensions';
-export const version = '1.22.0';
+export const version = '1.23.0';
 export const configKey = 'ltExtensions';
 
 // Default cookie names — re-exported from auth-state so consumers can read
@@ -275,6 +275,7 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
         { name: 'useLtAiChat', from: resolve('./runtime/composables/use-lt-ai-chat') },
         { name: 'useLtAiConnections', from: resolve('./runtime/composables/use-lt-ai-connections') },
         { name: 'useLtAiSettings', from: resolve('./runtime/composables/use-lt-ai-settings') },
+        { name: 'useLtAiStatus', from: resolve('./runtime/composables/use-lt-ai-status') },
         { name: 'useLtAiUsage', from: resolve('./runtime/composables/use-lt-ai-usage') },
         { name: 'useLtAiPrompts', from: resolve('./runtime/composables/use-lt-ai-prompts') },
         { name: 'useLtAiPlaceholders', from: resolve('./runtime/composables/use-lt-ai-placeholders') },

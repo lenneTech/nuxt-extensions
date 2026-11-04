@@ -24,6 +24,7 @@ export { useLtAi } from './use-lt-ai';
 export { useLtAiChat } from './use-lt-ai-chat';
 export { useLtAiConnections } from './use-lt-ai-connections';
 export { useLtAiSettings } from './use-lt-ai-settings';
+export { useLtAiStatus } from './use-lt-ai-status';
 export { useLtAiUsage } from './use-lt-ai-usage';
 export { useLtAiAdmin } from './use-lt-ai-admin';
 export { useLtAiPrompts } from './use-lt-ai-prompts';

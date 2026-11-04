@@ -140,6 +140,18 @@ export interface LtAiSettingsInput {
   mcpConfirmation?: boolean;
 }
 
+/** Whether the API's AI module is on (`GET /ai/status`), as `useLtAiStatus()` holds it. */
+export interface LtAiStatus {
+  /** True only after a well-formed 200: the AI module is on. */
+  enabled: boolean;
+  /** Why the status could not be read (network, timeout, other status, malformed body); null for an answer, 404 included. */
+  error: null | string;
+  /** True once an answer or an error is in. */
+  loaded: boolean;
+  /** Whether the API serves MCP; false whenever `enabled` is false. */
+  mcp: boolean;
+}
+
 /** Usage for a single scope (user or tenant). */
 export interface LtAiUsageScope {
   maxPrompts?: number;
@@ -462,6 +474,15 @@ export interface UseLtAiConnectionsReturn {
   locked: ComputedRef<boolean>;
   select: (connectionId: string) => Promise<void>;
   selected: ComputedRef<LtAiAvailableConnection | undefined>;
+}
+
+export interface UseLtAiStatusReturn {
+  enabled: ComputedRef<boolean>;
+  error: ComputedRef<null | string>;
+  /** Reads the status once per app start; `force` asks again. Never throws. */
+  load: (options?: { force?: boolean }) => Promise<void>;
+  loaded: ComputedRef<boolean>;
+  mcp: ComputedRef<boolean>;
 }
 
 export interface UseLtAiSettingsReturn {

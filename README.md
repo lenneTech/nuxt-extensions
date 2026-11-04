@@ -29,8 +29,8 @@ Reusable Nuxt 4 composables, components, and Better-Auth integration for lenne.t
 |---|---|---|
 | Node | `>= 22` | |
 | Nuxt | `^4.0.0` | |
-| `better-auth` | `>=1.7.12 <1.8.0` | **required peer** — pin it, see below |
-| `@better-auth/passkey` | `>=1.7.12 <1.8.0` | optional peer, passkey/WebAuthn only |
+| `better-auth` | `>=1.7.16 <1.8.0` | **required peer** — pin it, see below |
+| `@better-auth/passkey` | `>=1.7.16 <1.8.0` | optional peer, passkey/WebAuthn only |
 | `tus-js-client` | `>=4.0.0` | optional peer, resumable uploads only |
 | `@lenne.tech/nest-server` | `>= 11.37.0` | **only if you use the backend** — see the lock-step rule |
 
@@ -38,7 +38,7 @@ Reusable Nuxt 4 composables, components, and Better-Auth integration for lenne.t
 better-auth is one protocol with two ends. This module is the client end and
 `@lenne.tech/nest-server` is the server end, and they must resolve the **same**
 better-auth minor. better-auth breaks in *minor* releases — 1.7 removed subpath
-exports and changed the 2FA response shape — so a caret (`^1.7.12`) would re-open the
+exports and changed the 2FA response shape — so a caret (`^1.7.16`) would re-open the
 hole at 1.8. If the api and the app drift apart, 2FA activation fails at runtime with a
 generic client error while **both** projects' checks stay green: each is internally
 consistent, and only the assembled workspace has both halves.
@@ -46,21 +46,35 @@ consistent, and only the assembled workspace has both halves.
 Raising better-auth therefore means raising it in `@lenne.tech/nest-server` **and**
 `@lenne.tech/nuxt-extensions` in one step.
 
-**Why the floor is 1.7.12:** better-auth before 1.7.12 verifies JWTs with the algorithm named
-in the token's own header instead of the algorithm of the stored key
-([#11925](https://github.com/better-auth/better-auth/pull/11925)). Below 1.7.7 it is also
-affected by
-[GHSA-965c-763c-88jm](https://github.com/better-auth/better-auth/security/advisories/GHSA-965c-763c-88jm)
-(critical): the OAuth state can be used as a magic link to sign in as another user. Both flaws
-are in the server end, so your API must run 1.7.12 too (`@lenne.tech/nest-server` 12.0.0
-declares the same range), and the pin below keeps both halves on it.
+**Why the floor is 1.7.16:** better-auth 1.7.16 closes twelve advisories published on
+2026-11-03. Among those that reach a typical lt project: a social sign-in can treat an unverified
+provider email as verified
+([GHSA-9hm7-xhfp-cx58](https://github.com/better-auth/better-auth/security/advisories/GHSA-9hm7-xhfp-cx58)),
+revoked sessions can stay valid with secondary storage or the cookie cache
+([GHSA-fvxx-76fc-893x](https://github.com/better-auth/better-auth/security/advisories/GHSA-fvxx-76fc-893x)),
+email-change links stay valid after the address changes hands
+([GHSA-hwq2-v29r-p69r](https://github.com/better-auth/better-auth/security/advisories/GHSA-hwq2-v29r-p69r)),
+and passkey verification does not enforce origin or user verification
+([GHSA-gv75-j3v8-3crm](https://github.com/better-auth/better-auth/security/advisories/GHSA-gv75-j3v8-3crm)).
+It also pins better-call 1.4.5, which closes
+[GHSA-23w8-wx9r-vm57](https://github.com/better-auth/better-call/security/advisories/GHSA-23w8-wx9r-vm57)
+(high, shared router context). That one is a second layer only: better-auth's own handler builds a
+fresh router per request, so the flaw is not reachable through it. Older flaws stay behind the
+floor too: before
+1.7.12 better-auth verifies JWTs with the algorithm named in the token's own header
+([#11925](https://github.com/better-auth/better-auth/pull/11925)), and below 1.7.7 the OAuth
+state can be used as a magic link to sign in as another user
+([GHSA-965c-763c-88jm](https://github.com/better-auth/better-auth/security/advisories/GHSA-965c-763c-88jm),
+critical). All of these are in the server end, so your API must run 1.7.16 too
+(`@lenne.tech/nest-server` 12.3.1 declares the same range), and the pin below keeps both halves
+on it.
 
 ## Installation
 
 ```bash
-npm install @lenne.tech/nuxt-extensions better-auth@1.7.12
+npm install @lenne.tech/nuxt-extensions better-auth@1.7.16
 # Optional: For passkey support
-npm install @better-auth/passkey@1.7.12
+npm install @better-auth/passkey@1.7.16
 # Optional: For TUS file uploads
 npm install tus-js-client
 ```
@@ -70,8 +84,9 @@ In a fullstack monorepo, pin it workspace-wide so the api and the app cannot dri
 ```yaml
 # pnpm-workspace.yaml
 overrides:
-  better-auth: 1.7.12
-  '@better-auth/passkey': 1.7.12
+  better-auth: 1.7.16
+  '@better-auth/passkey': 1.7.16
+  '@better-auth/core': 1.7.16 # the api of nest-server-starter projects depends on it directly
 ```
 
 ## Features
@@ -709,6 +724,33 @@ await load();
 is private to the owner; `scope: 'tenant'` is shared across the owner's tenant. The list
 returned by `load()` is already server-filtered to what the user is allowed to see.
 
+### AI status
+
+`useLtAiStatus()` says whether the API's AI module is on, so AI pages and navigation entries can
+be shown only then. It reads the public `GET /ai/status` of nest-server: 200 `{ mcp }` while the
+module is on, 404 while it is off.
+
+```typescript
+// middleware/ai.ts
+export default defineNuxtRouteMiddleware(async () => {
+  const status = useLtAiStatus();
+  await status.load();
+  if (!status.enabled.value) {
+    return navigateTo('/app');
+  }
+});
+```
+
+- One request per app start. The state is shared (`useState`) and travels from SSR to the
+  client, and callers that load at the same time share one request. `load({ force: true })` asks
+  again.
+- Sent without credentials; the endpoint is public.
+- Fails closed. A 404 means "AI is off" and sets no `error`. A network error, a timeout (5 s),
+  any other status or a malformed body leaves `enabled` false and sets `error`.
+- `GET /ai/status` exists from nest-server 12.3.1. An older API answers 404 as well, so AI reads
+  as off there. Gate on this only once your API runs 12.3.1 or later.
+- `mcp` says whether the API serves MCP. Show the MCP confirmation switch below only then.
+
 ### MCP confirmation switch
 
 Over MCP (Claude Desktop, Claude Code and other clients), nest-server 12.3.0 or later asks the
@@ -761,6 +803,7 @@ async function toggle(value: boolean) {
 | `useLtAiChat()` | Multi-turn chat state, streaming, budget, confirmation, `stop()`/`clear()`, optional `maxMessages` cap, auto-stop on component unmount |
 | `useLtAiConnections()` | User self-service: available connections + `select()` (`selected`/`locked`) |
 | `useLtAiSettings()` | The user's own AI settings: the MCP confirmation switch + `update()` (`enforced`) |
+| `useLtAiStatus()` | Whether the API's AI module is on (`enabled`, `mcp`), shared state, one request per app start |
 | `useLtAiUsage()` | Full token/prompt usage breakdown (`GET /ai/usage`) |
 | `useLtAiPrompts()` | User-facing CRUD for re-usable prompt snippets ("Vorlagen", `scope: 'user'` / `'tenant'`) |
 | `useLtAiPlaceholders()` | Loads `{{placeholder}}` registry from the backend so slot / prompt editors render a dynamic helper sidebar |
@@ -875,6 +918,7 @@ The package works **with or without** `@nuxtjs/i18n`:
 | `useLtAiChat()` | Multi-turn chat state, streaming, budget summary, confirmation gate, `maxMessages` cap |
 | `useLtAiConnections()` | User self-service connection list + `select()` |
 | `useLtAiSettings()` | The user's own AI settings (MCP confirmation switch, nest-server >= 12.3.0) |
+| `useLtAiStatus()` | Whether the API's AI module is on and serves MCP (public `GET /ai/status`) |
 | `useLtAiUsage()` | Token/prompt usage breakdown per user / tenant |
 | `useLtAiPrompts()` | User-facing prompt snippet CRUD (`'user'` / `'tenant'` scope) |
 | `useLtAiPlaceholders()` | Loads the backend's `{{placeholder}}` registry |

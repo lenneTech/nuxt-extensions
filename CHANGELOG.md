@@ -5,6 +5,52 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.23.0] - 2026-11-04
+
+Security and feature release. The `better-auth` peer floor moves to 1.7.16, in lock-step with
+`@lenne.tech/nest-server` 12.3.1, and `useLtAiStatus()` is new. Install-level breaking only: a project
+resolving better-auth 1.7.12 to 1.7.15 gets a peer conflict. No API of this module changed. Migration
+guide: `migration-guides/1.22.x-to-1.23.0.md`.
+
+### Security
+
+- `better-auth` and `@better-auth/passkey` peer range `>=1.7.12 <1.8.0` → `>=1.7.16 <1.8.0`,
+  byte-identical to nest-server 12.3.1. better-auth 1.7.16 closes twelve better-auth advisories
+  published 2026-11-03 (among them an unverified provider email treated as verified, revoked sessions
+  staying valid with the cookie cache, email-change links staying valid, passkey origin and user
+  verification not enforced) and pins better-call 1.4.5 (GHSA-23w8-wx9r-vm57, a second layer, not
+  reachable through better-auth's per-request router). The flaws are in the server end; the floor
+  moves here because both frameworks declare the same range. Projects made from nest-server-starter
+  also pin `@better-auth/core` 1.7.16 (see the migration guide).
+- Taken the same day: `minimumReleaseAgeExclude` names the ten exact versions (better-auth 1.7.16 and
+  its packages, better-call 1.4.5), all with SLSA provenance. Inert from 2026-11-04 21:24 UTC; removed
+  with the next maintenance.
+
+### Added
+
+- `useLtAiStatus()`: whether the API's AI module is on, from the public `GET /ai/status` of
+  nest-server >= 12.3.1 (200 `{ mcp }` while on, 404 while off). Computed `enabled`, `mcp`, `loaded`,
+  `error`; `load({ force? })`, which never throws. The state is shared (`useState`), travels from SSR
+  to the client, and concurrent callers share one request, so layout, middleware and pages cause one
+  request per app start. Sent without credentials, 5 s timeout. Fails closed: a 404 means "off"
+  without `error`; a network error, a timeout, any other status or a malformed body leaves `enabled`
+  false and sets a fixed `error` text (never the thrown message, which can carry the private API
+  URL into the server-rendered page). An older nest-server (12.3.0 and before) has no such endpoint
+  and reads as "off". Types `LtAiStatus`, `UseLtAiStatusReturn`. Auto-imported when the AI module is
+  enabled.
+
+### Changed
+
+- The passkey stub (used when `@better-auth/passkey` is not installed) mirrors the new error code
+  `ORIGIN_NOT_CONFIGURED` of passkey 1.7.16.
+- README: the MCP switch example mounts `USwitch` only once `settings` is loaded (reka-ui decides at
+  mount whether the switch is controlled).
+
+### Changed (repository only, not part of the published package)
+
+- Test stub `useNuxtApp()` returns the same object until `resetStubReactiveStores()`, as the real
+  app does per request.
+
 ## [1.22.0] - 2026-11-04
 
 Feature release: `useLtAiSettings()` for the per-user MCP confirmation switch of

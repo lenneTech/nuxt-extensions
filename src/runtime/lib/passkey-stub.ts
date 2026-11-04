@@ -61,6 +61,10 @@ export const PASSKEY_ERROR_CODES = Object.freeze({
   CHALLENGE_NOT_FOUND: { code: 'CHALLENGE_NOT_FOUND', message: 'Challenge not found' },
   FAILED_TO_UPDATE_PASSKEY: { code: 'FAILED_TO_UPDATE_PASSKEY', message: 'Failed to update passkey' },
   FAILED_TO_VERIFY_REGISTRATION: { code: 'FAILED_TO_VERIFY_REGISTRATION', message: 'Failed to verify registration' },
+  ORIGIN_NOT_CONFIGURED: {
+    code: 'ORIGIN_NOT_CONFIGURED',
+    message: 'Passkey origin is not configured. Set the `origin` option of the passkey plugin or configure `baseURL`.',
+  },
   PASSKEY_NOT_FOUND: { code: 'PASSKEY_NOT_FOUND', message: 'Passkey not found' },
   PREVIOUSLY_REGISTERED: { code: 'PREVIOUSLY_REGISTERED', message: 'Previously registered' },
   REGISTRATION_CANCELLED: { code: 'REGISTRATION_CANCELLED', message: 'Registration cancelled' },

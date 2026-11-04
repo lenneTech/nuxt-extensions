@@ -59,11 +59,12 @@ export function setStubCookieRefsPerCall(enabled: boolean): void {
   cookieRefsPerCall = enabled;
 }
 
-/** Reset the in-memory cookie / state ref stores between tests. */
+/** Reset the in-memory cookie / state ref stores (and the Nuxt app object) between tests. */
 export function resetStubReactiveStores(): void {
   cookieRefs.clear();
   stateRefs.clear();
   cookieRefsPerCall = false;
+  nuxtAppStub = {};
 }
 
 export function useRuntimeConfig(): StubRuntimeConfig {
@@ -162,11 +163,15 @@ export function useState<T = unknown>(key: string, init?: () => T): Ref<T> {
 }
 
 /**
- * Minimal `useNuxtApp` stub — returns an empty object so optional `$i18n`
- * lookups fall through to the German fallback path in `useTranslation()`.
+ * Minimal `useNuxtApp` stub — an empty object so optional `$i18n` lookups fall
+ * through to the German fallback path in `useTranslation()`. Like the real app
+ * it is the same object for every call until `resetStubReactiveStores()`, so
+ * per-app state keyed by it behaves as in Nuxt.
  */
+let nuxtAppStub: Record<string, unknown> = {};
+
 export function useNuxtApp(): Record<string, unknown> {
-  return {};
+  return nuxtAppStub;
 }
 
 export { computed, getCurrentScope, onScopeDispose, reactive, readonly, ref, shallowReadonly, shallowRef, unref, watch };

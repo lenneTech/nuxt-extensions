@@ -41,6 +41,7 @@ src/
 | `useLtAiChat()` | Multi-turn chat: streaming, budget summary, confirmation gate, `stop()`/`clear()`, optional `maxMessages` cap, auto-stop on unmount |
 | `useLtAiConnections()` | User-facing list of available connections + `select()` |
 | `useLtAiSettings()` | The user's own AI settings: MCP confirmation switch (`GET/PUT /ai/settings`, `enforced` → show disabled) |
+| `useLtAiStatus()` | Whether the API's AI module is on (`GET /ai/status`, public; 404 = off): `enabled`, `mcp`, shared `useState`, one request per app start, fails closed |
 | `useLtAiUsage()` | Full token/prompt usage breakdown (`GET /ai/usage`) |
 | `useLtAiPrompts()` | User-facing CRUD for re-usable prompt snippets ("Vorlagen", `scope: 'user'` / `'tenant'`) |
 | `useLtAiPlaceholders()` | Loads the backend's `{{placeholder}}` registry for editor sidebars |
@@ -412,7 +413,7 @@ fields at `app:beforeMount` and restores them at `app:mounted`, dispatching a sy
    Handling" below).
 3. **Check existing composables** before creating new ones — this module may already provide what you need
 4. **Peer dependencies** (`better-auth`, `@better-auth/passkey`, `tus-js-client`) must be installed in the consuming project.
-   `better-auth` and `@better-auth/passkey` are pinned to **`>=1.7.12 <1.8.0`** — deliberately not a caret.
+   `better-auth` and `@better-auth/passkey` are pinned to **`>=1.7.16 <1.8.0`** — deliberately not a caret.
    **They move in lock-step with `@lenne.tech/nest-server`.** better-auth is one protocol with two ends;
    this module is the client end, nest-server the server end, and both declare the *same* narrow range.
    Raising it means raising it in **both** framework repos and pinning the new version in **both** starters,
