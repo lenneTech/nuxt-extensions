@@ -127,6 +127,19 @@ export interface LtAiAvailableConnection {
   selected?: boolean;
 }
 
+/** The current user's AI settings as they take effect (`GET/PUT /ai/settings`, nest-server >= 12.3.0). */
+export interface LtAiSettings {
+  /** Whether MCP asks this user before a destructive tool (and a mutating one, if configured) runs. */
+  mcpConfirmation: boolean;
+  /** Whether the server fixed `mcpConfirmation`, so the user cannot change it (a change answers 403 `#LTNS_0609`). */
+  mcpConfirmationEnforced: boolean;
+}
+
+/** The user's own choices for `PUT /ai/settings`; a field left out stays unchanged. */
+export interface LtAiSettingsInput {
+  mcpConfirmation?: boolean;
+}
+
 /** Usage for a single scope (user or tenant). */
 export interface LtAiUsageScope {
   maxPrompts?: number;
@@ -449,6 +462,17 @@ export interface UseLtAiConnectionsReturn {
   locked: ComputedRef<boolean>;
   select: (connectionId: string) => Promise<void>;
   selected: ComputedRef<LtAiAvailableConnection | undefined>;
+}
+
+export interface UseLtAiSettingsReturn {
+  /** True when the server fixed the MCP confirmation: show the switch disabled. */
+  enforced: ComputedRef<boolean>;
+  error: DeepReadonly<Ref<null | string>>;
+  load: () => Promise<void>;
+  loading: DeepReadonly<Ref<boolean>>;
+  settings: DeepReadonly<Ref<LtAiSettings | null>>;
+  /** Stores the user's choice and adopts the answer; throws (and sets `error`) when refused. */
+  update: (input: LtAiSettingsInput) => Promise<void>;
 }
 
 export interface UseLtAiUsageReturn {

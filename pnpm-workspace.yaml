@@ -172,6 +172,16 @@ overrides:
   # request the old majors. Still load-bearing: a fresh resolve without the overrides block brings
   # back glob 10.5.0 / 13.0.6 and minimatch 5.1.9 / 9.0.9 / 10.2.6, and `pnpm audit` reports
   # GHSA-3g3m-2fjr-6pw4 and GHSA-g3hv-75wg-m249 again.
+  #
+  # Verified 2026-11-04 (nuxt 4.6.3 -> 4.6.4): its nitropack 2.13.6 moved to archiver 8.0.0, which no
+  # longer depends on archiver-utils and takes readdir-glob 3.0.0 (minimatch `^10.2.2`). The
+  # `archiver-utils>glob` entry is now LATENT: archiver-utils left the tree, and a fresh resolve without
+  # the block no longer brings glob 10 back. Kept as the guard for a tree still on archiver 7 (nitropack
+  # 2.13.5 and older); drop it once no supported nuxt resolves that. The other two stay load-bearing: a
+  # fresh resolve without the block brings back glob 13.0.6 (@vercel/nft 1.11.0, still `^13`) and
+  # minimatch 10.2.6 (readdir-glob 3.0.0 and glob 13), and `pnpm audit` reports GHSA-3g3m-2fjr-6pw4 and
+  # GHSA-g3hv-75wg-m249 again. No new glob or minimatch advisory; 14.0.3 and 11.0.4 are still the
+  # newest in their majors, and a fresh resolve WITH the block holds one copy of each (no lock).
   '@vercel/nft>glob@<14.0.2': '14.0.3'
   'archiver-utils>glob@<14.0.2': '14.0.3'
   'readdir-glob>minimatch@<11.0.1': '11.0.4'

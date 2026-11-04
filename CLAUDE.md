@@ -40,6 +40,7 @@ src/
 | `useLtAi()` | One-shot `prompt()` + streaming `promptStream()` (POST `/ai/prompt` / `/ai/stream`) |
 | `useLtAiChat()` | Multi-turn chat: streaming, budget summary, confirmation gate, `stop()`/`clear()`, optional `maxMessages` cap, auto-stop on unmount |
 | `useLtAiConnections()` | User-facing list of available connections + `select()` |
+| `useLtAiSettings()` | The user's own AI settings: MCP confirmation switch (`GET/PUT /ai/settings`, `enforced` → show disabled) |
 | `useLtAiUsage()` | Full token/prompt usage breakdown (`GET /ai/usage`) |
 | `useLtAiPrompts()` | User-facing CRUD for re-usable prompt snippets ("Vorlagen", `scope: 'user'` / `'tenant'`) |
 | `useLtAiPlaceholders()` | Loads the backend's `{{placeholder}}` registry for editor sidebars |

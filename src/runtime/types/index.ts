@@ -60,6 +60,8 @@ export type {
   LtAiPromptInput,
   LtAiPromptRunInput,
   LtAiResponse,
+  LtAiSettings,
+  LtAiSettingsInput,
   LtAiSlot,
   LtAiSlotInput,
   LtAiStreamEvent,
@@ -74,5 +76,6 @@ export type {
   UseLtAiPlaceholdersReturn,
   UseLtAiPromptsReturn,
   UseLtAiReturn,
+  UseLtAiSettingsReturn,
   UseLtAiUsageReturn,
 } from './ai';

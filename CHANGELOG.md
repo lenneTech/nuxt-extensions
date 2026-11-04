@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.22.0] - 2026-11-04
+
+Feature release: `useLtAiSettings()` for the per-user MCP confirmation switch of
+`@lenne.tech/nest-server` 12.3.0. No breaking change, no peer range changed; a project that does
+not call it gets no new behaviour.
+
+### Added
+
+- `useLtAiSettings()`, the user's own AI settings from `GET/PUT /ai/settings` (nest-server >= 12.3.0).
+  Today that is the MCP confirmation switch: whether MCP asks this user before a destructive (or
+  configured mutating) tool runs. Read-only refs `settings` (`mcpConfirmation`,
+  `mcpConfirmationEnforced`), `loading`, `error`, computed `enforced`; methods `load()` and
+  `update(input)`. `update()` adopts the server's answer and throws when refused; a setting the
+  server enforces answers 403 `#LTNS_0609`. Types `LtAiSettings`, `LtAiSettingsInput`,
+  `UseLtAiSettingsReturn`. Auto-imported when the AI module is enabled. README: "MCP confirmation
+  switch".
+
+### Changed (repository only, not part of the published package)
+
+- Dev dependencies: `nuxt` and `@nuxt/schema` 4.6.4 (also the playground), `vitest` and
+  `@vitest/coverage-v8` 5.1.0. Other lockfile movement is in-range transitive patches;
+  `archiver-utils` and `lodash` left the dev tree (nitropack 2.13.6 uses archiver 8), so the
+  `archiver-utils>glob` override is latent now and kept as a guard.
+- Held: `better-auth` and `@better-auth/passkey` at 1.7.12. From 1.7.13 on, the passkey plugin
+  requires better-auth of at least its own version, which the shared peer floor `>=1.7.12` does not
+  guarantee; moving the tested version means raising the floor in this package and in
+  `@lenne.tech/nest-server` together. `oxfmt` 0.76.0 and `oxlint` 1.91.0 (younger than pnpm's 24h
+  release-age gate); TypeScript 5.9.3 (`@nuxt/module-builder` 1.0.3 still accepts only `^5.9.3`).
+
 ## [1.21.0] - 2026-11-03
 
 Feature release: offline sync for the `@lenne.tech/nest-server` sync module. It is opt-in; a

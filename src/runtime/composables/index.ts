@@ -23,6 +23,7 @@ export { useLtErrorTranslation } from './use-lt-error-translation';
 export { useLtAi } from './use-lt-ai';
 export { useLtAiChat } from './use-lt-ai-chat';
 export { useLtAiConnections } from './use-lt-ai-connections';
+export { useLtAiSettings } from './use-lt-ai-settings';
 export { useLtAiUsage } from './use-lt-ai-usage';
 export { useLtAiAdmin } from './use-lt-ai-admin';
 export { useLtAiPrompts } from './use-lt-ai-prompts';

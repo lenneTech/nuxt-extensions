@@ -709,6 +709,45 @@ await load();
 is private to the owner; `scope: 'tenant'` is shared across the owner's tenant. The list
 returned by `load()` is already server-filtered to what the user is allowed to see.
 
+### MCP confirmation switch
+
+Over MCP (Claude Desktop, Claude Code and other clients), nest-server 12.3.0 or later asks the
+user before a destructive tool runs, and before a mutating one if the server is configured that
+way. Each user may switch the question off for themselves, like a "bypass permissions" mode.
+`useLtAiSettings()` reads and changes that switch (`GET/PUT /ai/settings`):
+
+```vue
+<script setup lang="ts">
+const { enforced, load, settings, update } = useLtAiSettings();
+await load();
+
+async function toggle(value: boolean) {
+  try {
+    await update({ mcpConfirmation: value });
+  } catch {
+    // `error` holds the message; `settings` keeps the previous value, so the switch snaps back
+  }
+}
+</script>
+
+<template>
+  <USwitch
+    :model-value="settings?.mcpConfirmation"
+    :disabled="enforced || !settings"
+    label="Ask before destructive AI actions over MCP"
+    @update:model-value="toggle"
+  />
+</template>
+```
+
+- `settings` is always the value as it takes effect, never just the stored choice. `update()`
+  adopts the server's answer instead of the input.
+- `enforced` is true when the server fixed the value (`ai.mcp.confirmation.enforced`). Show the
+  switch disabled. A change is refused with 403 `#LTNS_0609`, which `update()` throws.
+- Switching it off lets an MCP client run destructive tools in this user's name without asking.
+  Say so next to the switch. The tool's own `authorize()` check and the admin's `deny` / `ask`
+  rules still apply, and other users and the in-app chat are not affected.
+
 ### Lower-level + supporting composables
 
 | Composable | Purpose |
@@ -716,6 +755,7 @@ returned by `load()` is already server-filtered to what the user is allowed to s
 | `useLtAi()` | One-shot `prompt(input)` and streaming `promptStream(input, handlers)` (POST `/ai/stream`) |
 | `useLtAiChat()` | Multi-turn chat state, streaming, budget, confirmation, `stop()`/`clear()`, optional `maxMessages` cap, auto-stop on component unmount |
 | `useLtAiConnections()` | User self-service: available connections + `select()` (`selected`/`locked`) |
+| `useLtAiSettings()` | The user's own AI settings: the MCP confirmation switch + `update()` (`enforced`) |
 | `useLtAiUsage()` | Full token/prompt usage breakdown (`GET /ai/usage`) |
 | `useLtAiPrompts()` | User-facing CRUD for re-usable prompt snippets ("Vorlagen", `scope: 'user'` / `'tenant'`) |
 | `useLtAiPlaceholders()` | Loads `{{placeholder}}` registry from the backend so slot / prompt editors render a dynamic helper sidebar |
@@ -829,6 +869,7 @@ The package works **with or without** `@nuxtjs/i18n`:
 | `useLtAi()` | One-shot `prompt()` + streaming `promptStream()` for the nest-server AI module |
 | `useLtAiChat()` | Multi-turn chat state, streaming, budget summary, confirmation gate, `maxMessages` cap |
 | `useLtAiConnections()` | User self-service connection list + `select()` |
+| `useLtAiSettings()` | The user's own AI settings (MCP confirmation switch, nest-server >= 12.3.0) |
 | `useLtAiUsage()` | Token/prompt usage breakdown per user / tenant |
 | `useLtAiPrompts()` | User-facing prompt snippet CRUD (`'user'` / `'tenant'` scope) |
 | `useLtAiPlaceholders()` | Loads the backend's `{{placeholder}}` registry |
