@@ -732,14 +732,19 @@ async function toggle(value: boolean) {
 
 <template>
   <USwitch
-    :model-value="settings?.mcpConfirmation"
-    :disabled="enforced || !settings"
+    v-if="settings"
+    :model-value="settings.mcpConfirmation"
+    :disabled="enforced"
     label="Ask before destructive AI actions over MCP"
     @update:model-value="toggle"
   />
 </template>
 ```
 
+- Mount the switch only once `settings` is loaded (`v-if`). reka-ui's `Switch` decides at mount
+  whether it is controlled: mounted with `undefined`, for example while `onMounted(load)` is still
+  running, it keeps its own state, and a refused change then stays flipped although `settings`
+  kept the old value.
 - `settings` is always the value as it takes effect, never just the stored choice. `update()`
   adopts the server's answer instead of the input.
 - `enforced` is true when the server fixed the value (`ai.mcp.confirmation.enforced`). Show the
