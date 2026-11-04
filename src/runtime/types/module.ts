@@ -413,28 +413,11 @@ export interface LtExtensionsPublicRuntimeConfig {
   };
 }
 
-/**
- * Server-only runtime config added by this module. Present only while `securityTxt` is enabled.
- */
-export interface LtExtensionsRuntimeConfig {
-  ltExtensions?: {
-    securityTxt?: {
-      contact: string | string[];
-      hosts: string | string[];
-      policy: string;
-      preferredLanguages: string | string[];
-      validDays: number | string;
-    };
-  };
-}
-
 // Extend Nuxt's runtime config types
 declare module 'nuxt/schema' {
   interface PublicRuntimeConfig extends LtExtensionsPublicRuntimeConfig {}
-  interface RuntimeConfig extends LtExtensionsRuntimeConfig {}
 }
 
 declare module '@nuxt/schema' {
   interface PublicRuntimeConfig extends LtExtensionsPublicRuntimeConfig {}
-  interface RuntimeConfig extends LtExtensionsRuntimeConfig {}
 }
