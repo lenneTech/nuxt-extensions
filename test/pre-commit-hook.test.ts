@@ -7,15 +7,21 @@
  * somebody else's message. It also formatted all of `src/`, rewriting files nobody had staged.
  *
  * These tests run the real `.githooks/pre-commit` and the real `lint-staged` config from
- * package.json through a real `git commit`, in a throwaway repository that borrows this
- * repository's node_modules. Only `lint` and `dev:prepare` are stubbed: the type-aware lint needs
- * the whole Nuxt project, and it only reads, so it cannot change what a commit contains.
+ * package.json through a real `git commit`, in a throwaway repository that runs this repository's
+ * binaries from PATH. Only `lint` and `dev:prepare` are stubbed: the type-aware lint needs the whole
+ * Nuxt project, and it only reads, so it cannot change what a commit contains.
+ *
+ * The fixture has no node_modules of its own, on purpose. pnpm 11 checks the install before
+ * `pnpm exec` and `pnpm <script>` (`verifyDepsBeforeRun`). With this repository's node_modules linked
+ * in, that check found them out of sync with the fixture's package.json and set out to remove them;
+ * only pnpm's own safety check (ERR_PNPM_UNSAFE_MODULES_DIR) stopped it. Without node_modules and
+ * without dependencies there is nothing to install.
  */
 
-import { execFileSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { delimiter, join, resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const ROOT = process.cwd();
@@ -33,11 +39,20 @@ const pkg = JSON.parse(readFileSync(resolve(ROOT, 'package.json'), 'utf8')) as {
 const PARTIAL_BASE = ['export const first = 1;', ...Array.from({ length: 8 }, (_, i) => `export const filler${i} = ${i};`), 'export const last = 1;', ''].join('\n');
 
 let repo: string;
+let commitStderr = '';
 
-/** Runs git in the throwaway repository, without anything the calling process inherited from a git hook. */
-function git(...args: string[]): string {
+/** The environment for git in the fixture: nothing inherited from a calling git hook, this repository's binaries first on PATH. */
+function gitEnv(): NodeJS.ProcessEnv {
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
-  return execFileSync('git', args, { cwd: repo, encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'pipe'] });
+  // Windows spells it `Path`; a second `PATH` key next to it would be ambiguous.
+  const pathKey = Object.keys(env).find((key) => key.toUpperCase() === 'PATH') ?? 'PATH';
+  env[pathKey] = [resolve(ROOT, 'node_modules/.bin'), env[pathKey]].filter(Boolean).join(delimiter);
+  return env;
+}
+
+/** Runs git in the throwaway repository. */
+function git(...args: string[]): string {
+  return execFileSync('git', args, { cwd: repo, encoding: 'utf8', env: gitEnv(), stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
 function write(path: string, content: string): void {
@@ -54,8 +69,6 @@ beforeAll(() => {
   mkdirSync(join(repo, '.githooks'));
   copyFileSync(resolve(ROOT, '.githooks/pre-commit'), join(repo, '.githooks/pre-commit'));
   copyFileSync(resolve(ROOT, '.oxfmtrc.jsonc'), join(repo, '.oxfmtrc.jsonc'));
-  // A junction needs no privileges on Windows; elsewhere the type is ignored.
-  symlinkSync(resolve(ROOT, 'node_modules'), join(repo, 'node_modules'), 'junction');
   writeFileSync(
     join(repo, 'package.json'),
     JSON.stringify(
@@ -69,7 +82,6 @@ beforeAll(() => {
       2,
     ),
   );
-  write('.gitignore', 'node_modules\n');
 
   git('init', '--quiet');
   for (const [key, value] of [
@@ -100,7 +112,9 @@ beforeAll(() => {
   git('add', 'src/partial.ts');
   write('src/partial.ts', PARTIAL_BASE.replace('export const first = 1;', 'export const first   =   10').replace('export const last = 1;', 'export const last   =   20'));
 
-  git('commit', '--quiet', '-m', 'staged work');
+  const commit = spawnSync('git', ['commit', '--quiet', '-m', 'staged work'], { cwd: repo, encoding: 'utf8', env: gitEnv() });
+  if (commit.status !== 0) throw new Error(`git commit failed (${commit.status}):\n${commit.stdout}${commit.stderr}`);
+  commitStderr = commit.stderr;
 }, 120_000);
 
 afterAll(() => {
@@ -131,6 +145,13 @@ describe('pre-commit hook — what reaches the commit', () => {
   it('keeps the unstaged lines of a partially staged file in the working tree, untouched', () => {
     expect(worktree('src/partial.ts')).toContain('export const last   =   20');
     expect(git('diff', '--cached', '--name-only').trim()).toBe('');
+  });
+});
+
+describe('pre-commit hook — the fixture stays a fixture', () => {
+  it('runs without pnpm installing anything, here or in this repository', () => {
+    expect(commitStderr).not.toMatch(/ERR_PNPM_|install that runs before scripts/);
+    expect(existsSync(join(repo, 'node_modules'))).toBe(false);
   });
 });
 
