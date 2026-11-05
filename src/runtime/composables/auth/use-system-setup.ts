@@ -27,13 +27,50 @@ function isApiUrlMissing(): boolean {
   }
 }
 
+/**
+ * Header that carries the setup token to `POST /system-setup/init`. The server compares it as
+ * given, so it is sent unhashed — unlike the password — and never in the body.
+ */
+const SETUP_TOKEN_HEADER = 'X-System-Setup-Token';
+
+/** Whether `error` is the API's 403, as `$fetch` (ofetch `FetchError`) reports it */
+function isRefusal(error: unknown): boolean {
+  const { status, statusCode } = (error ?? {}) as { status?: unknown; statusCode?: unknown };
+  return (statusCode ?? status) === 403;
+}
+
+/** Response of `GET /system-setup/status`. The two HTTP-init fields exist since nest-server 12.4.0. */
+interface SystemSetupStatusResponse {
+  httpInitEnabled?: unknown;
+  httpInitTokenRequired?: unknown;
+  needsSetup: boolean;
+}
+
+interface HttpInitState {
+  enabled: boolean;
+  tokenRequired: boolean;
+}
+
 export interface UseSystemSetupReturn {
   /** Whether the system needs initial setup (null = not checked yet) */
   needsSetup: ComputedRef<boolean | null>;
+  /**
+   * Whether the API accepts the setup over HTTP (null = not checked yet). `false` means the
+   * deployment creates its first admin from its configuration, and `initSetup()` would be
+   * refused with 403 (`LTNS_0053`): show a notice instead of the form. An API before
+   * nest-server 12.4.0 does not report it and accepts the HTTP setup, so it reads as `true`.
+   */
+  httpInitEnabled: ComputedRef<boolean | null>;
+  /** Whether `initSetup()` needs a `token` (null = not checked yet). Only an explicit `true` counts. */
+  httpInitTokenRequired: ComputedRef<boolean | null>;
   /** Check setup status from the backend */
   checkSetupStatus: () => Promise<boolean>;
-  /** Initialize the system with the first admin user */
-  initSetup: (params: { email: string; password: string; name: string }) => Promise<void>;
+  /**
+   * Initialize the system with the first admin user. `token` is the setup token, required when
+   * `httpInitTokenRequired` is true. A refusal is rethrown unchanged, so `useLtErrorTranslation()`
+   * reads its code (`LTNS_0053` HTTP setup disabled, `LTNS_0054` wrong token) from the body.
+   */
+  initSetup: (params: { email: string; password: string; name: string; token?: string }) => Promise<void>;
 }
 
 /**
@@ -41,18 +78,21 @@ export interface UseSystemSetupReturn {
  *
  * @example
  * ```typescript
- * const { needsSetup, checkSetupStatus, initSetup } = useSystemSetup();
+ * const { needsSetup, httpInitEnabled, httpInitTokenRequired, checkSetupStatus, initSetup } = useSystemSetup();
  *
  * await checkSetupStatus();
- * if (needsSetup.value) {
- *   await initSetup({ email: 'admin@example.com', password: 'secret', name: 'Admin' });
+ * if (needsSetup.value && httpInitEnabled.value) {
+ *   await initSetup({ email: 'admin@example.com', password: 'secret', name: 'Admin', token });
  * }
  * ```
  */
 export function useSystemSetup(): UseSystemSetupReturn {
   const needsSetupState = useState<boolean | null>('lt-needs-setup', () => null);
+  const httpInitState = useState<HttpInitState | null>('lt-system-setup-http-init', () => null);
 
   const needsSetup = computed(() => needsSetupState.value);
+  const httpInitEnabled = computed(() => httpInitState.value?.enabled ?? null);
+  const httpInitTokenRequired = computed(() => httpInitState.value?.tokenRequired ?? null);
 
   /**
    * Check if the system needs initial setup
@@ -70,7 +110,13 @@ export function useSystemSetup(): UseSystemSetupReturn {
 
     try {
       const url = buildLtApiUrl('/system-setup/status');
-      const data = await $fetch<{ needsSetup: boolean }>(url);
+      const data = await $fetch<SystemSetupStatusResponse>(url);
+      httpInitState.value = {
+        // Missing or malformed reads as released: an API before 12.4.0 accepts the HTTP setup,
+        // and the server's 403 is the boundary, not this flag.
+        enabled: typeof data.httpInitEnabled === 'boolean' ? data.httpInitEnabled : true,
+        tokenRequired: data.httpInitTokenRequired === true,
+      };
       needsSetupState.value = data.needsSetup;
       return data.needsSetup;
     } catch {
@@ -83,24 +129,40 @@ export function useSystemSetup(): UseSystemSetupReturn {
   /**
    * Initialize the system with the first admin user
    */
-  async function initSetup(params: { email: string; password: string; name: string }): Promise<void> {
+  async function initSetup(params: { email: string; password: string; name: string; token?: string }): Promise<void> {
     const url = buildLtApiUrl('/system-setup/init');
     const hashedPassword = await ltSha256(params.password);
+    // An HTTP field value carries no surrounding whitespace, and `fetch` throws on a line break,
+    // so a token pasted with its newline would abort the request instead of reaching the server.
+    const token = params.token?.trim();
 
-    await $fetch(url, {
-      method: 'POST',
-      body: {
-        email: params.email,
-        password: hashedPassword,
-        name: params.name,
-      },
-    });
+    try {
+      await $fetch(url, {
+        method: 'POST',
+        body: {
+          email: params.email,
+          password: hashedPassword,
+          name: params.name,
+        },
+        ...(token ? { headers: { [SETUP_TOKEN_HEADER]: token } } : {}),
+      });
+    } catch (error) {
+      // A refusal can mean the API was restarted with another configuration since the status was
+      // read: the HTTP setup closed (`LTNS_0053`), or a token is now required (`LTNS_0054`).
+      // Re-reading the status lets the page and the middleware show the current state.
+      if (isRefusal(error)) {
+        await checkSetupStatus();
+      }
+      throw error;
+    }
 
     needsSetupState.value = false;
   }
 
   return {
     needsSetup,
+    httpInitEnabled,
+    httpInitTokenRequired,
     checkSetupStatus,
     initSetup,
   };

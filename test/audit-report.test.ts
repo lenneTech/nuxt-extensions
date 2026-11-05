@@ -539,7 +539,11 @@ describe('configuredRegistry', () => {
     }
   });
 
-  it('falls back to the resolved config when the environment says nothing', () => {
+  // A real, synchronous `pnpm config get registry`: on a loaded machine it outlasts vitest's
+  // default 5 s, and a synchronous test that overruns fails even though it returned the right
+  // value. The budget belongs to the test, not to `configuredRegistry` — a spawn timeout there
+  // would return '' and fall back to npmjs.org, the false-green the probe exists to prevent.
+  it('falls back to the resolved config when the environment says nothing', { timeout: 30_000 }, () => {
     const previous = process.env.npm_config_registry;
     try {
       delete process.env.npm_config_registry;
