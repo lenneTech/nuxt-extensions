@@ -311,7 +311,8 @@ This is a consequence of client-side hashing, not a bug in either backend, and t
 ### `admin.*` is passed through UNHASHED — an armed trap, not a live one
 
 `admin.createUser` (`password`) and `admin.setUserPassword` (`newPassword`) are the only
-credential-carrying methods this library does **not** hash.
+passwords this library does **not** hash. (The setup token of `useSystemSetup().initSetup()` is
+unhashed too, by design — see "First Admin Setup" below.)
 
 Today that is harmless: `@lenne.tech/nest-server` does not register better-auth's `admin()`
 plugin and has no option to enable it, so those routes 404. But `auth.enableAdmin` defaults to
@@ -344,9 +345,9 @@ optionally behind a setup token (`LTNS_0054` when wrong). `GET /system-setup/sta
   bug: a redirect would hold every visitor on a page whose only action fails, and the login would be
   unreachable. The setup page itself must show the notice ("first admin comes from the
   configuration") instead of the form.
-- **The token is a header (`X-System-Setup-Token`), unhashed, never a body field.** It is the one
-  credential this library does not hash: the server compares it as given. Do not add it to the
-  SHA256 wrappers.
+- **The token is a header (`X-System-Setup-Token`), unhashed, never a body field.** Unlike the
+  passwords, it is not hashed: the server compares it as given. Do not add it to the SHA256
+  wrappers.
 - **A missing field means an API before 12.4.0**, which accepts the HTTP setup: `httpInitEnabled`
   reads `true`. The server's 403 is the boundary, the flag is UX. Only a 200 without the field
   counts as old; a failed status read leaves both values unchanged (`null` initially).
