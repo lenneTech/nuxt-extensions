@@ -105,12 +105,12 @@ describe('buildSecurityTxt', () => {
     }
   });
 
-  it('cannot be made to forge a field through a configured value', () => {
+  it.each(['\n', '\r', '\r\n', '\u2028'])('cannot be made to forge a field through a configured value (%j)', (lineBreak) => {
     const forged = buildSecurityTxt({
       ...OPTIONS,
-      contacts: ['mailto:a@example.com\nContact: mailto:evil@example.com'],
-      policy: 'https://example.com\nExpires: 1999-01-01T00:00:00.000Z',
-      preferredLanguages: ['de\nCanonical: https://evil.example'],
+      contacts: [`mailto:a@example.com${lineBreak}Contact: mailto:evil@example.com`],
+      policy: `https://example.com${lineBreak}Expires: 1999-01-01T00:00:00.000Z`,
+      preferredLanguages: [`de${lineBreak}Canonical: https://evil.example`],
     });
     expect(forged).not.toContain('evil');
     expect(fields(forged, 'Expires')).toHaveLength(1);
@@ -160,7 +160,7 @@ describe('normalisation', () => {
     const hosts = ['lenne.tech', 'www.lenne.tech'];
     expect(allowedRequestOrigin('www.lenne.tech', hosts)).toBe('https://www.lenne.tech');
     expect(allowedRequestOrigin('WWW.Lenne.Tech', hosts)).toBe('https://www.lenne.tech');
-    for (const host of [undefined, '', 'evil.example', 'lenne.tech.evil.example', 'lenne.tech:8443', 'lenne.tech/x\nContact: mailto:evil@example.com']) {
+    for (const host of [undefined, '', 'evil.example', 'evil-lenne.tech', 'lenne.tech.evil.example', 'lenne.tech:8443', 'lenne.tech/x\nContact: mailto:evil@example.com']) {
       expect(allowedRequestOrigin(host, hosts)).toBeUndefined();
     }
     expect(allowedRequestOrigin('lenne.tech', [])).toBeUndefined();
