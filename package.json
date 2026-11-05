@@ -112,6 +112,7 @@
     "cross-spawn": "7.0.6",
     "fake-indexeddb": "6.2.7",
     "happy-dom": "21.0.4",
+    "lint-staged": "17.6.0",
     "nuxt": "4.6.4",
     "oxfmt": "0.75.0",
     "oxlint": "1.90.0",
@@ -135,6 +136,9 @@
     "file-upload",
     "lenne-tech"
   ],
+  "lint-staged": {
+    "src/**/*": "oxfmt --no-error-on-unmatched-pattern"
+  },
   "engines": {
     "node": ">= 22",
     "pnpm": "^11.0.0"
