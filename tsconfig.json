@@ -4,7 +4,7 @@
     "dist",
     "node_modules",
     "playground",
-    // Nitro context, checked against its own tsconfig (`test:types`)
+    // Nitro context, checked against tsconfig.server.json (`test:types`)
     "src/runtime/server",
   ]
 }

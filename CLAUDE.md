@@ -429,6 +429,10 @@ fields at `app:beforeMount` and restores them at `app:mounted`, dispatching a sy
   ends in a 404 rather than a file scanners reject. If a project reports a 404 with the option on,
   check the contact first.
 - For a customer project, ask whether reports go to lenne.Tech or the customer before enabling it.
+- **No `tsconfig.json` under `src/runtime`.** Vendoring copies that tree one level deeper, so a
+  relative `extends` points at nothing, and `oxlint --type-aware` then stops every vendored project's
+  `check` with `Invalid tsconfig`. Nitro code is typechecked through the root `tsconfig.server.json`.
+  No gate here runs in vendor mode, so `test/vendored-core.test.ts` holds this.
 - **The `nuxt/schema` blocks in `runtime/types/module.ts` augment `PublicRuntimeConfig` and nothing
   else.** Vendoring turns them into project source, where they cause TS2310, and the cli removes a
   block only while it holds that one interface. Type server-only config where it is read.
