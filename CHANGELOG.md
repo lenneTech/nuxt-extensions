@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.25.0] - 2026-11-05
+
+Feature release for `@lenne.tech/nest-server` 12.4.0, which closes the first-admin setup over HTTP on
+deployed stages. Additive only: against an older API everything behaves as before. No option, runtime
+config, environment variable or peer range changed.
+
+### Added
+
+- **`useSystemSetup()` reports whether the API accepts the setup over HTTP.** `httpInitEnabled` and
+  `httpInitTokenRequired` (`ComputedRef<boolean | null>`, `null` until the status was read) come from
+  `GET /system-setup/status`. nest-server 12.4.0 opens `POST /system-setup/init` only in `local`, `ci` and
+  `e2e`, unless the deployment releases it (`systemSetup.httpInit`), optionally behind a setup token;
+  otherwise the first admin comes from the configuration (`systemSetup.initialAdmin`). An API before
+  12.4.0 sends neither field and reads as released without a token.
+- **`initSetup({ …, token })` sends a setup token** as the `X-System-Setup-Token` header. It is not
+  hashed (the server compares it as given), never goes in the body, and surrounding whitespace is
+  dropped; a blank token sends no header.
+- **After a 403 `initSetup()` re-reads the status** before rethrowing the original error, so a page whose
+  API was restarted with another configuration switches to the notice (`LTNS_0053`) or the token field
+  (`LTNS_0054`) without a reload.
+
+### Changed
+
+- **The `lt-system-setup` middleware no longer redirects to the setup page while `httpInitEnabled` is
+  `false`.** On such a deployment every visitor was held on a page whose only action failed with 403,
+  and the login was out of reach. The setup page stays reachable and is expected to show a notice
+  instead of the form (see README, "First Admin Setup").
+
+### Setup page in your project
+
+- **Starter-based projects:** take over the starter's updated `app/pages/auth/setup.vue` (notice
+  instead of form, token field) once it is released.
+- **Your own setup page:** show a notice when `httpInitEnabled === false`, a token field when
+  `httpInitTokenRequired === true`, and pass the error itself to `translateError(error)` — the
+  `#LTNS_` code is in the response body, `error.message` holds only the transport line.
+
+### Changed (repository only, not part of the published package)
+
+- `test/audit-report.test.ts`: the test that spawns a real `pnpm config get registry` has its own 30 s
+  budget; on a heavily loaded machine it outlasted vitest's default 5 s and failed `check`.
+
 ## [1.24.1] - 2026-11-05
 
 Patch release for vendored projects. No API, option or behaviour changed; npm-mode projects only
