@@ -27,7 +27,7 @@ src/
 |-----------|---------|
 | `useLtAuth()` | Authentication state, login, logout, session management, password change + reset |
 | `useLtAuthClient()` | Raw Better Auth client access (`twoFactor.*`, `admin.*`, `passkey`) |
-| `useSystemSetup()` | First-admin setup flow |
+| `useSystemSetup()` | First-admin setup flow: status, HTTP-setup release + setup token (nest-server >= 12.4.0) |
 | `useLtTusUpload()` | TUS resumable file uploads |
 | `useLtFile()` | File utilities (size formatting, URLs) |
 | `useLtShare()` | Web Share API with clipboard fallback |
@@ -332,6 +332,28 @@ replaces ONE field and forwards the rest — `{ ...params, password: hashed }`. 
 `{ password: hashed }` (drops `revokeOtherSessions`, `redirectTo`, `method`, `issuer` — all
 shipped defects), and never `{ password: hashed, ...params }`, which looks almost identical and
 puts the **plaintext** back on the wire.
+
+## First Admin Setup: the HTTP init is closed on deployed stages
+
+Since nest-server 12.4.0 the anonymous `POST /system-setup/init` is open only in `local`, `ci` and
+`e2e`. A deployed API refuses it with 403 (`LTNS_0053`) unless `systemSetup.httpInit` releases it,
+optionally behind a setup token (`LTNS_0054` when wrong). `GET /system-setup/status` reports
+`httpInitEnabled` and `httpInitTokenRequired`; `useSystemSetup()` exposes both.
+
+- **The middleware does not redirect when `httpInitEnabled === false`.** That is deliberate, not a
+  bug: a redirect would hold every visitor on a page whose only action fails, and the login would be
+  unreachable. The setup page itself must show the notice ("first admin comes from the
+  configuration") instead of the form.
+- **The token is a header (`X-System-Setup-Token`), unhashed, never a body field.** It is the one
+  credential this library does not hash: the server compares it as given. Do not add it to the
+  SHA256 wrappers.
+- **A missing field means an API before 12.4.0**, which accepts the HTTP setup: `httpInitEnabled`
+  reads `true`. The server's 403 is the boundary, the flag is UX. Only a 200 without the field
+  counts as old; a failed status read leaves both values unchanged (`null` initially).
+- **After a 403 from `initSetup()` the composable re-reads the status** before rethrowing, so the
+  page switches to the notice or the token field when the API was restarted with another
+  configuration. Pass the error itself to `translateError(error)`: the `#LTNS_` code is in the
+  body, `error.message` holds only the transport line.
 
 ## Form Label Repair
 

@@ -567,6 +567,51 @@ against the value it receives, and because this library hashes first, that value
 64-character hex string — the check passes on every path. The form is the only place the rule can
 live.
 
+### First Admin Setup
+
+With `auth.systemSetup.enabled`, a global middleware sends visitors to `setupPath` while the API
+has no user yet, and `useSystemSetup()` creates the first admin.
+
+Since `@lenne.tech/nest-server` 12.4.0 the anonymous `POST /system-setup/init` is open only in
+`local`, `ci` and `e2e`. A deployed API refuses it with 403 (`LTNS_0053`) unless the deployment
+releases it (`systemSetup.httpInit`), optionally behind a setup token. A deployment usually creates
+its first admin from its configuration instead (`systemSetup.initialAdmin`).
+`GET /system-setup/status` reports which applies, and the composable exposes it:
+
+```vue
+<script setup lang="ts">
+const { httpInitEnabled, httpInitTokenRequired, initSetup } = useSystemSetup();
+const { translateError } = useLtErrorTranslation();
+const toast = useToast();
+
+async function onSubmit(data: { email: string; name: string; password: string; token?: string }) {
+  try {
+    // `token` goes out as the X-System-Setup-Token header, unhashed; omit it when not required.
+    await initSetup(data);
+  } catch (error) {
+    // Pass the error itself: the #LTNS_ code is in the response body, not in `error.message`.
+    toast.add({ color: 'error', description: translateError(error), title: 'Setup failed' });
+  }
+}
+</script>
+
+<template>
+  <!-- `false`: the deployment creates its first admin from its configuration — no form. -->
+  <SetupNotice v-if="httpInitEnabled === false" />
+  <SetupForm v-else :with-token="httpInitTokenRequired === true" @submit="onSubmit" />
+</template>
+```
+
+- **Without the HTTP setup the middleware redirects nowhere.** A redirect would hold every visitor
+  on a page whose only action fails. The setup page stays reachable, so it must show the notice
+  itself.
+- **An API before 12.4.0** reports neither field and accepts the HTTP setup, so `httpInitEnabled`
+  reads `true` and `httpInitTokenRequired` `false` — the behaviour before this release.
+- **After a 403 from `initSetup()`** the composable re-reads the status before rethrowing, so a page
+  whose API was restarted with another configuration switches to the notice (`LTNS_0053`) or to the
+  token field (`LTNS_0054`) without a reload.
+- `null` means the status was not read yet, or reading it failed.
+
 ### Custom Better Auth Plugins
 
 You can extend the auth client with additional [Better Auth plugins](https://www.better-auth.com/docs/plugins):
@@ -975,7 +1020,7 @@ The package works **with or without** `@nuxtjs/i18n`:
 | `useLtTusUpload()` | TUS protocol file uploads with pause/resume |
 | `useLtFile()` | File utilities (size formatting, URLs) |
 | `useLtShare()` | Web Share API with clipboard fallback |
-| `useSystemSetup()` | System setup flow for initial admin user creation |
+| `useSystemSetup()` | First admin creation: setup status, HTTP-setup release + token (nest-server >= 12.4.0) |
 | `useLtAi()` | One-shot `prompt()` + streaming `promptStream()` for the nest-server AI module |
 | `useLtAiChat()` | Multi-turn chat state, streaming, budget summary, confirmation gate, `maxMessages` cap |
 | `useLtAiConnections()` | User self-service connection list + `select()` |

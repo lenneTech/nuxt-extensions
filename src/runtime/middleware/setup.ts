@@ -5,8 +5,15 @@
  * needs initial setup (no admin user exists yet).
  *
  * - needsSetup === null -> calls checkSetupStatus()
- * - needsSetup === true AND route != setupPath -> redirect to setupPath
+ * - needsSetup === true AND HTTP init released AND route != setupPath -> redirect to setupPath
+ * - needsSetup === true AND HTTP init NOT released -> no redirect
  * - needsSetup === false AND route === setupPath -> redirect to loginPath
+ *
+ * Without the HTTP init (nest-server >= 12.4.0 closes it outside `local`, `ci` and `e2e`), the
+ * API refuses `POST /system-setup/init` with 403 and the deployment creates its first admin from
+ * its configuration. A redirect would then hold every visitor on a page whose only action fails,
+ * with the login out of reach. So nothing is redirected; the setup page stays reachable and shows
+ * its notice there (`useSystemSetup().httpInitEnabled === false`).
  */
 
 import type { RouteMiddleware } from '#app';
@@ -19,7 +26,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
   const setupPath = authConfig?.systemSetup?.setupPath || '/auth/setup';
   const loginPath = authConfig?.loginPath || '/auth/login';
 
-  const { needsSetup, checkSetupStatus } = useSystemSetup();
+  const { needsSetup, httpInitEnabled, checkSetupStatus } = useSystemSetup();
 
   try {
     // First check: fetch status if not yet determined
@@ -27,7 +34,8 @@ export default defineNuxtRouteMiddleware(async (to) => {
       await checkSetupStatus();
     }
 
-    if (needsSetup.value === true && to.path !== setupPath) {
+    // Only an explicit "not released" changes the redirect; anything else keeps the old behaviour.
+    if (needsSetup.value === true && httpInitEnabled.value !== false && to.path !== setupPath) {
       return navigateTo(setupPath);
     }
 

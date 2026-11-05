@@ -84,6 +84,22 @@ export function defineNuxtPlugin<T extends (...args: any[]) => any>(setup: T): T
   return setup;
 }
 
+/**
+ * Minimal `defineNuxtRouteMiddleware` stub — a pass-through like `defineNuxtPlugin`, so a test
+ * can call a middleware's default export with a route object.
+ */
+export function defineNuxtRouteMiddleware<T extends (...args: any[]) => any>(middleware: T): T {
+  return middleware;
+}
+
+/**
+ * Minimal `navigateTo` stub — returns a marker instead of navigating, so a test asserts the
+ * redirect target from the middleware's return value.
+ */
+export function navigateTo(to: string): { navigateTo: string } {
+  return { navigateTo: to };
+}
+
 // Mutable store for the SSR request-headers stub so tests can simulate the
 // server-side raw `Cookie` header read (use-lt-auth.ts `resolvedAuthState`).
 let requestHeaders: Record<string, string> = {};
