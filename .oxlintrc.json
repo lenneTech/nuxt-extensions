@@ -1,6 +1,10 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript"],
+  // nuxt-base-starter lints `app/core/**`, where `lt fullstack init` vendors this code, with a subset of
+  // these plugins, never more. A plugin only the starter applies reports its warnings in every generated
+  // project instead of here: unicorn(no-useless-spread) did, three times, in the smoke test after 1.24.0.
+  // `lint` runs with --deny-warnings for the same reason.
+  "plugins": ["typescript", "vue", "unicorn", "import"],
   "env": {
     "browser": true,
     "node": true

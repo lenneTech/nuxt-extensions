@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.24.1] - 2026-11-05
+
+Patch release for vendored projects. No API, option or behaviour changed; npm-mode projects only
+bump the version.
+
+### Fixed
+
+- **Vendored projects: `lint` reported three warnings in `app/core/runtime/lib/sync-hints.ts`.**
+  nuxt-base-starter lints the vendored core with oxlint's `unicorn` plugin, which this repository did not
+  run, and `unicorn(no-useless-spread)` flagged the subscriber snapshot `[...hub.subscribers]`. The
+  snapshot stays, written as `Array.from(...)`: a subscriber that joins while a stop is delivered must not
+  receive the stop of a stream it never had. Do not follow the rule's own hint and iterate the Set
+  directly; that reintroduces exactly this.
+
+### Vendored projects
+
+- Update the core (`/lt-dev:frontend:update-nuxt-extensions-core`). If you silenced the three warnings
+  locally (a patch, a lint override, a note in `app/core/VENDOR.md`), remove it.
+
+### Changed (repository only, not part of the published package)
+
+- `.oxlintrc.json` runs every plugin nuxt-base-starter may apply to `app/core/**` (`typescript`, `vue`,
+  `unicorn`, `import`), and `lint` / `lint:fix` run with `--deny-warnings`, so a warning a generated
+  project would see fails `check` here first. `test/vendored-core.test.ts` holds both, and
+  `test/sync-hints.test.ts` pins the snapshot.
+
 ## [1.24.0] - 2026-11-05
 
 Feature release: an opt-in security.txt. Nothing changes for a project that does not enable it, except

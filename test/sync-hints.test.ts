@@ -234,6 +234,47 @@ describe('subscribeLtSyncHints — one stream per tab and tenant', () => {
     for (const unsubscribe of off) unsubscribe();
   });
 
+  it('does not hand the stop to an instance that joins while the stop is being delivered', async () => {
+    let calls = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_input: string, init: RequestInit) => {
+        if (calls++ === 0) return new Response(null, { status: 401 });
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            init.signal!.addEventListener('abort', () => controller.error(new DOMException('aborted', 'AbortError')));
+          },
+        });
+        return new Response(body, { status: 200 });
+      }),
+    );
+    const late = subscriber('task');
+    const off: Array<() => void> = [];
+    const first = subscriber('note');
+    off.push(
+      subscribeLtSyncHints({
+        model: first.model,
+        onConnect: () => first.connects++,
+        onHint: () => first.hints++,
+        onStop: (reason) => {
+          first.stops.push(reason);
+          off.push(subscribe(late));
+        },
+      }),
+    );
+
+    // Unsubscribe even when an assertion fails: a hub left in the module-level map keeps its stream
+    // open, and the next test that asks for the same models would then get no stop at all.
+    try {
+      await until(() => first.stops.length > 0 && off.length === 2);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(first.stops).toEqual(['unauthorized']);
+      expect(late.stops).toEqual([]);
+    } finally {
+      for (const unsubscribe of off) unsubscribe();
+    }
+  });
+
   it('tells every instance when the stream stops for good', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 401 })));
     const a = subscriber('note');

@@ -433,6 +433,10 @@ fields at `app:beforeMount` and restores them at `app:mounted`, dispatching a sy
   relative `extends` points at nothing, and `oxlint --type-aware` then stops every vendored project's
   `check` with `Invalid tsconfig`. Nitro code is typechecked through the root `tsconfig.server.json`.
   No gate here runs in vendor mode, so `test/vendored-core.test.ts` holds this.
+- **nuxt-base-starter lints `app/core/**` with a subset of the plugins in `.oxlintrc.json`, never
+  more**, and `lint` here runs with `--deny-warnings`. A plugin only the starter applies reports its
+  warnings in every generated project after the release; the 1.24.0 smoke test found three. A plugin
+  the starter wants for `app/core/**` is added here first.
 - **The `nuxt/schema` blocks in `runtime/types/module.ts` augment `PublicRuntimeConfig` and nothing
   else.** Vendoring turns them into project source, where they cause TS2310, and the cli removes a
   block only while it holds that one interface. Type server-only config where it is read.

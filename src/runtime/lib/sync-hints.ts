@@ -139,18 +139,21 @@ function connectHub(key: string, hub: HintHub): void {
   if (hub.close && hub.models === models) return;
   hub.close?.();
   hub.models = models;
+  // Each callback walks a copy: a subscriber may join or leave inside one, and a Set visits members
+  // added during the walk, so one that joins in `onStop` would get the stop of a stream it never had.
+  // `Array.from` and not `[...set]`, which unicorn(no-useless-spread) reports in every vendored core.
   hub.close = openLtSyncHints({
     models: models.split(','),
     onConnect: () => {
-      for (const subscriber of [...hub.subscribers]) subscriber.onConnect();
+      for (const subscriber of Array.from(hub.subscribers)) subscriber.onConnect();
     },
     onHint: (model) => {
-      for (const subscriber of [...hub.subscribers]) if (subscriber.model === model) subscriber.onHint();
+      for (const subscriber of Array.from(hub.subscribers)) if (subscriber.model === model) subscriber.onHint();
     },
     onStop: (reason) => {
       hub.close = undefined;
       hub.models = '';
-      for (const subscriber of [...hub.subscribers]) subscriber.onStop?.(reason);
+      for (const subscriber of Array.from(hub.subscribers)) subscriber.onStop?.(reason);
     },
     tenantId: key || undefined,
   });

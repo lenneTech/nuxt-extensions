@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -17,6 +17,19 @@ describe('vendored core', () => {
     const files = readdirSync(resolve(process.cwd(), 'src/runtime'), { recursive: true }).map(String);
     expect(files.length).toBeGreaterThan(0);
     expect(files.filter((file) => /(?:^|[\\/])tsconfig[^\\/]*\.json$/.test(file))).toEqual([]);
+  });
+
+  // nuxt-base-starter lints `app/core/**` with a subset of these plugins, and a generated project
+  // expects a lint without warnings. So this repository lints with every plugin the starter may apply
+  // there, and fails on a warning. A warning only the starter reports surfaces after the release.
+  it('is linted with every plugin nuxt-base-starter may apply to app/core, and a warning fails the lint', () => {
+    const config = readFileSync(resolve(process.cwd(), '.oxlintrc.json'), 'utf8');
+    const plugins = JSON.parse(config.match(/"plugins":\s*(\[[^\]]*\])/)?.[1] ?? '[]') as string[];
+    expect(plugins).toEqual(expect.arrayContaining(['typescript', 'vue', 'unicorn', 'import']));
+
+    const scripts = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')).scripts as Record<string, string>;
+    expect(scripts.lint).toContain('--deny-warnings');
+    expect(scripts['lint:fix']).toContain('--deny-warnings');
   });
 
   it('the Nitro code is typechecked from the repository root', () => {
