@@ -31,6 +31,18 @@ function namesFromExportBlocks(src: string): Set<string> {
 }
 
 describe('public type exports', () => {
+  // `lt fullstack init` vendors this file by default, where these blocks become project source and
+  // close the TS2310 cycle that turns every `config.public.*` into `unknown`. The cli removes a block
+  // only while it augments `PublicRuntimeConfig` alone, so one more interface in here leaves the block
+  // in every new vendored project. Nothing in this repository would fail otherwise.
+  it('the nuxt/schema blocks augment PublicRuntimeConfig and nothing else', () => {
+    const blocks = [...readSource('module.ts').matchAll(/declare module '(?:@nuxt|nuxt)\/schema' \{\n([\s\S]*?)\n\}/g)];
+    expect(blocks).toHaveLength(2);
+    for (const [, body] of blocks) {
+      expect([...(body ?? '').matchAll(/\binterface\s+(\w+)/g)].map((match) => match[1])).toEqual(['PublicRuntimeConfig']);
+    }
+  });
+
   it('every public type from runtime/types/*.ts is re-exported by the barrel', () => {
     const barrel = namesFromExportBlocks(readSource('index.ts'));
 
