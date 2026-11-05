@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.24.0] - 2026-11-05
+
+Feature release: an opt-in security.txt. Nothing changes for a project that does not enable it, except
+that vendored projects delete one file (see below). No peer range changed.
+
+### Added
+
+- **`ltExtensions.securityTxt`: an opt-in security.txt (RFC 9116)** at `/.well-known/security.txt`,
+  ported from the lenne.Tech website. Off by default. Once enabled, the contact defaults to
+  `mailto:security@lenne.tech`; set your own for a customer project that wants reports itself, as a
+  `mailto:`, `https://` or `tel:` URI. Anything else counts as no contact, and the route answers 404.
+  `Expires` is computed per request, so the file does not run out between deployments. `Canonical`
+  names `NUXT_PUBLIC_SITE_URL` plus the requested host if it is listed in `hosts`, and the module
+  declares `public.siteUrl` while the option is on. GET and HEAD answer `text/plain` with `no-store`.
+  Every value except `enabled` can be overridden per stage via `NUXT_LT_EXTENSIONS_SECURITY_TXT_*`.
+  The route is excluded from prerendering; `nuxt generate` has no server to answer it and warns.
+
+### Vendored projects
+
+- Delete `app/core/runtime/server/tsconfig.json` when updating the core. The file is gone upstream.
+  Left in place, its `extends` points at nothing, and now that the folder holds `.ts` files
+  `oxlint --type-aware` stops with `Invalid tsconfig`, so `check` fails.
+
+### Changed (repository only, not part of the published package)
+
+- The Nitro code is typechecked through a root `tsconfig.server.json` (`test:types`).
+- `test/vendored-core.test.ts` keeps tsconfigs out of `src/runtime`, and `test/public-exports.test.ts`
+  keeps the `nuxt/schema` blocks on `PublicRuntimeConfig` alone. Both guard vendor mode, which no gate
+  in this repository runs.
+
 ## [1.23.0] - 2026-11-04
 
 Security and feature release. The `better-auth` peer floor moves to 1.7.16, in lock-step with
