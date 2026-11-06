@@ -97,7 +97,8 @@ describe('clearLtAuthCookies()', () => {
 
   it('hard-deletes the JWT token cookie alongside the state cookie', async () => {
     const { clearLtAuthCookies, setLtJwtToken } = await import('../src/runtime/lib/auth-state');
-    setLtJwtToken('abc');
+    // A JWT: `setLtJwtToken()` refuses anything else (session-token-guard.test.ts).
+    setLtJwtToken('eyJhbGciOiJFZERTQSJ9.eyJzdWIiOiJ1c2VyLTEifQ.c2lnbmF0dXJl');
     expect(readCookieValue('lt-jwt-token')).toBeTruthy();
 
     clearLtAuthCookies();

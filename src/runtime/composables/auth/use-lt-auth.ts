@@ -14,7 +14,7 @@ import type { LtAuthMode, LtAuthState, LtPasskeyAuthResult, LtPasskeyRegisterRes
 
 import { useNuxtApp, useCookie, useState, useRequestHeaders, useRuntimeConfig, ref, computed, watch } from '#imports';
 import { ltArrayBufferToBase64Url, ltBase64UrlToUint8Array } from '../../utils/crypto';
-import { clearLtAuthCookies, getLtApiBase, getLtAuthCookieNames, resolveLtAuthState } from '../../lib/auth-state';
+import { clearLtAuthCookies, getLtApiBase, getLtAuthCookieNames, getLtJwtToken, isLtJwtShaped, resolveLtAuthState } from '../../lib/auth-state';
 import { useLtAuthClient } from '../use-lt-auth-client';
 
 /**
@@ -130,10 +130,21 @@ export function useLtAuth(): UseLtAuthReturn {
   // manufactures the stale twin which then shadows the real session.
   const ssrCookieHeader = import.meta.server ? useRequestHeaders(['cookie']).cookie || '' : '';
 
-  // JWT token storage (used when cookies are not available)
-  const jwtToken = useCookie<string | null>(tokenCookieName, {
+  // JWT token storage (used when cookies are not available). Only ever written through `jwtToken`.
+  const jwtTokenCookie = useCookie<string | null>(tokenCookieName, {
     maxAge: 60 * 60 * 24 * 7, // 7 days
     sameSite: 'lax',
+  });
+
+  // A JWT or nothing. The token cookie is readable by every script on the page; Better-Auth's
+  // session token, which turns up in the 2FA and passkey answers, must never land there (see
+  // `isLtJwtShaped`). A value that is not a JWT clears the cookie instead of being stored, and
+  // reads as `null` (on the server too, where nothing may be written).
+  const jwtToken = computed<string | null>({
+    get: () => (isLtJwtShaped(jwtTokenCookie.value) ? jwtTokenCookie.value : null),
+    set: (value) => {
+      jwtTokenCookie.value = isLtJwtShaped(value) ? value : null;
+    },
   });
 
   // Loading state
@@ -149,6 +160,18 @@ export function useLtAuth(): UseLtAuthReturn {
     const cookieString = import.meta.client ? document.cookie : ssrCookieHeader;
     return resolveLtAuthState(cookieString, stateCookieName) ?? refVal ?? null;
   });
+
+  // A session token an earlier version (or a hand-written 2FA page) stored in the token cookie
+  // stays readable by any script until it expires: delete it on start, together with the JWT mode
+  // it came with. The httpOnly session cookie keeps the user signed in.
+  if (import.meta.client && jwtTokenCookie.value && !isLtJwtShaped(jwtTokenCookie.value)) {
+    jwtTokenCookie.value = null;
+    getLtJwtToken(); // expires the document cookie on both slots and resets the stored mode
+    const resolved = resolveLtAuthState(document.cookie, stateCookieName) ?? authState.value;
+    if (resolved?.authMode === 'jwt') {
+      setUser(resolved.user ?? null, 'cookie');
+    }
+  }
 
   // Auth mode: 'cookie' (default) or 'jwt' (fallback)
   const authMode = computed(() => resolvedAuthState.value?.authMode || 'cookie');
@@ -196,7 +219,16 @@ export function useLtAuth(): UseLtAuthReturn {
    * Set user data after successful login/signup
    * Also manually writes to browser cookie for SSR compatibility
    */
-  function setUser(userData: LtUserInput | null, mode: LtAuthMode = 'cookie'): void {
+  function setUser(userData: LtUserInput | null, requestedMode: LtAuthMode = 'cookie'): void {
+    // JWT mode sends the stored JWT instead of the cookies. Without one (a session token handed
+    // to `jwtToken` is refused), it would send nothing: stay on the cookie session and fetch the
+    // JWT from `/iam/token`. A hand-written 2FA page that stores the body token and then calls
+    // `setUser(user, 'jwt')` therefore still signs in, without the session token leaking.
+    const mode: LtAuthMode = requestedMode === 'jwt' && !jwtToken.value ? 'cookie' : requestedMode;
+    if (mode !== requestedMode && import.meta.client && userData) {
+      void switchToJwtMode();
+    }
+
     // Normalise Better Auth's `image: null` to `undefined` at the boundary, so the stored
     // user and every reader keep ONE empty case. See `LtUserInput` for why this is not done
     // by widening `LtUser.image` instead.
@@ -276,7 +308,7 @@ export function useLtAuth(): UseLtAuthReturn {
 
       if (response.ok) {
         const data = await response.json();
-        if (data.token) {
+        if (isLtJwtShaped(data.token)) {
           jwtToken.value = data.token;
           if (authState.value) {
             authState.value = { ...authState.value, authMode: 'jwt' };
@@ -595,12 +627,14 @@ export function useLtAuth(): UseLtAuthReturn {
       try {
         const result = await authClient.signIn.email(params, options);
 
-        // Extract token from response (JWT mode: cookies: false)
+        // Extract token from response (JWT mode: cookies: false). Only a JWT counts: nest-server
+        // converts the body token to one in JWT mode and removes it in cookie mode, and anything
+        // else is a session token that must not reach the readable token cookie.
         const resultAny = result as any;
         const token = resultAny?.token || resultAny?.data?.token;
         const userData = resultAny?.user || resultAny?.data?.user;
 
-        if (token) {
+        if (isLtJwtShaped(token)) {
           // JWT mode: Token is in the response
           jwtToken.value = token;
           if (userData) {
@@ -630,12 +664,14 @@ export function useLtAuth(): UseLtAuthReturn {
       try {
         const result = await authClient.signUp.email(params, options);
 
-        // Extract token from response (JWT mode: cookies: false)
+        // Extract token from response (JWT mode: cookies: false). Only a JWT counts: nest-server
+        // converts the body token to one in JWT mode and removes it in cookie mode, and anything
+        // else is a session token that must not reach the readable token cookie.
         const resultAny = result as any;
         const token = resultAny?.token || resultAny?.data?.token;
         const userData = resultAny?.user || resultAny?.data?.user;
 
-        if (token) {
+        if (isLtJwtShaped(token)) {
           // JWT mode: Token is in the response
           jwtToken.value = token;
           if (userData) {
@@ -764,19 +800,13 @@ export function useLtAuth(): UseLtAuthReturn {
         };
       }
 
-      // Store user data after successful passkey login
-      if (result.user) {
-        setUser(result.user as LtUser, 'cookie');
-        switchToJwtMode().catch(() => {});
-      } else if (result.session?.token) {
-        // Passkey auth returned session without user data.
-        // Store the session token and fetch user via get-session.
-        jwtToken.value = result.session.token;
-        if (authState.value) {
-          authState.value = { ...authState.value, authMode: 'jwt' };
-        }
-
-        // Fetch user data via get-session to populate auth state
+      // Better-Auth answers `{ session, user }` and has set the httpOnly session cookie. The
+      // session token in `session.token` is never stored or handed on: in the readable token
+      // cookie (or in the caller's hands) it would be one XSS away from an attacker. The cookie
+      // session signs in, and `switchToJwtMode()` fetches a real JWT.
+      let signedInUser = result.user as LtUser | undefined;
+      if (!signedInUser && result.session) {
+        // An answer without the user (older plugin versions): read it through the cookie session.
         try {
           const sessionResponse = await fetchWithAuth(`${apiBase}/get-session`, { method: 'GET' });
           if (sessionResponse.ok) {
@@ -784,10 +814,7 @@ export function useLtAuth(): UseLtAuthReturn {
             if (sessionData?.user) {
               // Merge onto the cached user so this passkey get-session fallback
               // never drops nest-server-only fields either (see mergeSessionUser).
-              const mergedUser = mergeSessionUser(sessionData.user as LtUser);
-              result.user = mergedUser;
-              setUser(mergedUser, 'cookie');
-              switchToJwtMode().catch(() => {});
+              signedInUser = mergeSessionUser(sessionData.user as LtUser);
             }
           }
         } catch {
@@ -795,7 +822,12 @@ export function useLtAuth(): UseLtAuthReturn {
         }
       }
 
-      return { success: true, user: result.user as LtUser, session: result.session };
+      if (signedInUser) {
+        setUser(signedInUser, 'cookie');
+        switchToJwtMode().catch(() => {});
+      }
+
+      return { success: true, user: signedInUser };
     } catch (err: unknown) {
       // Handle WebAuthn-specific errors
       if (err instanceof Error && err.name === 'NotAllowedError') {
@@ -950,6 +982,49 @@ export function useLtAuth(): UseLtAuthReturn {
     }
   }
 
+  /**
+   * Completes a sign-in that stopped at the second factor.
+   *
+   * Better-Auth answers `verify-totp` / `verify-backup-code` with `{ token, user }`, the token
+   * being its session token, and has set the httpOnly session cookie. That token is never stored:
+   * the user is signed in on the cookie session and the JWT comes from `/iam/token`. Only a JWT a
+   * server already put into the body (JWT mode, `cookies: false`) is taken as it is.
+   */
+  async function completeTwoFactorSignIn(result: unknown): Promise<void> {
+    const answer = result as null | undefined | { data?: null | { token?: unknown; user?: LtUserInput }; error?: unknown };
+    const data = answer?.data;
+    if (answer?.error || !data?.user) {
+      return;
+    }
+    if (isLtJwtShaped(data.token)) {
+      jwtToken.value = data.token;
+      setUser(data.user, 'jwt');
+      return;
+    }
+    setUser(data.user, 'cookie');
+    await switchToJwtMode();
+  }
+
+  // The client's two-factor methods; the two that finish a sign-in also put the user into the
+  // auth state, the safe way (see `completeTwoFactorSignIn`).
+  const verifyingTwoFactor =
+    (method: 'verifyBackupCode' | 'verifyTotp') =>
+    async <T extends { code: string }>(params: T, options?: unknown): Promise<unknown> => {
+      isLoading.value = true;
+      try {
+        const result = await authClient.twoFactor[method](params, options as Parameters<typeof authClient.twoFactor.verifyTotp>[1]);
+        await completeTwoFactorSignIn(result);
+        return result;
+      } finally {
+        isLoading.value = false;
+      }
+    };
+  const twoFactor = {
+    ...authClient.twoFactor,
+    verifyBackupCode: verifyingTwoFactor('verifyBackupCode'),
+    verifyTotp: verifyingTwoFactor('verifyTotp'),
+  };
+
   // Auto-fetch features once on first client-side useLtAuth() call
   if (import.meta.client && !featuresFetched.value) {
     featuresFetched.value = true; // Set immediately to prevent duplicate fetches
@@ -1010,6 +1085,6 @@ export function useLtAuth(): UseLtAuthReturn {
 
     // Better Auth client passthrough
     passkey: authClient.passkey,
-    twoFactor: authClient.twoFactor,
+    twoFactor,
   };
 }

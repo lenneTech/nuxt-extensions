@@ -406,7 +406,37 @@ export function getLtAuthMode(): LtAuthMode {
 }
 
 /**
- * Get the JWT token from cookie
+ * Whether `value` has the shape of a JWT: three dot-separated segments, the header starting with
+ * `eyJ` (base64url of `{"`). The same test as nest-server's `isJwtShaped`
+ * (`core-better-auth-token.helper.ts`), so client and server agree about one token.
+ *
+ * The token cookie (`lt-jwt-token`) is readable by every script on the page, so it may hold a JWT
+ * and nothing else. Better-Auth's opaque session token (what the API keeps in the httpOnly
+ * `iam.session_token` cookie) also turns up in response bodies: `two-factor/verify-totp` and
+ * `verify-backup-code` answer `{ token, user }`, `passkey/verify-authentication` answers
+ * `{ session, user }`. Stored as the "JWT", it was one XSS away from the attacker, for the
+ * session's whole lifetime.
+ */
+export function isLtJwtShaped(value: unknown): value is string {
+  return typeof value === 'string' && value.startsWith('eyJ') && value.split('.').length === 3;
+}
+
+/** Expires the token cookie on both slots (host-only and domain-scoped), as `clearLtAuthCookies()` does. */
+function expireLtJwtTokenCookie(tokenCookieName: string): void {
+  const secure = globalThis.location?.protocol === 'https:' ? '; secure' : '';
+  const host = globalThis.location?.hostname;
+  document.cookie = `${tokenCookieName}=; path=/; max-age=0; samesite=lax${secure}`;
+  if (host) {
+    document.cookie = `${tokenCookieName}=; path=/; max-age=0; samesite=lax${secure}; domain=${host}`;
+  }
+}
+
+/**
+ * Get the JWT token from cookie.
+ *
+ * Anything in the token cookie that is not a JWT is deleted, not returned: a session token an
+ * earlier version (or a hand-written 2FA page) stored there stays readable by any script until
+ * it expires, so it is removed on the first read.
  */
 export function getLtJwtToken(): string | null {
   if (import.meta.server) return null;
@@ -422,9 +452,13 @@ export function getLtJwtToken(): string | null {
       const raw = decodeURIComponent(row.slice(cookiePrefix.length));
       // Handle JSON-encoded string (useCookie stores as JSON)
       const value = raw.startsWith('"') && raw.endsWith('"') ? (JSON.parse(raw) as string) : raw;
-      if (value) {
-        return value;
+      if (!value) continue;
+      if (!isLtJwtShaped(value)) {
+        expireLtJwtTokenCookie(tokenCookieName);
+        if (getLtAuthMode() === 'jwt') setLtAuthMode('cookie');
+        return null;
       }
+      return value;
     }
   } catch {
     // Ignore parse errors
@@ -433,7 +467,8 @@ export function getLtJwtToken(): string | null {
 }
 
 /**
- * Set JWT token in cookie
+ * Set JWT token in cookie. A value that is not a JWT is refused and clears the cookie instead
+ * (see {@link isLtJwtShaped}).
  */
 export function setLtJwtToken(token: string | null): void {
   if (import.meta.server) return;
@@ -441,10 +476,10 @@ export function setLtJwtToken(token: string | null): void {
   const { token: tokenCookieName } = getLtAuthCookieNames();
   const maxAge = 60 * 60 * 24 * 7; // 7 days
   const secure = globalThis.location?.protocol === 'https:' ? '; secure' : '';
-  if (token) {
+  if (token && isLtJwtShaped(token)) {
     document.cookie = `${tokenCookieName}=${encodeURIComponent(JSON.stringify(token))}; path=/; max-age=${maxAge}; samesite=lax${secure}`;
   } else {
-    document.cookie = `${tokenCookieName}=; path=/; max-age=0; samesite=lax${secure}`;
+    expireLtJwtTokenCookie(tokenCookieName);
   }
 }
 
@@ -565,7 +600,7 @@ export async function attemptLtJwtSwitch(basePath: string = '/iam'): Promise<boo
 
     if (response.ok) {
       const data = await response.json();
-      if (data.token) {
+      if (isLtJwtShaped(data.token)) {
         setLtJwtToken(data.token);
         setLtAuthMode('jwt');
         console.debug('[LtAuth] Switched to JWT mode');

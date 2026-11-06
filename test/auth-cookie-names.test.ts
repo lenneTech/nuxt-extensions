@@ -200,19 +200,19 @@ describe('auth cookie name configuration', () => {
 
     it('getLtJwtToken / setLtJwtToken use the default token cookie name without config', async () => {
       const { getLtJwtToken, setLtJwtToken } = await import('../src/runtime/lib/auth-state');
-      setLtJwtToken('abc123');
+      setLtJwtToken('eyJhbGciOiJFZERTQSJ9.eyJ0ZXN0IjoxfQ.YWJjMTIz');
       expect(document.cookie).toContain('lt-jwt-token=');
-      expect(getLtJwtToken()).toBe('abc123');
+      expect(getLtJwtToken()).toBe('eyJhbGciOiJFZERTQSJ9.eyJ0ZXN0IjoxfQ.YWJjMTIz');
     });
 
     it('getLtJwtToken / setLtJwtToken use the configured token cookie name', async () => {
       const { getLtJwtToken, setLtJwtToken } = await import('../src/runtime/lib/auth-state');
       setCookieNamesConfig(undefined, 'my-jwt');
-      setLtJwtToken('zzz');
+      setLtJwtToken('eyJhbGciOiJFZERTQSJ9.eyJ0ZXN0IjoyfQ.enp6');
       expect(document.cookie).toContain('my-jwt=');
       // The default cookie must not be re-introduced with a value.
       expect(document.cookie).not.toMatch(/(?:^|; )lt-jwt-token=[^;]+/);
-      expect(getLtJwtToken()).toBe('zzz');
+      expect(getLtJwtToken()).toBe('eyJhbGciOiJFZERTQSJ9.eyJ0ZXN0IjoyfQ.enp6');
     });
 
     it('setLtAuthMode writes to the configured state cookie', async () => {
@@ -226,7 +226,7 @@ describe('auth cookie name configuration', () => {
     it('only configuring state keeps jwt cookie at default', async () => {
       const { setLtJwtToken } = await import('../src/runtime/lib/auth-state');
       setCookieNamesConfig('only-state', undefined);
-      setLtJwtToken('partial');
+      setLtJwtToken('eyJhbGciOiJFZERTQSJ9.eyJ0ZXN0IjozfQ.cGFydGlhbA');
       expect(document.cookie).toContain('lt-jwt-token=');
     });
 

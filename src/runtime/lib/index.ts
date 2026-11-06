@@ -12,6 +12,7 @@ export {
   getLtAuthMode,
   getLtJwtToken,
   isLtAuthenticated,
+  isLtJwtShaped,
   LT_AUTH_STATE_COOKIE_DEFAULT,
   LT_JWT_TOKEN_COOKIE_DEFAULT,
   ltAuthFetch,

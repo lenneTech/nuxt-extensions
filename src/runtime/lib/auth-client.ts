@@ -44,7 +44,7 @@ import { navigateTo } from '#imports';
 import type { LtAuthClientConfig } from '../types';
 
 import { ltSha256 } from '../utils/crypto';
-import { createLtAuthFetch, isLocalDevApiProxy } from './auth-state';
+import { createLtAuthFetch, isLocalDevApiProxy, isLtJwtShaped } from './auth-state';
 
 // =============================================================================
 // Plugin Registry & Singleton Management
@@ -452,15 +452,34 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
         return (baseClient as any).twoFactor.generateBackupCodes({ ...params, password: hashedPassword }, options);
       },
       /**
-       * Verify TOTP code (pass through to base client)
+       * Verify TOTP code. The session token Better-Auth puts into the answer is removed first,
+       * see {@link withoutSessionToken}.
        */
-      verifyTotp: (baseClient as any).twoFactor.verifyTotp,
+      verifyTotp: async (...args: unknown[]) => withoutSessionToken(await (baseClient as any).twoFactor.verifyTotp(...args)),
       /**
-       * Verify backup code (pass through to base client)
+       * Verify backup code. Same as `verifyTotp`.
        */
-      verifyBackupCode: (baseClient as any).twoFactor.verifyBackupCode,
+      verifyBackupCode: async (...args: unknown[]) => withoutSessionToken(await (baseClient as any).twoFactor.verifyBackupCode(...args)),
     },
   };
+}
+
+/**
+ * Removes a session token from a Better-Auth answer before application code sees it.
+ *
+ * `two-factor/verify-totp` and `verify-backup-code` answer `{ token, user }` with Better-Auth's
+ * opaque session token, the value the API keeps in the httpOnly session cookie; nest-server
+ * forwards these routes unchanged. A 2FA page that took that `token` for a JWT wrote it into the
+ * readable `lt-jwt-token` cookie, where any script could take it. Without it, the same page signs
+ * in on the cookie session, and `useLtAuth()` fetches a real JWT from `/iam/token`. A JWT a
+ * server puts there on purpose (JWT mode) passes.
+ */
+function withoutSessionToken<T>(result: T): T {
+  const data = (result as { data?: unknown } | null | undefined)?.data;
+  if (data && typeof data === 'object' && 'token' in data && !isLtJwtShaped((data as { token?: unknown }).token)) {
+    delete (data as { token?: unknown }).token;
+  }
+  return result;
 }
 
 // Type export for the auth client

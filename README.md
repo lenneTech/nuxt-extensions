@@ -462,11 +462,23 @@ const {
   resetPassword,
 } = useLtAuth();
 
-// Login with email/password
+// Login with email/password. For an account with 2FA, nest-server answers
+// `{ requiresTwoFactor: true }` (Better-Auth's own `twoFactorRedirect` makes the two-factor
+// client plugin navigate to `auth.twoFactorRedirectPath` by itself; nest-server does not send it).
 async function handleLogin(email: string, password: string) {
-  const result = await signIn.email({ email, password });
-  if (result.requiresTwoFactor) {
-    navigateTo('/auth/2fa');
+  const { data } = (await signIn.email({ email, password })) as {
+    data?: { requiresTwoFactor?: boolean; twoFactorRedirect?: boolean } | null;
+  };
+  if (data?.requiresTwoFactor || data?.twoFactorRedirect) {
+    await navigateTo('/auth/2fa');
+  }
+}
+
+// On the 2FA page: finishes the sign-in (user, cookie session, JWT from /iam/token)
+async function handleTotp(code: string) {
+  const { error } = (await twoFactor.verifyTotp({ code })) as { error?: { message?: string } | null };
+  if (!error) {
+    navigateTo('/dashboard');
   }
 }
 
@@ -486,6 +498,29 @@ async function handlePasskeyLogin() {
   </div>
 </template>
 ```
+
+#### Two-factor sign-in, and what `lt-jwt-token` may hold
+
+Finish a sign-in that stopped at the second factor with `useLtAuth().twoFactor.verifyTotp()` or
+`verifyBackupCode()`. They put the user into the auth state on the cookie session and fetch the
+JWT from `/iam/token`.
+
+- **Never store the `token` of a 2FA or passkey answer.** Better-Auth answers `verify-totp` and
+  `verify-backup-code` with `{ token, user }`, and `passkey/verify-authentication` with
+  `{ session, user }`. That token is its session token, the value the API keeps in the httpOnly
+  cookie. Stored as the "JWT", it lands in the readable `lt-jwt-token` cookie, where any script
+  on the page can take it for the session's whole lifetime.
+- **`lt-jwt-token` holds a JWT or nothing.** `jwtToken`, `setLtJwtToken()` and the sign-in
+  methods refuse anything else; `isLtJwtShaped()` (from `/lib`) is the test, the same as
+  nest-server's `isJwtShaped`.
+- **A value found there that is not a JWT is deleted** on the next start or read, along with the
+  JWT mode it came with. The httpOnly session cookie keeps the user signed in.
+- **`setUser(user, 'jwt')` without a stored JWT signs in on the cookie session** and fetches the
+  JWT. A hand-written 2FA page that stored the body token therefore still works, without the
+  leak; move it to the helpers anyway.
+- **`useLtAuthClient().twoFactor.verifyTotp()` / `verifyBackupCode()` no longer return the
+  session token.**
+- **`authenticateWithPasskey()` returns no `session`.**
 
 #### Admin detection (`role` vs `roles`)
 

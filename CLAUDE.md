@@ -204,6 +204,31 @@ The `useLtAuth()` composable manages the `lt-auth-state` cookie for authenticati
 - Don't call `useCookie('lt-auth-state')` with different options than `useLtAuth()` uses (`maxAge: 604800, sameSite: 'lax'`)
 - Don't URL-decode or JSON-parse the cookie value manually on the server — `useCookie` handles this automatically
 - Don't write to `authState.value` from custom middleware — this generates a `Set-Cookie` header in the SSR response that may overwrite the browser's cookie
+- Don't store the `token` of a 2FA or passkey answer anywhere. Finish a 2FA sign-in with `useLtAuth().twoFactor.verifyTotp()` / `verifyBackupCode()`.
+
+### The session token never reaches `lt-jwt-token`:
+Better-Auth answers `two-factor/verify-totp` and `verify-backup-code` with `{ token, user }`, and
+`passkey/verify-authentication` with `{ session, user }`; nest-server forwards these routes
+unchanged. That token is the session token, the value the API keeps in the httpOnly
+`iam.session_token` cookie. The starter's 2FA page stored it as the "JWT" in the readable
+`lt-jwt-token` cookie, so one XSS was enough to take the session for its whole lifetime
+(nuxt-extensions 1.25.1 closes it).
+
+- **`lt-jwt-token` holds a JWT or nothing.** The `jwtToken` ref, `setLtJwtToken()`,
+  `switchToJwtMode()`, `attemptLtJwtSwitch()` and `signIn` / `signUp` take a value only when
+  `isLtJwtShaped()` says so. That is the same test as nest-server's `isJwtShaped`: three segments,
+  header `eyJ`. Test fixtures need JWT-shaped tokens too; `'a.b.c'` is refused.
+- **A JWT comes from `GET /iam/token`, or from a body the server already converted** (sign-in with
+  `cookies: false`; nest-server's `resolveJwtToken` never returns the session token there).
+- **Anything else found in `lt-jwt-token` is deleted** on start (`useLtAuth()`) and on read
+  (`getLtJwtToken()`), along with its JWT mode, because leaked values from before 1.25.1 are
+  still in users' browsers. Never write such a value there "temporarily".
+- **`setUser(user, 'jwt')` without a stored JWT falls back to `'cookie'`** and fetches the JWT.
+  Without that fallback, the refusal above would turn a hand-written 2FA page into a sign-in that
+  sends no credentials at all.
+- **`useLtAuthClient().twoFactor.verify*` strips a non-JWT `token` from the answer**, and
+  `authenticateWithPasskey()` returns no `session`. Keep both: application code that never
+  receives the session token cannot store it.
 
 ### How Auth Cookies Work:
 1. `setUser()` writes the cookie via both `useCookie().value` (for SSR sync) and `document.cookie` (for immediate availability)

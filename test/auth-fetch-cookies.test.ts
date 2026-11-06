@@ -38,10 +38,10 @@ const API_BASE = 'https://api.example.com/iam';
 
 let fetchSpy: ReturnType<typeof vi.fn>;
 
-/** Put the composable into JWT mode with a signed-in user. */
+/** Put the composable into JWT mode with a signed-in user. The tokens are JWT-shaped: anything else is refused (session-token-guard.test.ts). */
 function signedInWithJwt(): void {
   document.cookie = `lt-auth-state=${encodeURIComponent(JSON.stringify({ authMode: 'jwt', user: { email: 'someone@example.com', id: 'u1' } }))}`;
-  document.cookie = 'lt-jwt-token=a.b.c';
+  document.cookie = 'lt-jwt-token=eyJhbGciOiJFZERTQSJ9.eyJzdGFsZSI6dHJ1ZX0.c3RhbGU';
 }
 
 /** The `credentials` value the wrapper used for the last request. */
@@ -123,7 +123,7 @@ describe('fetchWithAuth — stale JWT in JWT mode', () => {
         return { json: async () => ({ token: tokenResponse.token }), ok: tokenResponse.ok, status: tokenResponse.status };
       }
       const bearer = new Headers(init?.headers).get('Authorization');
-      return bearer === 'Bearer fresh.jwt.token' ? { json: async () => ({}), ok: true, status: 200 } : { json: async () => ({}), ok: false, status: 401 };
+      return bearer === 'Bearer eyJhbGciOiJFZERTQSJ9.eyJmcmVzaCI6dHJ1ZX0.ZnJlc2g' ? { json: async () => ({}), ok: true, status: 200 } : { json: async () => ({}), ok: false, status: 401 };
     });
   }
 
@@ -134,7 +134,7 @@ describe('fetchWithAuth — stale JWT in JWT mode', () => {
   it('mints a fresh token from the session cookie and retries the request once', async () => {
     const { useLtAuth } = await import('../src/runtime/composables/auth/use-lt-auth');
     signedInWithJwt();
-    backendWithStaleBearer({ ok: true, status: 200, token: 'fresh.jwt.token' });
+    backendWithStaleBearer({ ok: true, status: 200, token: 'eyJhbGciOiJFZERTQSJ9.eyJmcmVzaCI6dHJ1ZX0.ZnJlc2g' });
     const { fetchWithAuth } = useLtAuth();
 
     const response = await fetchWithAuth('https://api.example.com/measures', { body: '{"a":1}', method: 'POST' });
@@ -144,7 +144,7 @@ describe('fetchWithAuth — stale JWT in JWT mode', () => {
     expect(callsTo(`${API_BASE}/token`)[0]?.credentials).toBe('include');
     const attempts = callsTo('https://api.example.com/measures');
     expect(attempts).toHaveLength(2);
-    expect(new Headers(attempts[1]?.headers).get('Authorization')).toBe('Bearer fresh.jwt.token');
+    expect(new Headers(attempts[1]?.headers).get('Authorization')).toBe('Bearer eyJhbGciOiJFZERTQSJ9.eyJmcmVzaCI6dHJ1ZX0.ZnJlc2g');
     expect(attempts[1]?.credentials).toBe('omit');
     expect(attempts[1]?.body).toBe('{"a":1}');
   });
@@ -165,7 +165,7 @@ describe('fetchWithAuth — stale JWT in JWT mode', () => {
     const { useLtAuth } = await import('../src/runtime/composables/auth/use-lt-auth');
     signedInWithJwt();
     fetchSpy.mockImplementation(async (url: string) =>
-      url === `${API_BASE}/token` ? { json: async () => ({ token: 'fresh.jwt.token' }), ok: true, status: 200 } : { json: async () => ({}), ok: false, status: 401 },
+      url === `${API_BASE}/token` ? { json: async () => ({ token: 'eyJhbGciOiJFZERTQSJ9.eyJmcmVzaCI6dHJ1ZX0.ZnJlc2g' }), ok: true, status: 200 } : { json: async () => ({}), ok: false, status: 401 },
     );
     const { fetchWithAuth } = useLtAuth();
 
@@ -179,7 +179,7 @@ describe('fetchWithAuth — stale JWT in JWT mode', () => {
   it('mints one token for a burst of parallel 401s, not one per request', async () => {
     const { useLtAuth } = await import('../src/runtime/composables/auth/use-lt-auth');
     signedInWithJwt();
-    backendWithStaleBearer({ ok: true, status: 200, token: 'fresh.jwt.token' });
+    backendWithStaleBearer({ ok: true, status: 200, token: 'eyJhbGciOiJFZERTQSJ9.eyJmcmVzaCI6dHJ1ZX0.ZnJlc2g' });
     const { fetchWithAuth } = useLtAuth();
 
     const responses = await Promise.all([
@@ -202,7 +202,7 @@ describe('fetchWithAuth — stale JWT in JWT mode', () => {
     setStubCookieRefsPerCall(true);
     const { useLtAuth } = await import('../src/runtime/composables/auth/use-lt-auth');
     signedInWithJwt();
-    backendWithStaleBearer({ ok: true, status: 200, token: 'fresh.jwt.token' });
+    backendWithStaleBearer({ ok: true, status: 200, token: 'eyJhbGciOiJFZERTQSJ9.eyJmcmVzaCI6dHJ1ZX0.ZnJlc2g' });
     const page = useLtAuth();
     const widget = useLtAuth();
 
@@ -214,6 +214,6 @@ describe('fetchWithAuth — stale JWT in JWT mode', () => {
     expect(responses.map((r) => r.status)).toEqual([200, 200]);
     expect(callsTo(`${API_BASE}/token`)).toHaveLength(1);
     // Adopted, so the widget's next request does not start with the expired bearer.
-    expect(widget.jwtToken.value).toBe('fresh.jwt.token');
+    expect(widget.jwtToken.value).toBe('eyJhbGciOiJFZERTQSJ9.eyJmcmVzaCI6dHJ1ZX0.ZnJlc2g');
   });
 });

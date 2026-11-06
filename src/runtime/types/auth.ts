@@ -120,7 +120,8 @@ export interface LtAuthResponse {
  */
 export interface LtPasskeyAuthResult {
   error?: string;
-  session?: { token: string };
+  // No `session`: it carried Better-Auth's session token, the value the API keeps in the httpOnly
+  // cookie, and handing it to application code is how it ended up in a readable cookie.
   success: boolean;
   user?: LtUser;
 }
@@ -312,5 +313,18 @@ export interface UseLtAuthReturn {
 
   // Better Auth client passthrough
   passkey?: unknown;
-  twoFactor?: unknown;
+  /**
+   * Better-Auth's two-factor methods (`enable`, `disable` and `generateBackupCodes` hash the
+   * password, as on `useLtAuthClient()`).
+   *
+   * `verifyTotp` and `verifyBackupCode` also finish a sign-in that stopped at the second factor:
+   * they put the user into the auth state on the cookie session and fetch the JWT from
+   * `/iam/token`. The session token Better-Auth puts into their answer is never stored; in the
+   * readable token cookie it would be one XSS away from an attacker. Use these on a 2FA sign-in
+   * page rather than `useLtAuthClient().twoFactor` plus `setUser()`.
+   */
+  twoFactor: Record<string, unknown> & {
+    verifyBackupCode: <T extends { code: string }>(params: T, options?: unknown) => Promise<unknown>;
+    verifyTotp: <T extends { code: string }>(params: T, options?: unknown) => Promise<unknown>;
+  };
 }
