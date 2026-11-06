@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { pinsVendoringRaises } from '../scripts/lib/template-pins.mjs';
+import { judgePins, pinsVendoringRaises } from '../scripts/lib/template-pins.mjs';
 
 const ROOT = process.cwd();
 const pkg = JSON.parse(readFileSync(resolve(ROOT, 'package.json'), 'utf8')) as {
@@ -69,24 +69,56 @@ describe('pinsVendoringRaises — the CLI’s rule', () => {
   });
 });
 
+describe('judgePins — the pending list for the publish order', () => {
+  const raise = { from: '3.3.14', name: 'vue-tsc', section: 'devDependencies' as const, to: '3.3.15' };
+  const entry = { reason: 'maintenance', templateFollowsIn: '2.38.0', to: '3.3.15' };
+
+  it('allows exactly the pending raise until the starter release it names', () => {
+    expect(judgePins([raise], { 'vue-tsc': entry }, '2.37.0')).toEqual({ accepted: [{ entry, raise }], failures: [] });
+  });
+
+  it('fails a raise that no entry allows', () => {
+    expect(judgePins([raise], {}, undefined).failures).toEqual(['devDependencies.vue-tsc: template 3.3.14 → 3.3.15']);
+  });
+
+  it('fails when the raise goes further than the entry allows', () => {
+    expect(judgePins([{ ...raise, to: '3.3.16' }], { 'vue-tsc': entry }, '2.37.0').failures[0]).toMatch(/allows 3\.3\.15/);
+  });
+
+  it('fails once the named starter release is out and the template still lags', () => {
+    expect(judgePins([raise], { 'vue-tsc': entry }, '2.38.0').failures[0]).toMatch(/pending until nuxt-base-starter 2\.38\.0, which is out at 2\.38\.0/);
+  });
+
+  it('fails an entry that is no longer needed, so the list never outlives its reason', () => {
+    expect(judgePins([], { 'vue-tsc': entry }, '2.37.0').failures).toEqual(['pending entry "vue-tsc" is no longer needed: vendoring raises nothing for it. Remove it.']);
+  });
+
+  it('fails an entry without exact versions, and a starter version it cannot read', () => {
+    expect(judgePins([raise], { 'vue-tsc': { templateFollowsIn: 'next', to: '3.3.15' } }, '2.37.0').failures[0]).toMatch(/needs "to" and "templateFollowsIn"/);
+    expect(judgePins([raise], { 'vue-tsc': entry }, undefined).failures[0]).toMatch(/starter's version could not be read/);
+  });
+});
+
 describe('check:template-pins', () => {
   const dir = mkdtempSync(join(tmpdir(), 'lt-template-pins-'));
   afterAll(() => rmSync(dir, { force: true, recursive: true }));
 
-  const run = (template: unknown) => {
-    const file = join(dir, `package-${Math.random().toString(36).slice(2)}.json`);
-    if (template !== undefined) writeFileSync(file, JSON.stringify(template));
-    return spawnSync(process.execPath, ['scripts/check-template-pins.mjs'], {
+  const file = (content: unknown) => {
+    const path = join(dir, `${Math.random().toString(36).slice(2)}.json`);
+    if (content !== undefined) writeFileSync(path, JSON.stringify(content));
+    return path;
+  };
+  const run = (template: unknown, extra: NodeJS.ProcessEnv = {}) =>
+    spawnSync(process.execPath, ['scripts/check-template-pins.mjs'], {
       cwd: ROOT,
       encoding: 'utf8',
-      env: { ...process.env, LT_TEMPLATE_PACKAGE_JSON: file },
+      env: { ...process.env, LT_TEMPLATE_PACKAGE_JSON: file(template), ...extra },
     });
-  };
 
   it('passes when the template already has every version this package has', { timeout: 60_000 }, () => {
     const result = run({ devDependencies: { 'vue-tsc': pkg.devDependencies['vue-tsc'], vitest: pkg.devDependencies.vitest } });
 
-    expect(result.stdout).toMatch(/vendoring raises nothing: 2 shared versions compared/);
+    expect(result.stdout).toMatch(/vendoring raises nothing unexpected: 2 shared versions compared/);
     expect(result.status).toBe(0);
   });
 
@@ -95,7 +127,25 @@ describe('check:template-pins', () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(`devDependencies.vue-tsc: template 0.0.1 → ${pkg.devDependencies['vue-tsc']}`);
-    expect(result.stderr).toMatch(/Vendoring would raise 1 version/);
+    expect(result.stderr).toMatch(/versions the template's own check never ran with/);
+  });
+
+  it('passes a raise the pending list allows, and says until when', { timeout: 60_000 }, () => {
+    const pending = file({ pending: { 'vue-tsc': { templateFollowsIn: '2.38.0', to: pkg.devDependencies['vue-tsc'] } } });
+    const result = run({ devDependencies: { 'vue-tsc': '0.0.1' } }, { LT_STARTER_PACKAGE_JSON: file({ version: '2.37.0' }), LT_TEMPLATE_PINS_PENDING: pending });
+
+    expect(result.stdout).toMatch(/pending: devDependencies\.vue-tsc template 0\.0\.1 → .+, until nuxt-base-starter 2\.38\.0 \(now 2\.37\.0\)/);
+    expect(result.status).toBe(0);
+  });
+
+  it('reads this repository’s pending list in the shape the script expects', () => {
+    const { pending } = JSON.parse(readFileSync(resolve(ROOT, 'scripts/template-pins-pending.json'), 'utf8')) as { pending: Record<string, { templateFollowsIn: string; to: string }> };
+
+    expect(typeof pending).toBe('object');
+    for (const [name, entry] of Object.entries(pending)) {
+      expect(entry.to, name).toMatch(/^\d+\.\d+\.\d+$/);
+      expect(entry.templateFollowsIn, name).toMatch(/^\d+\.\d+\.\d+$/);
+    }
   });
 
   it('fails when the template’s package.json cannot be read, and says nothing was compared', { timeout: 60_000 }, () => {

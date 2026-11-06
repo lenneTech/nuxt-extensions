@@ -27,6 +27,9 @@ import semver from "semver";
 export const TEMPLATE_PACKAGE_JSON_URL =
   "https://raw.githubusercontent.com/lenneTech/nuxt-base-starter/main/nuxt-base-template/package.json";
 
+/** The starter's own package.json: its `version` is the release the template ships in (the template's own says 0.0.1). */
+export const STARTER_PACKAGE_JSON_URL = "https://raw.githubusercontent.com/lenneTech/nuxt-base-starter/main/package.json";
+
 const SECTIONS = /** @type {const} */ (["dependencies", "devDependencies"]);
 
 /** Which framework sections may raise a version in each section of the project. */
@@ -78,6 +81,64 @@ export function pinsVendoringRaises(project, framework) {
   }
 
   return { compared, raised, skipped };
+}
+
+/**
+ * @typedef {{ reason?: string, templateFollowsIn: string, to: string }} PendingPin
+ * @typedef {{ entry: PendingPin, raise: PinRaise }} AcceptedRaise
+ */
+
+/**
+ * Weighs the raises against the pending list (`scripts/template-pins-pending.json`).
+ *
+ * The stack publishes this package before the starter, so a shared tool raised here (a vue-tsc
+ * patch) lags in the template until the starter's next release. A pending entry names the version
+ * this package is on and the starter release that brings the template along. It allows exactly
+ * that raise, and only until that release: an entry whose release came without the version fails,
+ * and so does one that is no longer needed, so the list never outlives its reason.
+ *
+ * @param {PinRaise[]} raised
+ * @param {Record<string, PendingPin>} pending keyed by package name
+ * @param {string | undefined} starterVersion the starter's current version; needed only when `pending` has entries
+ * @returns {{ accepted: AcceptedRaise[], failures: string[] }}
+ */
+export function judgePins(raised, pending, starterVersion) {
+  /** @type {AcceptedRaise[]} */
+  const accepted = [];
+  /** @type {string[]} */
+  const failures = [];
+  const entries = Object.entries(pending ?? {});
+
+  for (const [name, entry] of entries) {
+    if (!semver.valid(entry?.to) || !semver.valid(entry?.templateFollowsIn)) {
+      failures.push(`pending entry "${name}" needs "to" and "templateFollowsIn" as exact versions`);
+    }
+  }
+  if (entries.length > 0 && !semver.valid(starterVersion)) {
+    failures.push(`the starter's version could not be read ("${starterVersion}"), so no pending entry can be weighed`);
+    return { accepted, failures };
+  }
+
+  for (const raise of raised) {
+    const entry = pending?.[raise.name];
+    const label = `${raise.section}.${raise.name}: template ${raise.from} → ${raise.to}`;
+    if (!entry) {
+      failures.push(label);
+    } else if (entry.to !== raise.to) {
+      failures.push(`${label} (the pending entry allows ${entry.to})`);
+    } else if (semver.valid(entry.templateFollowsIn) && semver.gte(/** @type {string} */ (starterVersion), entry.templateFollowsIn)) {
+      failures.push(`${label} (pending until nuxt-base-starter ${entry.templateFollowsIn}, which is out at ${starterVersion} without it)`);
+    } else if (semver.valid(entry.templateFollowsIn)) {
+      accepted.push({ entry, raise });
+    }
+  }
+
+  const raisedNames = new Set(raised.map((raise) => raise.name));
+  for (const [name] of entries) {
+    if (!raisedNames.has(name)) failures.push(`pending entry "${name}" is no longer needed: vendoring raises nothing for it. Remove it.`);
+  }
+
+  return { accepted, failures };
 }
 
 /**
