@@ -46,6 +46,15 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      # Lints src/ as nuxt-base-starter does once it is vendored into app/core/, with the template's
+      # .oxlintrc.json from its `main` branch. Blocking: a finding here is a finding in every new
+      # vendor-mode project. It can turn red with no change in this repository when the template
+      # starts applying more to app/core/, and that is the signal. Deliberately not in publish.yml:
+      # a release must not fail after its tag because another repository changed; `pnpm check`
+      # gates it before the release.
+      - name: Lint as vendored core (nuxt-base-template config)
+        run: pnpm run check:vendored-core
+
       - name: Test
         run: pnpm test
 
