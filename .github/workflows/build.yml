@@ -46,6 +46,14 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      # Lints src/ as nuxt-base-starter does once it is vendored into app/core/, with the template's
+      # .oxlintrc.json from its `main` branch. Non-blocking for the audit's reason: a change in the
+      # template can turn it red with no change in this repository. `pnpm check` runs it as a gate,
+      # so nothing ships past it.
+      - name: Lint as vendored core (nuxt-base-template config)
+        run: pnpm run check:vendored-core
+        continue-on-error: true
+
       - name: Test
         run: pnpm test
 

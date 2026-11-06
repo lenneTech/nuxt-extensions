@@ -459,7 +459,11 @@ fields at `app:beforeMount` and restores them at `app:mounted`, dispatching a sy
 - **nuxt-base-starter lints `app/core/**` with a subset of the plugins in `.oxlintrc.json`, never
   more**, and `lint` here runs with `--deny-warnings`. A plugin only the starter applies reports its
   warnings in every generated project after the release; the 1.24.0 smoke test found three. A plugin
-  the starter wants for `app/core/**` is added here first.
+  the starter wants for `app/core/**` is added here first. `check:vendored-core` (part of `check`)
+  holds this: it copies `src/` into a temporary `app/core/` the way `lt fullstack init` does and lints
+  it with the template's current `.oxlintrc.json` from GitHub, `--deny-warnings`. Red without a change
+  here means the template now applies more to the core; offline it fails rather than passing unseen
+  (`LT_TEMPLATE_OXLINTRC=<path>` lints against a local copy).
 - **The `nuxt/schema` blocks in `runtime/types/module.ts` augment `PublicRuntimeConfig` and nothing
   else.** Vendoring turns them into project source, where they cause TS2310, and the cli removes a
   block only while it holds that one interface. Type server-only config where it is read.
