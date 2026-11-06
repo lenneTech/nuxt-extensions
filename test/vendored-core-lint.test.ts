@@ -150,6 +150,9 @@ describe('check:vendored-core', () => {
     expect(pkg.scripts['check:raw']).toContain('pnpm run lint && pnpm run check:vendored-core &&');
     expect(pkg.scripts['check:fix']).toContain('pnpm run lint:fix && pnpm run check:vendored-core &&');
     expect(pkg.scripts['check:naf']).toContain('pnpm run lint:fix && pnpm run check:vendored-core &&');
-    expect(readFileSync(resolve(ROOT, '.github/workflows/build.yml'), 'utf8')).toMatch(/run: pnpm run check:vendored-core/);
+    // Blocking in CI: the step itself, up to the next step, carries no continue-on-error.
+    const step = /- name: Lint as vendored core[^\n]*\n((?:(?!\n\s*- name:)[\s\S])*)/.exec(readFileSync(resolve(ROOT, '.github/workflows/build.yml'), 'utf8'))?.[1] ?? '';
+    expect(step).toMatch(/run: pnpm run check:vendored-core/);
+    expect(step).not.toMatch(/continue-on-error/);
   });
 });
