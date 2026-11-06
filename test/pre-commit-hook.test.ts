@@ -61,9 +61,13 @@ interface Fixture {
 const fixtures: string[] = [];
 
 /** A repository with the real hook, the real script (imported from here) and the stubbed lint, with `files` committed. */
-function createFixture(files: Record<string, string>): Fixture {
-  const dir = mkdtempSync(join(tmpdir(), 'lt-pre-commit-'));
+function createFixture(files: Record<string, string>, parent = tmpdir()): Fixture {
+  const dir = mkdtempSync(join(parent, 'lt-pre-commit-'));
   fixtures.push(dir);
+  // pnpm (for the stubbed scripts) looks for the nearest pnpm-workspace.yaml in every parent directory. Without
+  // this one it would take a file another user planted in a shared /tmp, `scriptShell` included, and run the
+  // scripts through whatever that names (review of DEV-4043, reproduced). This one ends the search here.
+  writeFileSync(join(dir, 'pnpm-workspace.yaml'), 'packages: []\n');
   mkdirSync(join(dir, '.githooks'));
   mkdirSync(join(dir, 'scripts'));
   mkdirSync(join(dir, 'src'));
@@ -145,6 +149,22 @@ describe('pre-commit hook — what reaches the commit', () => {
   it('runs without pnpm installing anything, in the fixture or in this repository', () => {
     expect(String(commit.stderr)).not.toMatch(/ERR_PNPM_|install that runs before scripts/);
     expect(existsSync(join(repo.dir, 'node_modules'))).toBe(false);
+  });
+
+  it('ignores a pnpm-workspace.yaml somebody placed above the fixture', { timeout: 60_000 }, () => {
+    const parent = mkdtempSync(join(tmpdir(), 'lt-pre-commit-parent-'));
+    fixtures.push(parent);
+    const marker = join(parent, 'planted-shell-ran');
+    const shell = join(parent, process.platform === 'win32' ? 'planted-shell.cmd' : 'planted-shell.sh');
+    writeFileSync(shell, process.platform === 'win32' ? `@echo ran>>${JSON.stringify(marker)}\r\n` : `#!/bin/sh\necho ran >> ${JSON.stringify(marker)}\n`, { mode: 0o755 });
+    writeFileSync(join(parent, 'pnpm-workspace.yaml'), `packages: ["*"]\nscriptShell: ${JSON.stringify(shell)}\n`);
+    const planted = createFixture({ 'src/a.ts': FORMATTED('a', 1) }, parent);
+    planted.write('src/a.ts', UNFORMATTED('a', 2));
+    planted.git('add', 'src/a.ts');
+
+    expect(planted.commit('-m', 'planted').status).toBe(0);
+
+    expect(existsSync(marker)).toBe(false);
   });
 });
 
