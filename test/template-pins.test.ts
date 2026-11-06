@@ -108,11 +108,20 @@ describe('check:template-pins', () => {
     if (content !== undefined) writeFileSync(path, JSON.stringify(content));
     return path;
   };
+  // Every input is the test's own: an entry in this repository's pending list, or one left in the
+  // caller's environment, would otherwise flip the expected exit codes and send the script to GitHub
+  // for the starter's version (review of DEV-4042, reproduced).
   const run = (template: unknown, extra: NodeJS.ProcessEnv = {}) =>
     spawnSync(process.execPath, ['scripts/check-template-pins.mjs'], {
       cwd: ROOT,
       encoding: 'utf8',
-      env: { ...process.env, LT_TEMPLATE_PACKAGE_JSON: file(template), ...extra },
+      env: {
+        ...process.env,
+        LT_STARTER_PACKAGE_JSON: file({ version: '0.0.0' }),
+        LT_TEMPLATE_PACKAGE_JSON: file(template),
+        LT_TEMPLATE_PINS_PENDING: file({ pending: {} }),
+        ...extra,
+      },
     });
 
   it('passes when the template already has every version this package has', { timeout: 60_000 }, () => {
