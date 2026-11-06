@@ -1,10 +1,11 @@
 #!/bin/sh
-# Pre-commit hook: format the staged files, then lint
+# Pre-commit hook: format what is staged, then lint
 #
-# lint-staged formats only what is staged and re-stages only what it formatted, so a commit carries
-# nothing nobody staged: not another session's edits in a shared checkout, and not the unstaged
-# lines of a partially staged file. Never add a `git add` here; test/pre-commit-hook.test.ts holds that.
-pnpm exec lint-staged || exit 1
+# scripts/format-staged.mjs formats the staged content of each file under src/ and writes it back to
+# the index. It touches no other file and runs no stash, reset or `git add`, so a commit carries
+# exactly what was staged: not another session's edits in a shared checkout, and not the unstaged
+# lines of a partially staged file. test/pre-commit-hook.test.ts holds that.
+node scripts/format-staged.mjs || exit 1
 
 # The type-aware lint reads tsconfig.json, which extends .nuxt/tsconfig.json (written by dev:prepare).
 [ -f .nuxt/tsconfig.json ] || pnpm dev:prepare || exit 1
