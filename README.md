@@ -866,6 +866,21 @@ await load();
 is private to the owner; `scope: 'tenant'` is shared across the owner's tenant. The list
 returned by `load()` is already server-filtered to what the user is allowed to see.
 
+`load()` lists active prompts only, which is what a chat picker offers. A management screen
+calls `load({ includeDisabled: true })` (nest-server >= 12.7.0), so a prompt saved with
+`enabled: false` stays in the list and can be switched on again:
+
+```typescript
+// Settings page: every prompt, disabled ones included
+const { load, prompts, update } = useLtAiPrompts();
+onMounted(() => load({ includeDisabled: true }));
+// The reload after create / update / remove asks for the same list
+await update(prompt.id, { enabled: false });
+```
+
+Each `useLtAiPrompts()` call has its own list, so the chat picker on the same page stays on
+active prompts. An API before 12.7.0 ignores the parameter and lists active prompts only.
+
 ### AI status
 
 `useLtAiStatus()` says whether the API's AI module is on, so AI pages and navigation entries can

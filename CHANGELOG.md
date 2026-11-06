@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.27.0] - 2026-11-06
+
+Feature release for `@lenne.tech/nest-server` 12.7.0, which lists disabled AI prompts on request
+(DEV-4126). Additive only: `load()` without options behaves as before, and an older API ignores the
+new parameter. No option, runtime config, environment variable or peer range changed.
+
+### Added
+
+- **`useLtAiPrompts().load({ includeDisabled: true })`** also lists disabled prompts
+  (`GET /ai/prompts?includeDisabled=true`). A prompt saved with "enabled" switched off disappeared
+  from the management list, so it could be neither switched on again nor deleted. `load()` without
+  options keeps listing active prompts only, which is what a chat picker offers.
+- **The reload after `create`, `update` and `remove` uses the options of the last `load()`**, so a
+  prompt saved as disabled stays in a management list. A later `load()` without options goes back
+  to active prompts.
+- **`LtAiPromptsLoadOptions`** type.
+
 ## [1.26.0] - 2026-11-06
 
 Security release (DEV-4082). Better-Auth's session token could end up in the readable `lt-jwt-token`

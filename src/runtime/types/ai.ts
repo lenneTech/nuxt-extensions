@@ -384,7 +384,10 @@ export interface LtAiPrompt {
   createdAt?: string;
   /** Optional description. */
   description?: string;
-  /** Whether the prompt is active (disabled prompts are hidden). */
+  /**
+   * Whether the prompt is active. The server lists disabled prompts only on request
+   * (`useLtAiPrompts().load({ includeDisabled: true })`, nest-server >= 12.7.0).
+   */
   enabled?: boolean;
   /** Optional icon hint (lucide name or single emoji). */
   icon?: string;
@@ -504,6 +507,19 @@ export interface UseLtAiUsageReturn {
 }
 
 /**
+ * Options of `useLtAiPrompts().load()`.
+ */
+export interface LtAiPromptsLoadOptions {
+  /**
+   * Also list disabled prompts (`GET /ai/prompts?includeDisabled=true`, nest-server >= 12.7.0).
+   * For a management screen, where a disabled prompt must stay editable. A chat picker leaves it
+   * off, because it must offer active prompts only. A server before 12.7.0 ignores the parameter
+   * and lists active prompts only.
+   */
+  includeDisabled?: boolean;
+}
+
+/**
  * User-facing prompt composable. Lets any signed-in user manage their own
  * prompts ("Vorlagen") and use the visible ones (own private + tenant public)
  * in a chat.
@@ -511,7 +527,11 @@ export interface UseLtAiUsageReturn {
 export interface UseLtAiPromptsReturn {
   create: (input: LtAiPromptInput) => Promise<LtAiPrompt>;
   error: DeepReadonly<Ref<null | string>>;
-  load: () => Promise<void>;
+  /**
+   * Loads the prompts the user may see. Its options also apply to the reload after `create`,
+   * `update` and `remove`, so a prompt saved as disabled stays in a management list.
+   */
+  load: (options?: LtAiPromptsLoadOptions) => Promise<void>;
   loading: DeepReadonly<Ref<boolean>>;
   prompts: DeepReadonly<Ref<LtAiPrompt[]>>;
   remove: (id: string) => Promise<LtAiPrompt>;

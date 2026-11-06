@@ -60,6 +60,7 @@ export type {
   LtAiPromptHintInput,
   LtAiPromptInput,
   LtAiPromptRunInput,
+  LtAiPromptsLoadOptions,
   LtAiResponse,
   LtAiSettings,
   LtAiSettingsInput,

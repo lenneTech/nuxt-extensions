@@ -43,7 +43,7 @@ src/
 | `useLtAiSettings()` | The user's own AI settings: MCP confirmation switch (`GET/PUT /ai/settings`, `enforced` → show disabled) |
 | `useLtAiStatus()` | Whether the API's AI module is on (`GET /ai/status`, public; 404 = off): `enabled`, `mcp`, shared `useState`, one request per app start, fails closed |
 | `useLtAiUsage()` | Full token/prompt usage breakdown (`GET /ai/usage`) |
-| `useLtAiPrompts()` | User-facing CRUD for re-usable prompt snippets ("Vorlagen", `scope: 'user'` / `'tenant'`) |
+| `useLtAiPrompts()` | User-facing CRUD for re-usable prompt snippets ("Vorlagen", `scope: 'user'` / `'tenant'`). `load()` = active only (chat picker); `load({ includeDisabled: true })` = management list (nest-server >= 12.7.0), kept for the reload after create/update/remove |
 | `useLtAiPlaceholders()` | Loads the backend's `{{placeholder}}` registry for editor sidebars |
 | `useLtAiAdmin()` | Admin CRUD: connections, preferences, budget limits, slots, prompt hints, interactions — server-gated |
 
