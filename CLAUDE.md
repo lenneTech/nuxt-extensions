@@ -212,7 +212,7 @@ Better-Auth answers `two-factor/verify-totp` and `verify-backup-code` with `{ to
 unchanged. That token is the session token, the value the API keeps in the httpOnly
 `iam.session_token` cookie. The starter's 2FA page stored it as the "JWT" in the readable
 `lt-jwt-token` cookie, so one XSS was enough to take the session for its whole lifetime
-(nuxt-extensions 1.25.1 closes it).
+(nuxt-extensions 1.26.0 closes it).
 
 - **`lt-jwt-token` holds a JWT or nothing.** The `jwtToken` ref, `setLtJwtToken()`,
   `switchToJwtMode()`, `attemptLtJwtSwitch()` and `signIn` / `signUp` take a value only when
@@ -221,7 +221,7 @@ unchanged. That token is the session token, the value the API keeps in the httpO
 - **A JWT comes from `GET /iam/token`, or from a body the server already converted** (sign-in with
   `cookies: false`; nest-server's `resolveJwtToken` never returns the session token there).
 - **Anything else found in `lt-jwt-token` is deleted** on start (`useLtAuth()`) and on read
-  (`getLtJwtToken()`), along with its JWT mode, because leaked values from before 1.25.1 are
+  (`getLtJwtToken()`), along with its JWT mode, because leaked values from before 1.26.0 are
   still in users' browsers. Never write such a value there "temporarily".
 - **`setUser(user, 'jwt')` without a stored JWT falls back to `'cookie'`** and fetches the JWT.
   Without that fallback, the refusal above would turn a hand-written 2FA page into a sign-in that

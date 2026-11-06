@@ -5,6 +5,69 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.26.0] - 2026-11-06
+
+Security release (DEV-4082). Better-Auth's session token could end up in the readable `lt-jwt-token`
+cookie, where any script on the page could take it. **The bump alone closes the leak in a copied
+`2fa.vue`**: after the update such a page signs in on the cookie session, and nothing readable holds
+the token any more. Contains breaking changes; the major digit tracks Nuxt, so they ship as a minor.
+See `migration-guides/1.25.x-to-1.26.0.md`.
+
+### Breaking
+
+- **`LtPasskeyAuthResult` has no `session` any more.** It carried the session token.
+  `authenticateWithPasskey()` returns `{ success, error?, user? }`.
+- **`useLtAuth().twoFactor` is typed and always present** (was `unknown`).
+- **A value that is not a JWT is refused** by `jwtToken`, `setLtJwtToken()`, `switchToJwtMode()`,
+  `attemptLtJwtSwitch()` and `signIn` / `signUp`. Test fixtures need JWT-shaped tokens: `'a.b.c'` or
+  `'abc'` no longer stick.
+
+### Security
+
+- **`lt-jwt-token` holds a JWT or nothing.** Better-Auth answers `two-factor/verify-totp` and
+  `verify-backup-code` with `{ token, user }`, and `passkey/verify-authentication` with
+  `{ session, user }`. The token is the session token, the value the API keeps in the httpOnly
+  `iam.session_token` cookie, and nest-server forwards these routes unchanged. A 2FA page that
+  stored it as the "JWT" (the nuxt-base-starter `2fa.vue` did) made it readable by every script, for
+  the session's whole lifetime. `isLtJwtShaped()` (new in `/lib`, the same test as nest-server's
+  `isJwtShaped`) now guards every write and read.
+- **Leaked values are deleted.** A value in `lt-jwt-token` that is not a JWT is removed on start
+  (`useLtAuth()`) and on read (`getLtJwtToken()`), together with the JWT mode it came with.
+- **`useLtAuthClient().twoFactor.verifyTotp()` / `verifyBackupCode()` drop the session token from the
+  answer**, so a copied `2fa.vue` takes its cookie branch.
+- **`setUser(user, 'jwt')` without a stored JWT signs in on the cookie session** and fetches the JWT
+  from `/iam/token`.
+- **`authenticateWithPasskey()` never stores the session token**, and reads a missing user through
+  the cookie session.
+
+### Added
+
+- **`useLtAuth().twoFactor.verifyTotp()` / `verifyBackupCode()`** finish a sign-in that stopped at
+  the second factor: the user on the cookie session, the JWT from `/iam/token`. Only a JWT a server
+  already put into the answer (JWT mode, `cookies: false`) is taken as it is.
+- **`isLtJwtShaped(value)`** in `@lenne.tech/nuxt-extensions/lib`.
+
+### Fixed
+
+- **README sign-in example**: it reads `requiresTwoFactor` from `result.data`, where nest-server puts
+  it for an account with 2FA. New section "Two-factor sign-in, and what `lt-jwt-token` may hold".
+- **CLAUDE.md**: the rules for `lt-jwt-token` and the 2FA helpers.
+
+### Changed (repository only, not part of the published package)
+
+- **The pre-commit hook commits what was staged, and nothing else** (DEV-4043).
+  `scripts/format-staged.mjs` formats the staged content of each file under `src/` and writes it
+  back to the index. It runs no `git add`, stash or reset, so another session's edits in a shared
+  checkout stay out of the commit.
+- **`check:vendored-core`** (DEV-4041) lints `src/` the way nuxt-base-starter lints it once it is
+  vendored into `app/core/`, with the template's current `.oxlintrc.json` and `--deny-warnings`. It
+  runs in `check`, and blocking in `build.yml`.
+- **`check:template-pins`** (DEV-4042) fails when `lt fullstack init` would raise a version in
+  nuxt-base-template, using the CLI's rule. Shared tools are raised in the template first;
+  `scripts/template-pins-pending.json` allows one version per package until the starter release that
+  brings the template along. It runs in `check`, and blocking in `build.yml`; `semver` is a new
+  devDependency.
+
 ## [1.25.0] - 2026-11-05
 
 Feature release for `@lenne.tech/nest-server` 12.4.0, which closes the first-admin setup over HTTP on
