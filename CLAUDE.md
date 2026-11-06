@@ -464,6 +464,19 @@ fields at `app:beforeMount` and restores them at `app:mounted`, dispatching a sy
   it with the template's current `.oxlintrc.json` from GitHub, `--deny-warnings`. Red without a change
   here means the template now applies more to the core; offline it fails rather than passing unseen
   (`LT_TEMPLATE_OXLINTRC=<path>` lints against a local copy).
+- **A version this repository shares with nuxt-base-template is raised in the template first.**
+  `lt fullstack init` raises every shared version to this repository's when that is newer, so a
+  vendor-mode project gets versions the template's own `check` never ran with: vue-tsc 3.3.14 broke
+  a template component after 1.24.0, partly with exit 0. `check:template-pins` (part of `check`)
+  applies the CLI's rule to the template's `package.json` on GitHub and fails on every version
+  vendoring would raise. When it does, raise the version in nuxt-base-starter (whose `check` runs
+  the type check, lint and tests with it), or keep this repository on the template's version until
+  then. Offline it fails; `LT_TEMPLATE_PACKAGE_JSON=<path>` compares against a local copy.
+  The stack publishes this repository before the starter, so a release here must not wait for the
+  template: `scripts/template-pins-pending.json` allows one named version per package until the
+  starter release that brings the template along (`"vue-tsc": { "to": "3.3.15",
+  "templateFollowsIn": "2.38.0" }`). That release coming out without it fails `check`, and so does
+  an entry nobody needs any more: remove it once the template has the version.
 - **The `nuxt/schema` blocks in `runtime/types/module.ts` augment `PublicRuntimeConfig` and nothing
   else.** Vendoring turns them into project source, where they cause TS2310, and the cli removes a
   block only while it holds that one interface. Type server-only config where it is read.

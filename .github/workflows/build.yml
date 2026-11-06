@@ -55,6 +55,12 @@ jobs:
       - name: Lint as vendored core (nuxt-base-template config)
         run: pnpm run check:vendored-core
 
+      # Fails when `lt fullstack init` would raise a version in nuxt-base-template (its package.json
+      # on `main`) to this package's version: the template's own check never ran with it. Blocking
+      # and not in publish.yml, for the reasons of the step above.
+      - name: Versions the template gets when vendored (nuxt-base-template package.json)
+        run: pnpm run check:template-pins
+
       - name: Test
         run: pnpm test
 

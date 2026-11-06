@@ -1,0 +1,4 @@
+{
+  "$comment": "Versions this repository may be ahead of nuxt-base-template on, each until the nuxt-base-starter release that brings the template along. Entry: \"<package>\": { \"to\": \"<this repository's version>\", \"templateFollowsIn\": \"<starter version>\", \"reason\": \"...\" }. Read by scripts/check-template-pins.mjs; an entry whose release came without the version, or that is no longer needed, fails check. See CLAUDE.md.",
+  "pending": {}
+}
