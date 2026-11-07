@@ -820,6 +820,22 @@ override that never calls `super.onUploadComplete(upload)`).
 </template>
 ```
 
+The components style themselves with Tailwind 4 utilities. Tailwind only generates the classes it
+finds in your sources, and a package in `node_modules` is not among them, so in npm mode add the
+package's runtime to the stylesheet that imports Tailwind:
+
+```css
+/* app/assets/css/tailwind.css */
+@import 'tailwindcss';
+@import '@nuxt/ui';
+@source '../../../node_modules/@lenne.tech/nuxt-extensions/dist/runtime';
+```
+
+The path is relative to that stylesheet. A vendored core (`app/core`) is scanned with the app
+anyway, and Tailwind ignores a `@source` path that does not exist, so the line can stay after a
+switch to vendor mode. Without it, a transition whose classes the app does not use elsewhere runs
+without its duration or easing.
+
 ### Web Share API
 
 ```vue
