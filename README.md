@@ -166,7 +166,7 @@ export default defineNuxtConfig({
   ltExtensions: {
     // Auth configuration
     auth: {
-      enabled: true,                // Enable auth features
+      enabled: true,                // Only gates the 401 interceptor below; useLtAuth() etc. stay available
       baseURL: '',                  // API base URL (empty = use env vars)
       basePath: '/iam',             // Better-Auth endpoint prefix
       loginPath: '/auth/login',     // Login redirect path
