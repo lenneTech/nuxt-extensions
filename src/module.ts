@@ -447,7 +447,7 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
     // project and has no diagnostic value in someone else's production CI log.
     if (nuxt.options.dev) {
       console.log(`[${name}] Module loaded with config:`, {
-        auth: resolvedOptions.auth?.enabled ? 'enabled' : 'disabled',
+        authInterceptor: resolvedOptions.auth?.enabled && resolvedOptions.auth?.interceptor?.enabled ? 'on' : 'off',
         i18nAutoMerge: resolvedOptions.i18n?.autoMerge,
         tusEndpoint: resolvedOptions.tus?.defaultEndpoint,
       });

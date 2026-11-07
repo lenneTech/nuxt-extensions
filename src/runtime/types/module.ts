@@ -68,7 +68,13 @@ export interface LtAuthModuleOptions {
   baseURL?: string;
   /** Override the cookie names used for auth state and JWT storage */
   cookieNames?: LtAuthCookieNamesOptions;
-  /** Enable the auth module (default: true) */
+  /**
+   * Gate of the 401 auth interceptor plugin (default: true). Despite its name it does not switch
+   * the auth module off: `useLtAuth()`, `useLtAuthClient()`, the auth helpers and the Better-Auth
+   * client stay registered, because the AI composables and offline sync authenticate through
+   * `ltAuthFetch` and TUS uploads send the same session. `false` has the same effect as
+   * `interceptor.enabled: false`; prefer that.
+   */
   enabled?: boolean;
   /** Enable admin plugin (default: true) */
   enableAdmin?: boolean;

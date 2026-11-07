@@ -62,7 +62,7 @@ export default defineNuxtConfig({
   modules: ['@lenne.tech/nuxt-extensions'],
   ltExtensions: {
     auth: {
-      enabled: true,
+      enabled: true,                 // only gates the 401 interceptor (= interceptor.enabled); the auth composables stay
       basePath: '/iam',              // Better-Auth endpoint prefix
       loginPath: '/auth/login',
       enableAdmin: true,
