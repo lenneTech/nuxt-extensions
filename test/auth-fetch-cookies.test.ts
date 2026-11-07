@@ -176,6 +176,20 @@ describe('fetchWithAuth — stale JWT in JWT mode', () => {
     expect(callsTo(`${API_BASE}/token`)).toHaveLength(1);
   });
 
+  it('leaves a 401 from a cookie-bound path alone: the cookie failed there, not the bearer', async () => {
+    const { useLtAuth } = await import('../src/runtime/composables/auth/use-lt-auth');
+    signedInWithJwt();
+    backendWithStaleBearer({ ok: true, status: 200, token: 'eyJhbGciOiJFZERTQSJ9.eyJmcmVzaCI6dHJ1ZX0.ZnJlc2g' });
+    const { fetchWithAuth } = useLtAuth();
+
+    // A wrong 2FA code must not be sent a second time with a new token
+    const response = await fetchWithAuth(`${API_BASE}/two-factor/verify-totp`, { body: '{"code":"000000"}', method: 'POST' });
+
+    expect(response.status).toBe(401);
+    expect(callsTo(`${API_BASE}/two-factor/verify-totp`)).toHaveLength(1);
+    expect(callsTo(`${API_BASE}/token`)).toHaveLength(0);
+  });
+
   it('mints one token for a burst of parallel 401s, not one per request', async () => {
     const { useLtAuth } = await import('../src/runtime/composables/auth/use-lt-auth');
     signedInWithJwt();
