@@ -131,6 +131,9 @@ renewed an expired JWT. Do not write a third one; a caller with its own state pa
   JWT mode: the bearer had expired (15 minutes against a 7-day session). One `GET <basePath>/token`
   per burst, shared by every caller (`requestLtJwtAfter401`); each caller stores the token where it
   keeps its own (`adoptJwt`: the cookies, or the composable's `useCookie` refs).
+- **A 401 the bearer did not cause is never retried in JWT mode.** `ltAuthFetch`: Better-Auth's own
+  routes (under the auth base), where a 401 is the verdict of sign-in, 2FA or passkey; sending a wrong
+  password or code again counts twice against the rate limit. `fetchWithAuth`: the cookie-bound paths.
 - **Cookies in JWT mode differ on purpose.** `ltAuthFetch` always sends them: nest-server
   (>= 11.13.1) falls back to the session cookie when the bearer fails, and Better-Auth's own routes
   read the session from it. `fetchWithAuth` sends them only to passkey, 2FA and `/get-session`

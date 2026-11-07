@@ -130,6 +130,18 @@ describe('ltAuthFetch — an expired JWT', () => {
     expect(tokenCalls()).toHaveLength(1);
   });
 
+  it("passes a 401 from Better-Auth's own routes through: a wrong code or password must not be sent twice", async () => {
+    signedIn('jwt');
+    backend();
+
+    const totp = await ltAuthFetch(`${API}/iam/two-factor/verify-totp`, { body: '{"code":"000000"}', method: 'POST' });
+    const signIn = await ltAuthFetch(`${API}/iam/sign-in/email`, { body: '{"email":"someone@test.com"}', method: 'POST' });
+
+    expect([totp.status, signIn.status]).toEqual([401, 401]);
+    expect(callsTo((url) => url.includes('/iam/two-factor/') || url.includes('/iam/sign-in/'))).toHaveLength(2);
+    expect(tokenCalls()).toHaveLength(0);
+  });
+
   it('leaves a 401 alone when nobody is signed in', async () => {
     backend();
 

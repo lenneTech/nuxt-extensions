@@ -533,7 +533,9 @@ the AI composables and offline sync) run through one implementation.
 - **A 401 while signed in fetches a JWT once and retries the request once.** In cookie mode that
   is the switch to JWT; in JWT mode it renews an expired JWT, which lives 15 minutes while the
   session lasts 7 days. Requests that fail in the same burst share one `GET <basePath>/token`. A
-  401 that survives the fresh token reaches the caller unchanged.
+  401 that survives the fresh token reaches the caller unchanged, and so does a 401 in JWT mode from
+  Better-Auth's own routes (sign-in, 2FA, passkey): there it is the flow's verdict, and a wrong
+  password or code must not be sent twice.
 - **The JWT comes from `auth.basePath`.** Without an argument, `ltAuthFetch`, `createLtAuthFetch()`
   and `attemptLtJwtSwitch()` read it from the module config; they used to fetch it from `/iam`
   whatever was configured. A path passed explicitly still wins.

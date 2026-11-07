@@ -664,6 +664,12 @@ function ltUrlRequiresCookies(url: string): boolean {
   return LT_PATHS_REQUIRING_COOKIES.some((path) => url.includes(path));
 }
 
+/** Whether `url` is one of Better-Auth's own routes (under the auth API base, e.g. `/iam/sign-in/email`). */
+function isLtAuthRoute(url: string, basePath?: string): boolean {
+  const base = getLtApiBase(basePath);
+  return url === base || url.startsWith(`${base}/`);
+}
+
 /**
  * Where a caller of the authenticated fetch keeps its auth mode and its JWT.
  *
@@ -737,12 +743,16 @@ function requestLtJwtAfter401(basePath?: string): Promise<null | string> {
  *    bearer was most likely expired: the JWT lives 15 minutes, the session behind it 7 days, and
  *    nothing renews it while the user works.
  * 3. A 401 that survives the fresh token, or one no token can be fetched for, reaches the caller
- *    unchanged. So does a 401 on a cookie-bound path in JWT mode with `'auth-paths'`: the cookie
- *    failed there, not the bearer.
+ *    unchanged. So does a 401 in JWT mode that the bearer did not cause: with `'auth-paths'` on a
+ *    cookie-bound path (the cookie failed there), with `'always'` on Better-Auth's own routes, where
+ *    the cookie rides along anyway and a 401 is the flow's verdict. A wrong password or 2FA code
+ *    sent a second time would count twice against the rate limit.
  */
 export function createLtAuthFetchFor(options: LtAuthFetchOptions) {
   const { basePath, cookiesInJwtMode = 'always', state } = options;
   const credentialsFor = (url: string, jwtMode: boolean): RequestCredentials => (jwtMode && cookiesInJwtMode === 'auth-paths' && !ltUrlRequiresCookies(url) ? 'omit' : 'include');
+  /** Whether a 401 in JWT mode can be the bearer's fault, so a fresh token may fix it (see 3. above). */
+  const bearerMayHaveFailed = (url: string): boolean => (cookiesInJwtMode === 'auth-paths' ? !ltUrlRequiresCookies(url) : !isLtAuthRoute(url, basePath));
 
   return async function ltAuthFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
@@ -758,7 +768,7 @@ export function createLtAuthFetchFor(options: LtAuthFetchOptions) {
     if (response.status !== 401 || !state.isAuthenticated()) {
       return response;
     }
-    if (jwtMode && cookiesInJwtMode === 'auth-paths' && ltUrlRequiresCookies(url)) {
+    if (jwtMode && !bearerMayHaveFailed(url)) {
       return response;
     }
     if (!jwtMode) {
