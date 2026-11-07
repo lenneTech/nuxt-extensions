@@ -93,7 +93,7 @@ export function useLtTusUpload(defaultOptions: LtUploadOptions = {}): UseLtTusUp
   const defaultConfig: LtUploadOptions = {
     autoStart: true,
     chunkSize: tusConfig?.defaultChunkSize || 5 * 1024 * 1024, // 5MB chunks
-    endpoint: tusConfig?.defaultEndpoint || '/files/upload',
+    endpoint: tusConfig?.defaultEndpoint || '/tus',
     parallelUploads: 3,
     retryDelays: [0, 1000, 3000, 5000, 10000],
     ...Object.fromEntries(Object.entries(defaultOptions).filter(([, value]) => value !== undefined)),

@@ -104,10 +104,12 @@ export interface LtTusModuleOptions {
   /** Default chunk size in bytes (default: 5MB) */
   defaultChunkSize?: number;
   /**
-   * Default TUS upload endpoint (default: '/files/upload').
+   * Default TUS upload endpoint (default: '/tus', nest-server's TUS path unless its `tus.path` is
+   * changed; before DEV-4072 the default was '/files/upload').
    *
-   * nest-server serves TUS at `/tus` unless its `tus.path` is changed. A relative value is a path
-   * on the API while `resolveAgainstApi` is on; an absolute URL is used as it is.
+   * A relative value is a path on the API while `resolveAgainstApi` is on; an absolute URL is used
+   * as it is. An endpoint ending in `/upload` also sets the base of the `useLtFile()` routes
+   * (`'/api/files/upload'` → `'/api/files'`); any other endpoint leaves them at `/files`.
    */
   defaultEndpoint?: string;
   /**

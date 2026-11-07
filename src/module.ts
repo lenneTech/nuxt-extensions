@@ -75,7 +75,7 @@ const defaultOptions: LtExtensionsModuleOptions = {
   },
   tus: {
     defaultChunkSize: 5 * 1024 * 1024, // 5MB
-    defaultEndpoint: '/files/upload',
+    defaultEndpoint: '/tus',
     resolveAgainstApi: true,
   },
 };
@@ -232,7 +232,7 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
       },
       tus: {
         defaultChunkSize: resolvedOptions.tus?.defaultChunkSize || 5 * 1024 * 1024,
-        defaultEndpoint: resolvedOptions.tus?.defaultEndpoint || '/files/upload',
+        defaultEndpoint: resolvedOptions.tus?.defaultEndpoint || '/tus',
         resolveAgainstApi: resolvedOptions.tus?.resolveAgainstApi ?? true,
       },
     };

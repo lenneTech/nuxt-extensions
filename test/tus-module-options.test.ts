@@ -23,4 +23,14 @@ describe('tus module options', () => {
   it('forwards resolveAgainstApi into the public runtime config, defaulting to true', () => {
     expect(moduleSource).toMatch(/resolveAgainstApi: resolvedOptions\.tus\?\.resolveAgainstApi \?\? true/);
   });
+
+  /**
+   * DEV-4072: nest-server serves TUS at `/tus` unless its `tus.path` is changed; `/files/upload`
+   * made every project set the endpoint itself. ng-base 22 uses `/tus` too.
+   */
+  it("defaults the endpoint to nest-server's /tus, in the module defaults and in the runtime config", () => {
+    expect(moduleSource).toMatch(/tus: \{[^}]*defaultEndpoint: '\/tus',[^}]*\}/);
+    expect(moduleSource).toMatch(/defaultEndpoint: resolvedOptions\.tus\?\.defaultEndpoint \|\| '\/tus',/);
+    expect(moduleSource).not.toContain("'/files/upload'");
+  });
 });
