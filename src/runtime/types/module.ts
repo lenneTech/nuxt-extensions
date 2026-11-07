@@ -76,7 +76,14 @@ export interface LtAuthModuleOptions {
    * `interceptor.enabled: false`; prefer that.
    */
   enabled?: boolean;
-  /** Enable admin plugin (default: true) */
+  /**
+   * Register Better-Auth's admin client plugin (`admin.*`, default: false).
+   *
+   * `@lenne.tech/nest-server` does not register the server-side `admin()` plugin, so the routes
+   * answer 404, and `admin.createUser` / `admin.setUserPassword` are not password-hashed by this
+   * module. Switch it on only for a backend that serves them; `useLtAuth()` warns once when it is on
+   * and `/iam/features` reports no admin plugin. It does not affect `isAdmin`.
+   */
   enableAdmin?: boolean;
   /** Enable passkey plugin (default: true) */
   enablePasskey?: boolean;

@@ -217,7 +217,7 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
     baseURL = defaultBaseURL,
     basePath = defaultBasePath,
     twoFactorRedirectPath = '/auth/2fa',
-    enableAdmin = true,
+    enableAdmin = false,
     enableTwoFactor = true,
     enablePasskey = true,
     plugins: externalPlugins = [],
@@ -299,9 +299,9 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
      * normalising those routes, this wrapper would CREATE the credential-store desync it
      * was meant to prevent.
      *
-     * What that costs, stated plainly: `auth.enableAdmin` defaults to `true`, so the admin
-     * CLIENT plugin is registered in every consuming project. The trap is armed and waiting
-     * for a server that answers. Enabling `admin()` server-side is therefore a LOCKSTEP
+     * What that costs, stated plainly: a project that sets `auth.enableAdmin: true` (the
+     * default until DEV-4076) registers the admin CLIENT plugin, and the trap is armed and
+     * waiting for a server that answers. Enabling `admin()` server-side is therefore a LOCKSTEP
      * change — the routes join nest-server's password-normalisation table and these two
      * methods get `ltSha256` wrappers here, in one release. Half of it produces accounts
      * whose password nobody can log in with, and nothing warns.

@@ -85,7 +85,7 @@ export interface LtAuthClientConfig {
   baseURL?: string;
   /** Auth API base path (default: '/iam' - must match nest-server betterAuth.basePath) */
   basePath?: string;
-  /** Enable admin plugin (default: true) */
+  /** Register Better-Auth's admin client plugin (default: false; nest-server serves no admin routes) */
   enableAdmin?: boolean;
   /** Enable passkey plugin (default: true) */
   enablePasskey?: boolean;

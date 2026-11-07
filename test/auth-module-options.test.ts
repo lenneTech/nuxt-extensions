@@ -54,7 +54,9 @@ describe('auth.enabled', () => {
 
   it('says so in its documentation', () => {
     const types = readFileSync(resolve(process.cwd(), 'src/runtime/types/module.ts'), 'utf8');
-    const doc = /\/\*\*((?:(?!\*\/)[\s\S])*)\*\/\s*enabled\?: boolean;\s*\/\*\* Enable admin plugin/.exec(types)?.[1] ?? '';
+    const start = types.indexOf('export interface LtAuthModuleOptions');
+    const authOptions = types.slice(start, types.indexOf('\n}', start));
+    const doc = /\/\*\*((?:(?!\*\/)[\s\S])*)\*\/\s*enabled\?: boolean;/.exec(authOptions)?.[1] ?? '';
     expect(doc).toContain('interceptor');
     expect(doc).toContain('useLtAuth');
   });

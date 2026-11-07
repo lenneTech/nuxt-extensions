@@ -65,7 +65,7 @@ export default defineNuxtConfig({
       enabled: true,                 // only gates the 401 interceptor (= interceptor.enabled); the auth composables stay
       basePath: '/iam',              // Better-Auth endpoint prefix
       loginPath: '/auth/login',
-      enableAdmin: true,
+      enableAdmin: false,            // nest-server serves no admin routes (DEV-4076)
       enablePasskey: true,
       enableTwoFactor: true,
     },
@@ -378,9 +378,11 @@ passwords this library does **not** hash. (The setup token of `useSystemSetup().
 unhashed too, by design — see "First Admin Setup" below.)
 
 Today that is harmless: `@lenne.tech/nest-server` does not register better-auth's `admin()`
-plugin and has no option to enable it, so those routes 404. But `auth.enableAdmin` defaults to
-`true`, meaning the admin *client* plugin is registered in every consuming project — the trap is
-armed and waiting for a server that answers.
+plugin and has no option to enable it, so those routes 404. Until DEV-4076 `auth.enableAdmin`
+defaulted to `true`, so the admin *client* plugin was registered in every consuming project — a
+trap armed and waiting for a server that answers. It now defaults to `false`, and `useLtAuth()`
+warns once when a project switches it on while `/iam/features` reports no admin plugin
+(`warnLtAdminPluginUnserved`). Do not flip the default back without the lock-step below.
 
 **Enabling `admin()` server-side is therefore a lock-step change across both repos in one
 release:** the two routes join nest-server's password-normalisation table, and these two methods

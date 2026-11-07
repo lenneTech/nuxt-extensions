@@ -172,6 +172,33 @@ function warnOnce(key: string, message: string): void {
 }
 
 /**
+ * Warn, once, when `auth.enableAdmin` is on but the backend's `/iam/features` reports no admin
+ * plugin (DEV-4076).
+ *
+ * `@lenne.tech/nest-server` does not register Better-Auth's `admin()` plugin: every `admin.*` call
+ * answers 404, and `admin.createUser` / `admin.setUserPassword` would send their passwords unhashed
+ * if a server ever answered them. A backend that does serve the routes reports `admin: true`.
+ *
+ * INTERNAL — called by `useLtAuth().fetchFeatures()`. Not part of the public API.
+ */
+export function warnLtAdminPluginUnserved(features: Record<string, unknown>): void {
+  try {
+    const enableAdmin = (useRuntimeConfig().public as Record<string, any>)?.ltExtensions?.auth?.enableAdmin;
+    if (enableAdmin !== true || features.admin === true) {
+      return;
+    }
+  } catch {
+    return;
+  }
+  warnOnce(
+    'admin-plugin-unserved',
+    '[LtAuth] ltExtensions.auth.enableAdmin is on, but the API reports no admin plugin (no `admin` in /iam/features). ' +
+      'admin.* calls answer 404, and admin.createUser / admin.setUserPassword are not password-hashed by this module. ' +
+      'Switch enableAdmin off unless your backend serves the Better-Auth admin routes.',
+  );
+}
+
+/**
  * Clear the one-shot warning state.
  *
  * INTERNAL — test-only. Module-scope state survives every test in a file that
