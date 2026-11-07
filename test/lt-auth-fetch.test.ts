@@ -91,7 +91,7 @@ describe('ltAuthFetch — an expired JWT', () => {
     signedIn('jwt');
     backend();
 
-    const response = await ltAuthFetch(`${API}/measures`, { body: '{"a":1}', method: 'POST' });
+    const response = await ltAuthFetch(`${API}/measures`, { body: '{"a":1}', headers: { 'content-type': 'application/json' }, method: 'POST' });
 
     expect(response.status).toBe(200);
     expect(tokenCalls()).toHaveLength(1);
@@ -102,6 +102,7 @@ describe('ltAuthFetch — an expired JWT', () => {
     expect(new Headers(attempts[0]?.headers).get('Authorization')).toBe(`Bearer ${STALE}`);
     expect(new Headers(attempts[1]?.headers).get('Authorization')).toBe(`Bearer ${FRESH}`);
     expect(attempts[1]?.body).toBe('{"a":1}');
+    expect(new Headers(attempts[1]?.headers).get('content-type')).toBe('application/json');
     // The session cookie stays on both attempts: nest-server falls back to it when a bearer fails
     expect(attempts.map((init) => init.credentials)).toEqual(['include', 'include']);
     // Stored, so the next request starts with the fresh token
@@ -254,7 +255,7 @@ describe('AI and sync calls with an expired JWT', () => {
       signedIn('jwt');
       backend({ onAuthorized: (url, init) => server.fetch(url, init) });
       // No `fetch` option: the engine's default transport is what this test is about
-      const client = createLtSyncEngine<{ title: string }>({ model: 'note' });
+      const client = createLtSyncEngine<{ title: string }>({ model: 'note', tenantId: 't1' });
       await client.create({ title: 'A' });
 
       const result = await client.sync();
@@ -262,6 +263,9 @@ describe('AI and sync calls with an expired JWT', () => {
       expect(result).toMatchObject({ applied: 1, needsLogin: false });
       expect(server.live()).toMatchObject([{ data: { title: 'A' } }]);
       expect(tokenCalls()).toHaveLength(1);
+      // The retry keeps the caller's headers: nest-server refuses a push without its JSON content
+      // type (400), and a create without its tenant
+      expect(server.pushes().at(-1)?.headers).toMatchObject({ 'content-type': 'application/json', 'x-tenant-id': 't1' });
     });
   });
 });
