@@ -8,16 +8,38 @@
  * Translations loaded from: GET /i18n/errors/:locale
  *
  * URL handling is delegated to {@link buildLtApiUrl} (SSR / proxy / direct).
+ *
+ * Until the translations for the current locale are loaded, `translateError` returns the
+ * developer message. The plugin starts the load after the app is mounted and does not wait
+ * for it (DEV-4078); every instance shares that request, see {@link inFlightLoads}.
  */
 
 import type { LtErrorTranslationResponse, LtParsedError, UseLtErrorTranslationReturn } from '../types/error';
 
-import { computed, ref, useState, useNuxtApp, useRuntimeConfig } from '#imports';
+import { computed, useState, useNuxtApp, useRuntimeConfig } from '#imports';
 import { buildLtApiUrl } from '../lib/auth-state';
 import { ltAddToast } from '../lib/toast';
 
 // Regex to parse #CODE: Message format
 const ERROR_CODE_REGEX = /^#([A-Z_]+_\d+):\s*(.+)$/;
+
+/**
+ * Loads in flight, per Nuxt app and locale. Every instance of the composable shares them: the
+ * plugin's load after mount and a component's `await loadTranslations()` are one request, and
+ * the component's `await` returns once the translations are there, not while they are still on
+ * the way. Keyed by the app, so on the server, where each request has an app of its own, no
+ * load is shared across requests.
+ */
+const inFlightLoads = new WeakMap<object, Map<string, Promise<void>>>();
+
+function inFlightLoadsOf(app: object): Map<string, Promise<void>> {
+  let loads = inFlightLoads.get(app);
+  if (!loads) {
+    loads = new Map();
+    inFlightLoads.set(app, loads);
+  }
+  return loads;
+}
 
 /**
  * Error Translation composable
@@ -47,7 +69,8 @@ export function useLtErrorTranslation(): UseLtErrorTranslationReturn {
 
   // Shared state for translations (SSR-compatible)
   const translations = useState<Record<string, Record<string, string>>>('lt-error-translations', () => ({}));
-  const isLoading = ref(false);
+  // Shared like the loads themselves: `true` while any instance's load is in flight.
+  const isLoading = useState<boolean>('lt-error-translations-loading', () => false);
 
   // Get module config
   const config = runtimeConfig.public?.ltExtensions?.errorTranslation;
@@ -94,25 +117,47 @@ export function useLtErrorTranslation(): UseLtErrorTranslationReturn {
   }
 
   /**
-   * Load translations for a locale from backend
+   * Load translations for a locale from backend.
+   *
+   * Resolves once they are in the shared state, or once the load failed (logged, never
+   * rejected): `translateError` then keeps returning the developer message, and the next
+   * call tries again. A call for a locale that is already loading waits for that request.
    */
-  async function loadTranslations(locale?: string): Promise<void> {
+  function loadTranslations(locale?: string): Promise<void> {
     const targetLocale = locale || detectLocale();
 
     // Already loaded
     if (translations.value[targetLocale]) {
-      return;
+      return Promise.resolve();
     }
 
-    // Already loading
-    if (isLoading.value) {
-      return;
+    // Already loading: wait for the same request
+    const loads = inFlightLoadsOf(nuxtApp);
+    const pending = loads.get(targetLocale);
+    if (pending) {
+      return pending;
+    }
+
+    let url: string;
+    try {
+      // Built now, while the Nuxt context exists; it is gone after the first `await`.
+      url = buildErrorUrl(targetLocale);
+    } catch (error) {
+      console.warn(`[LtErrorTranslation] Failed to load translations for ${targetLocale}:`, error);
+      return Promise.resolve();
     }
 
     isLoading.value = true;
+    const load = fetchTranslations(url, targetLocale).finally(() => {
+      loads.delete(targetLocale);
+      isLoading.value = loads.size > 0;
+    });
+    loads.set(targetLocale, load);
+    return load;
+  }
 
+  async function fetchTranslations(url: string, targetLocale: string): Promise<void> {
     try {
-      const url = buildErrorUrl(targetLocale);
       const response = await $fetch<LtErrorTranslationResponse>(url);
 
       if (response?.errors) {
@@ -123,8 +168,6 @@ export function useLtErrorTranslation(): UseLtErrorTranslationReturn {
       }
     } catch (error) {
       console.warn(`[LtErrorTranslation] Failed to load translations for ${targetLocale}:`, error);
-    } finally {
-      isLoading.value = false;
     }
   }
 

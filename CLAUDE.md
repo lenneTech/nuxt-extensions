@@ -402,6 +402,26 @@ optionally behind a setup token (`LTNS_0054` when wrong). `GET /system-setup/sta
   configuration. Pass the error itself to `translateError(error)`: the `#LTNS_` code is in the
   body, `error.message` holds only the transport line.
 
+## Error Translation: loaded after mount (DEV-4078)
+
+`plugins/error-translation.client.ts` starts `loadTranslations()` in `app:mounted` and does not
+await it. `test/error-translation-loading.test.ts` holds both halves.
+
+- **Never make the plugin async again, and never start the load before the mount.** Awaited, it
+  held back every client start for one API request. Started early but not awaited, it races
+  hydration: the server renders the developer message (it loads no translations), and
+  translations arriving before hydration render another text on the client.
+- **Loads are shared per Nuxt app and locale** (`inFlightLoads`), and `isLoading` is shared
+  state. A second caller waits for the request in flight instead of returning before the
+  translations are there. A load for another locale is never swallowed by one in flight.
+- **Until the load is done, `translateError` returns the developer message.** That is the
+  documented fallback, not a bug. `loadTranslations()` never rejects; a failure is logged, and
+  the next call tries again.
+- **SSR translates nothing by default** (one request and the whole table in every payload). The
+  README shows the opt-in: a project's own `.server` plugin awaits `loadTranslations()`, and the
+  payload carries the state to the client. It needs `@nuxtjs/i18n`, so both sides pick the same
+  locale.
+
 ## Form Label Repair
 
 **The defect:** Nuxt UI's `FormField` derives the label's `for` and the control's `id` from one
