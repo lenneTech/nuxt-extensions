@@ -1,19 +1,17 @@
 {
   "lt": {
     "auth": {
-      "loggingOut": "Abmelden...",
       "noPasskeySelected": "Kein Passkey ausgewählt",
       "passkeyAborted": "Passkey-Authentifizierung wurde abgebrochen",
+      "passkeyAlreadyRegistered": "Du hast bereits einen Passkey für diese Website registriert. Lösche ihn zuerst oder verwende einen anderen Authenticator.",
       "passkeyCreationAborted": "Passkey-Erstellung wurde abgebrochen",
       "passkeyError": "Konnte Passkey-Optionen nicht laden",
       "passkeyFailed": "Passkey-Anmeldung fehlgeschlagen",
       "passkeyRegisterFailed": "Passkey-Registrierung fehlgeschlagen",
-      "registerOptionsError": "Konnte Registrierungsoptionen nicht laden",
-      "sessionExpired": "Sitzung abgelaufen"
+      "registerOptionsError": "Konnte Registrierungsoptionen nicht laden"
     },
     "error": {
-      "title": "Fehler",
-      "loadFailed": "Fehlerübersetzungen konnten nicht geladen werden"
+      "title": "Fehler"
     },
     "share": {
       "copied": "Link kopiert",

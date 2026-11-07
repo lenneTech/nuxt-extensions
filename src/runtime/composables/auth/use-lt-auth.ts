@@ -795,7 +795,7 @@ export function useLtAuth(): UseLtAuthReturn {
       if (!credential) {
         return {
           success: false,
-          error: t('lt.auth.passkeyCreationAborted', 'Passkey-Erstellung abgebrochen'),
+          error: t('lt.auth.passkeyCreationAborted', 'Passkey-Erstellung wurde abgebrochen'),
         };
       }
 
