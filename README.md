@@ -822,9 +822,12 @@ is undefined when the backend sends no such header (an older nest-server, or an 
 override that never calls `super.onUploadComplete(upload)`).
 
 **File links.** `useLtFile().getFileUrl(id)`, `getDownloadUrl(id, filename?)` and `getFileInfo(id)`
-follow the same rule: the file routes are paths on the API (`/files/<id>`, `/files/download/<id>`,
-`/files/info/<id>`, below the base derived from an endpoint ending in `/upload`, otherwise `/files`).
-`tus.resolveAgainstApi: false` keeps them on the app origin, and an absolute base is used as it is.
+follow the same rule: they are paths on the API, below the base derived from an endpoint ending in
+`/upload`, otherwise `/files`. The two link helpers point at nest-server's `GET /files/id/<id>`
+(since 11.8.0), which sends the file with the stored filename; nest-server has no rename
+parameter, so `getDownloadUrl()` returns the same URL and ignores `filename`. `getFileInfo()` reads
+`GET /files/info/<id>` (the starter's file controller). `tus.resolveAgainstApi: false` keeps them
+on the app origin, and an absolute base is used as it is.
 The two link helpers return the URL the browser uses, during SSR too: they never contain the
 server-only `NUXT_API_URL`, and server and browser render the same `src`. Only the request
 `getFileInfo()` makes on the server goes to the server-side API URL.

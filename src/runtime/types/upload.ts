@@ -143,11 +143,11 @@ export interface UseLtFileReturn {
   formatDuration: (seconds: number) => string;
   /** Format bytes to human readable string (e.g., "1.5 MB") */
   formatFileSize: (bytes: number) => string;
-  /** Get download URL for a file by ID */
+  /** Download URL of a file by ID (nest-server `GET /files/id/:id`; `filename` is ignored, the server names the download after the stored file) */
   getDownloadUrl: (id: string, filename?: string) => string;
   /** Get file info from the server by ID */
   getFileInfo: (id: string | undefined) => Promise<LtFileInfo | null | string>;
-  /** Get direct file URL by ID */
+  /** URL of a file by ID (nest-server `GET /files/id/:id`) */
   getFileUrl: (id: string) => string;
   /** Check if a string is a valid MongoDB ObjectId */
   isValidMongoID: (id: string) => boolean;

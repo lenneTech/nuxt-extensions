@@ -100,25 +100,28 @@ export function useLtFile(): UseLtFileReturn {
   }
 
   /**
-   * Get the direct URL to view/access a file
+   * Get the URL of a file by its id: nest-server's `GET /files/id/:id` (since 11.8.0), which streams
+   * the file. `/files/:id` would be read as a file NAME (`GET /files/:filename`) and answer 404.
    *
    * @param id - The file ID
    * @returns The file URL
    */
   function getFileUrl(id: string): string {
-    return fileApiUrl(`/${id}`, 'link');
+    return fileApiUrl(`/id/${encodeURIComponent(id)}`, 'link');
   }
 
   /**
-   * Get the download URL for a file
+   * Get the download URL for a file: the same route as {@link getFileUrl}. nest-server sends
+   * `Content-Disposition: attachment` with the stored filename there and has no rename parameter,
+   * so `filename` is accepted for compatibility and ignored (as in ng-base). There is no
+   * `/files/download/:id` route.
    *
    * @param id - The file ID
-   * @param filename - Optional filename for the download
+   * @param _filename - Ignored; the server names the download after the stored file
    * @returns The download URL
    */
-  function getDownloadUrl(id: string, filename?: string): string {
-    const base = fileApiUrl(`/download/${id}`, 'link');
-    return filename ? `${base}?filename=${encodeURIComponent(filename)}` : base;
+  function getDownloadUrl(id: string, _filename?: string): string {
+    return getFileUrl(id);
   }
 
   /**

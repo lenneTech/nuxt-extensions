@@ -32,20 +32,20 @@ describe('useLtFile file base path', () => {
   it('derives /files from the default /files/upload endpoint', () => {
     configureEndpoint('/files/upload');
 
-    expect(useLtFile().getFileUrl('abc')).toBe('/files/abc');
+    expect(useLtFile().getFileUrl('abc')).toBe('/files/id/abc');
   });
 
   it('keeps a custom prefix in front of an /upload endpoint', () => {
     configureEndpoint('/api/files/upload');
 
-    expect(useLtFile().getFileUrl('abc')).toBe('/api/files/abc');
-    expect(useLtFile().getDownloadUrl('abc', 'a b.pdf')).toBe('/api/files/download/abc?filename=a%20b.pdf');
+    expect(useLtFile().getFileUrl('abc')).toBe('/api/files/id/abc');
+    expect(useLtFile().getDownloadUrl('abc', 'a b.pdf')).toBe('/api/files/id/abc');
   });
 
   it('does not derive the file routes from a TUS endpoint without /upload', () => {
     configureEndpoint('/tus');
 
-    expect(useLtFile().getFileUrl('abc')).toBe('/files/abc');
+    expect(useLtFile().getFileUrl('abc')).toBe('/files/id/abc');
   });
 
   it("keeps the file routes at /files with the module default /tus", () => {
@@ -57,7 +57,7 @@ describe('useLtFile file base path', () => {
   it('falls back to /files when no endpoint is configured', () => {
     configureEndpoint(undefined);
 
-    expect(useLtFile().getFileUrl('abc')).toBe('/files/abc');
+    expect(useLtFile().getFileUrl('abc')).toBe('/files/id/abc');
   });
 });
 
@@ -88,43 +88,53 @@ describe('useLtFile against the API', () => {
   it('builds the links on the API origin', () => {
     configure();
 
-    expect(useLtFile().getFileUrl('abc')).toBe(`${API}/files/abc`);
-    expect(useLtFile().getDownloadUrl('abc', 'a b.pdf')).toBe(`${API}/files/download/abc?filename=a%20b.pdf`);
+    expect(useLtFile().getFileUrl('abc')).toBe(`${API}/files/id/abc`);
+    expect(useLtFile().getDownloadUrl('abc', 'a b.pdf')).toBe(`${API}/files/id/abc`);
   });
 
   it('uses the /api prefix while the dev proxy is on', () => {
     configure({ apiProxy: true });
 
-    expect(useLtFile().getFileUrl('abc')).toBe('/api/files/abc');
-    expect(useLtFile().getDownloadUrl('abc')).toBe('/api/files/download/abc');
+    expect(useLtFile().getFileUrl('abc')).toBe('/api/files/id/abc');
+    expect(useLtFile().getDownloadUrl('abc')).toBe('/api/files/id/abc');
   });
 
   it('renders the same public links during SSR: no NUXT_API_URL, no hydration mismatch', () => {
     configure({ serverApiUrl: 'http://api.internal:3000' });
     setTestRenderScope('server');
 
-    expect(useLtFile().getFileUrl('abc')).toBe(`${API}/files/abc`);
-    expect(useLtFile().getDownloadUrl('abc')).toBe(`${API}/files/download/abc`);
+    expect(useLtFile().getFileUrl('abc')).toBe(`${API}/files/id/abc`);
+    expect(useLtFile().getDownloadUrl('abc')).toBe(`${API}/files/id/abc`);
   });
 
   it('keeps the dev-proxy prefix during SSR, as the browser will request it', () => {
     configure({ apiProxy: true, serverApiUrl: 'http://api.internal:3000' });
     setTestRenderScope('server');
 
-    expect(useLtFile().getFileUrl('abc')).toBe('/api/files/abc');
+    expect(useLtFile().getFileUrl('abc')).toBe('/api/files/id/abc');
+  });
+
+  it("links to nest-server's GET /files/id/:id, the only route that streams a file by its id", () => {
+    configure();
+
+    // `/files/<id>` would be read as a file name (GET /files/:filename) and answer 404; nest-server
+    // names the download after the stored file and has no rename parameter
+    expect(useLtFile().getFileUrl('0123456789abcdef01234567')).toBe(`${API}/files/id/0123456789abcdef01234567`);
+    expect(useLtFile().getDownloadUrl('0123456789abcdef01234567', 'a b.pdf')).toBe(`${API}/files/id/0123456789abcdef01234567`);
+    expect(useLtFile().getFileUrl('a/b?c')).toBe(`${API}/files/id/a%2Fb%3Fc`);
   });
 
   it('leaves the links relative with tus.resolveAgainstApi: false (own same-origin proxy)', () => {
     configure({ resolveAgainstApi: false });
 
-    expect(useLtFile().getFileUrl('abc')).toBe('/files/abc');
-    expect(useLtFile().getDownloadUrl('abc')).toBe('/files/download/abc');
+    expect(useLtFile().getFileUrl('abc')).toBe('/files/id/abc');
+    expect(useLtFile().getDownloadUrl('abc')).toBe('/files/id/abc');
   });
 
   it('never rewrites an absolute file base', () => {
     setStubRuntimeConfig({ public: { apiUrl: API, ltExtensions: { tus: { defaultEndpoint: 'https://files.example.com/files/upload' } } } });
 
-    expect(useLtFile().getFileUrl('abc')).toBe('https://files.example.com/files/abc');
+    expect(useLtFile().getFileUrl('abc')).toBe('https://files.example.com/files/id/abc');
   });
 
   it('fetches the file info from the API, during SSR from the server-side API URL', async () => {
