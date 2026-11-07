@@ -586,31 +586,44 @@ export function getLtApiBase(basePath?: string): string {
 }
 
 /**
+ * `GET <auth>/token` with the session cookie: a fresh JWT, or `null` (refused, not JWT-shaped, offline).
+ *
+ * INTERNAL — the one place a JWT is fetched: {@link attemptLtJwtSwitch}, the 401 recovery of
+ * {@link createLtAuthFetch} and `useLtAuth().switchToJwtMode()` all go through it. Not part of the
+ * public API (absent from the barrels and auto-imports).
+ *
+ * @param basePath - The auth API base path; `auth.basePath` from the runtime config when omitted
+ */
+export async function requestLtJwt(basePath?: string): Promise<null | string> {
+  try {
+    const response = await fetch(`${getLtApiBase(basePath)}/token`, {
+      credentials: 'include',
+      method: 'GET',
+    });
+    if (!response.ok) {
+      return null;
+    }
+    const data = (await response.json()) as null | { token?: unknown };
+    const token = data?.token;
+    return isLtJwtShaped(token) ? token : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Attempt to switch to JWT mode by fetching a token
  *
- * @param basePath - The auth API base path (default: '/iam')
+ * @param basePath - The auth API base path; `auth.basePath` from the runtime config when omitted
  */
-export async function attemptLtJwtSwitch(basePath: string = '/iam'): Promise<boolean> {
-  try {
-    const apiBase = getLtApiBase(basePath);
-    const response = await fetch(`${apiBase}/token`, {
-      method: 'GET',
-      credentials: 'include',
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      if (isLtJwtShaped(data.token)) {
-        setLtJwtToken(data.token);
-        setLtAuthMode('jwt');
-        console.debug('[LtAuth] Switched to JWT mode');
-        return true;
-      }
-    }
-    return false;
-  } catch {
+export async function attemptLtJwtSwitch(basePath?: string): Promise<boolean> {
+  const token = await requestLtJwt(basePath);
+  if (!token) {
     return false;
   }
+  ltCookieAuthFetchState.adoptJwt(token);
+  console.debug('[LtAuth] Switched to JWT mode');
+  return true;
 }
 
 /**
@@ -624,59 +637,159 @@ export function isLtAuthenticated(): boolean {
   return !!resolveLtAuthState(document.cookie)?.user;
 }
 
+// =============================================================================
+// Authenticated Fetch
+// =============================================================================
+
+/**
+ * Paths that need the session cookie even in JWT mode, for a fetch that otherwise omits cookies
+ * there (`cookiesInJwtMode: 'auth-paths'`, which `useLtAuth().fetchWithAuth` uses).
+ *
+ * Better-Auth's Passkey and 2FA operations need the session cookie for challenge/verification
+ * token handling.
+ *
+ * `/get-session` belongs here for a different reason: it reads the session COOKIE and nothing
+ * else. The JWT handed out by `/token` is not a session token, so a bearer-only request does not
+ * fail loudly — Better Auth answers `200` with a `null` body, exactly as it would for a signed-out
+ * visitor. Callers that probe this endpoint to find out whether a session is still alive (the auth
+ * interceptor does, before logging anyone out) would read that as "session is dead" for every
+ * authenticated user in JWT mode, and a single 401 from a mere permission error would end the
+ * session. That was effectively every user: each successful login pre-fetches a JWT, and
+ * `switchToJwtMode()` flips `authMode` to `'jwt'` when it succeeds.
+ */
+const LT_PATHS_REQUIRING_COOKIES = ['/passkey/', '/two-factor/', '/2fa/', '/get-session'];
+
+/** Whether `url` needs the session cookie even in JWT mode (see {@link LT_PATHS_REQUIRING_COOKIES}). */
+function ltUrlRequiresCookies(url: string): boolean {
+  return LT_PATHS_REQUIRING_COOKIES.some((path) => url.includes(path));
+}
+
+/**
+ * Where a caller of the authenticated fetch keeps its auth mode and its JWT.
+ *
+ * INTERNAL — `useLtAuth()` hands in its own `useCookie` refs, so its `fetchWithAuth` reads and
+ * writes what the composable shows; every other caller uses the browser cookies. Not part of the
+ * public API.
+ */
+export interface LtAuthFetchState {
+  /** Store a freshly fetched JWT and switch to JWT mode. */
+  adoptJwt: (token: string) => void;
+  isAuthenticated: () => boolean;
+  jwtToken: () => null | string;
+  mode: () => LtAuthMode;
+}
+
+/** INTERNAL — options of {@link createLtAuthFetchFor}. */
+export interface LtAuthFetchOptions {
+  /** The auth API base path for the JWT; `auth.basePath` from the runtime config when omitted. */
+  basePath?: string;
+  /**
+   * Cookies in JWT mode. `'always'` (default): the session cookie rides along, and nest-server
+   * (>= 11.13.1) falls back to it when the bearer fails; Better-Auth's own routes read the session
+   * from it. `'auth-paths'`: only {@link LT_PATHS_REQUIRING_COOKIES} get it, as in
+   * `useLtAuth().fetchWithAuth` (and ng-base's auth fetch).
+   */
+  cookiesInJwtMode?: 'always' | 'auth-paths';
+  state: LtAuthFetchState;
+}
+
+/** The auth state in the browser cookies: what `ltAuthFetch` and the Better-Auth client use. */
+const ltCookieAuthFetchState: LtAuthFetchState = {
+  adoptJwt: (token) => {
+    setLtJwtToken(token);
+    setLtAuthMode('jwt');
+  },
+  isAuthenticated: isLtAuthenticated,
+  jwtToken: getLtJwtToken,
+  mode: getLtAuthMode,
+};
+
+/**
+ * In-flight JWT fetch after a 401 (client only), shared by every authenticated fetch, so a burst of
+ * parallel 401s costs one `/token` request: the switch from cookie to JWT and the renewal of an
+ * expired JWT alike. Resolves to the token itself, which each caller then stores where it keeps its
+ * own (see {@link LtAuthFetchState.adoptJwt}). On the server the module scope is shared across
+ * requests, so a shared promise would hand one request another request's token: each fetches its own.
+ */
+let ltJwtAfter401: null | Promise<null | string> = null;
+
+function requestLtJwtAfter401(basePath?: string): Promise<null | string> {
+  if (!import.meta.client) {
+    return requestLtJwt(basePath);
+  }
+  if (!ltJwtAfter401) {
+    ltJwtAfter401 = requestLtJwt(basePath).finally(() => {
+      ltJwtAfter401 = null;
+    });
+  }
+  return ltJwtAfter401;
+}
+
+/**
+ * The authenticated fetch, one implementation for every caller.
+ *
+ * INTERNAL — `useLtAuth().fetchWithAuth` builds itself from it with its own state; everyone else
+ * uses {@link createLtAuthFetch} / {@link ltAuthFetch}. Not part of the public API.
+ *
+ * 1. JWT mode adds `Authorization: Bearer <jwt>`; cookies follow `cookiesInJwtMode`.
+ * 2. A 401 while signed in fetches a JWT once (shared by the burst, see {@link requestLtJwtAfter401})
+ *    and retries the request once with it. In cookie mode that is the switch to JWT; in JWT mode the
+ *    bearer was most likely expired: the JWT lives 15 minutes, the session behind it 7 days, and
+ *    nothing renews it while the user works.
+ * 3. A 401 that survives the fresh token, or one no token can be fetched for, reaches the caller
+ *    unchanged. So does a 401 on a cookie-bound path in JWT mode with `'auth-paths'`: the cookie
+ *    failed there, not the bearer.
+ */
+export function createLtAuthFetchFor(options: LtAuthFetchOptions) {
+  const { basePath, cookiesInJwtMode = 'always', state } = options;
+  const credentialsFor = (url: string, jwtMode: boolean): RequestCredentials => (jwtMode && cookiesInJwtMode === 'auth-paths' && !ltUrlRequiresCookies(url) ? 'omit' : 'include');
+
+  return async function ltAuthFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    const jwtMode = state.mode() === 'jwt';
+    const headers = new Headers(init?.headers);
+    const sentToken = jwtMode ? state.jwtToken() : null;
+    if (sentToken) {
+      headers.set('Authorization', `Bearer ${sentToken}`);
+    }
+
+    const response = await fetch(input, { ...init, credentials: credentialsFor(url, jwtMode), headers });
+
+    if (response.status !== 401 || !state.isAuthenticated()) {
+      return response;
+    }
+    if (jwtMode && cookiesInJwtMode === 'auth-paths' && ltUrlRequiresCookies(url)) {
+      return response;
+    }
+    if (!jwtMode) {
+      console.debug('[LtAuth] Cookie auth failed, attempting JWT fallback...');
+    }
+
+    const token = await requestLtJwtAfter401(basePath);
+    if (!token) {
+      return response;
+    }
+    state.adoptJwt(token);
+    const retryHeaders = new Headers(headers);
+    retryHeaders.set('Authorization', `Bearer ${token}`);
+    return fetch(input, { ...init, credentials: credentialsFor(url, true), headers: retryHeaders });
+  };
+}
+
 /**
  * Custom fetch function that handles Cookie/JWT dual-mode authentication
  *
  * This function:
- * 1. In cookie mode: Uses credentials: 'include'
- * 2. In JWT mode: Adds Authorization header
- * 3. On 401 in cookie mode: Attempts to switch to JWT and retries
+ * 1. Always sends the cookies (`credentials: 'include'`)
+ * 2. In JWT mode: Adds the Authorization header
+ * 3. On 401 while signed in: fetches a JWT once (cookie mode: switch to JWT; JWT mode: renew the
+ *    expired one) and retries the request once
  *
- * @param basePath - The auth API base path for JWT switch (default: '/iam')
+ * @param basePath - The auth API base path for the JWT; `auth.basePath` from the runtime config when omitted
  */
-export function createLtAuthFetch(basePath: string = '/iam') {
-  return async function ltAuthFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-    const authMode = getLtAuthMode();
-    const jwtToken = getLtJwtToken();
-
-    const headers = new Headers(init?.headers);
-
-    // In JWT mode, add Authorization header
-    if (authMode === 'jwt' && jwtToken) {
-      headers.set('Authorization', `Bearer ${jwtToken}`);
-    }
-
-    // Always include credentials for cookie-based session auth
-    // In JWT mode, cookies are sent but ignored by the server (Authorization header is used instead)
-    // This is more robust than conditionally omitting cookies
-    const response = await fetch(input, {
-      ...init,
-      headers,
-      credentials: 'include',
-    });
-
-    // If we get 401 in cookie mode and user is authenticated, try JWT fallback
-    if (response.status === 401 && authMode === 'cookie' && isLtAuthenticated()) {
-      console.debug('[LtAuth] Cookie auth failed, attempting JWT fallback...');
-      const switched = await attemptLtJwtSwitch(basePath);
-
-      if (switched) {
-        // Retry the request with JWT
-        const newToken = getLtJwtToken();
-        if (newToken) {
-          headers.set('Authorization', `Bearer ${newToken}`);
-          return fetch(input, {
-            ...init,
-            headers,
-            credentials: 'include',
-          });
-        }
-      }
-    }
-
-    return response;
-  };
+export function createLtAuthFetch(basePath?: string) {
+  return createLtAuthFetchFor({ basePath, state: ltCookieAuthFetchState });
 }
 
-// Default auth fetch using '/iam' base path
-export const ltAuthFetch = createLtAuthFetch('/iam');
+/** Default auth fetch; fetches its JWT from `auth.basePath` (default `/iam`). */
+export const ltAuthFetch = createLtAuthFetch();

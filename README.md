@@ -522,6 +522,22 @@ JWT from `/iam/token`.
   session token.**
 - **`authenticateWithPasskey()` returns no `session`.**
 
+#### Authenticated requests: `fetchWithAuth` and `ltAuthFetch`
+
+`useLtAuth().fetchWithAuth` and `ltAuthFetch` (from `/lib`, also used by the Better-Auth client,
+the AI composables and offline sync) run through one implementation.
+
+- **JWT mode sends `Authorization: Bearer <jwt>`.** `ltAuthFetch` always sends the cookies as well,
+  so nest-server (>= 11.13.1) falls back to the session cookie when the bearer fails.
+  `fetchWithAuth` sends them in JWT mode only to passkey, 2FA and `/get-session`.
+- **A 401 while signed in fetches a JWT once and retries the request once.** In cookie mode that
+  is the switch to JWT; in JWT mode it renews an expired JWT, which lives 15 minutes while the
+  session lasts 7 days. Requests that fail in the same burst share one `GET <basePath>/token`. A
+  401 that survives the fresh token reaches the caller unchanged.
+- **The JWT comes from `auth.basePath`.** Without an argument, `ltAuthFetch`, `createLtAuthFetch()`
+  and `attemptLtJwtSwitch()` read it from the module config; they used to fetch it from `/iam`
+  whatever was configured. A path passed explicitly still wins.
+
 #### Admin detection (`role` vs `roles`)
 
 `isAdmin` accepts **both** user shapes, so the same frontend works against either backend:

@@ -14,7 +14,7 @@ import type { LtAuthMode, LtAuthState, LtPasskeyAuthResult, LtPasskeyRegisterRes
 
 import { useNuxtApp, useCookie, useState, useRequestHeaders, useRuntimeConfig, ref, computed, watch } from '#imports';
 import { ltArrayBufferToBase64Url, ltBase64UrlToUint8Array } from '../../utils/crypto';
-import { clearLtAuthCookies, getLtApiBase, getLtAuthCookieNames, getLtJwtToken, isLtJwtShaped, resolveLtAuthState } from '../../lib/auth-state';
+import { clearLtAuthCookies, createLtAuthFetchFor, getLtApiBase, getLtAuthCookieNames, getLtJwtToken, isLtJwtShaped, requestLtJwt, resolveLtAuthState } from '../../lib/auth-state';
 import { useLtAuthClient } from '../use-lt-auth-client';
 
 /**
@@ -45,13 +45,6 @@ function isLtSyncEnabled(): boolean {
     return false;
   }
 }
-
-/**
- * In-flight JWT refresh after a 401 in JWT mode (client only), shared across
- * all `useLtAuth()` instances so a burst of parallel 401s costs one `/token` call.
- * Resolves to the minted token itself, or `null` (see `refreshStaleJwt`).
- */
-let staleJwtRefresh: null | Promise<null | string> = null;
 
 /**
  * Helper function for i18n with German fallback
@@ -296,30 +289,32 @@ export function useLtAuth(): UseLtAuthReturn {
   }
 
   /**
+   * Store a freshly fetched JWT in this instance's refs and switch to JWT mode.
+   *
+   * Every `useLtAuth()` call owns its own `useCookie` ref, and Nuxt brings the other refs of the
+   * same name up to date only on a later task (cookieStore / BroadcastChannel). An instance that
+   * joined another instance's JWT fetch would otherwise read its own ref in the same tick, find the
+   * expired token still in it, and retry with that.
+   */
+  function adoptJwt(token: string): void {
+    if (jwtToken.value !== token) {
+      jwtToken.value = token;
+    }
+    if (authState.value && authState.value.authMode !== 'jwt') {
+      authState.value = { ...authState.value, authMode: 'jwt' };
+    }
+  }
+
+  /**
    * Switch to JWT mode and fetch a token
    */
   async function switchToJwtMode(): Promise<boolean> {
-    try {
-      const apiBase = getLtApiBase();
-      const response = await fetch(`${apiBase}/token`, {
-        method: 'GET',
-        credentials: 'include',
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (isLtJwtShaped(data.token)) {
-          jwtToken.value = data.token;
-          if (authState.value) {
-            authState.value = { ...authState.value, authMode: 'jwt' };
-          }
-          return true;
-        }
-      }
-      return false;
-    } catch {
+    const token = await requestLtJwt();
+    if (!token) {
       return false;
     }
+    adoptJwt(token);
+    return true;
   }
 
   /**
@@ -331,129 +326,23 @@ export function useLtAuth(): UseLtAuthReturn {
   }
 
   /**
-   * Paths that require cookies even in JWT mode.
+   * Authenticated fetch wrapper: the same implementation as `ltAuthFetch` (`createLtAuthFetchFor`
+   * in lib/auth-state.ts), on this instance's refs. Uses cookies by default; on a 401 while signed
+   * in it fetches a JWT once per burst and retries once (cookie mode: switch to JWT; JWT mode: the
+   * bearer had expired).
    *
-   * Better-Auth's Passkey and 2FA operations need the session cookie for
-   * challenge/verification token handling.
-   *
-   * `/get-session` belongs here for a different reason: it reads the session
-   * COOKIE and nothing else. The JWT handed out by `/token` is not a session
-   * token, so a bearer-only request does not fail loudly — Better Auth answers
-   * `200` with a `null` body, exactly as it would for a signed-out visitor.
-   * Callers that probe this endpoint to find out whether a session is still
-   * alive (the auth interceptor does, before logging anyone out) would read
-   * that as "session is dead" for every authenticated user in JWT mode, and a
-   * single 401 from a mere permission error would end the session. That was
-   * effectively every user: each successful login pre-fetches a JWT, and
-   * `switchToJwtMode()` flips `authMode` to `'jwt'` when it succeeds.
-   *
-   * Note the sibling wrapper `createLtAuthFetch` (lib/auth-state.ts) never had
-   * this bug — it sends `credentials: 'include'` unconditionally. Any new entry
-   * here is only needed because THIS wrapper opts out of cookies by default.
+   * In JWT mode, cookies are only sent to the paths that the backend resolves from the session
+   * cookie rather than from the bearer token (passkey, 2FA, `/get-session`).
    */
-  const PATHS_REQUIRING_COOKIES = ['/passkey/', '/two-factor/', '/2fa/', '/get-session'];
-
-  /**
-   * Check if a URL needs the session cookie even in JWT mode
-   * (Passkey/2FA challenge handling, and the cookie-resolved session endpoint).
-   */
-  function urlRequiresCookies(url: string): boolean {
-    return PATHS_REQUIRING_COOKIES.some((path) => url.includes(path));
-  }
-
-  /**
-   * Authenticated fetch wrapper
-   * Uses cookies by default, falls back to JWT if cookies fail
-   *
-   * In JWT mode, cookies are only sent for the paths listed in
-   * {@link PATHS_REQUIRING_COOKIES} — the ones the backend resolves from the
-   * session cookie rather than from the bearer token.
-   */
-  async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
-    const headers = new Headers(options.headers);
-
-    // In JWT mode, add Authorization header
-    if (isJwtMode.value && jwtToken.value) {
-      headers.set('Authorization', `Bearer ${jwtToken.value}`);
-    }
-
-    // Determine credentials mode:
-    // - Cookie mode: always include credentials
-    // - JWT mode: only include for paths that require cookies (passkey, 2FA)
-    const needsCookies = !isJwtMode.value || urlRequiresCookies(url);
-
-    const response = await fetch(url, {
-      ...options,
-      headers,
-      credentials: needsCookies ? 'include' : 'omit',
-    });
-
-    // If we get 401 in cookie mode, try switching to JWT
-    if (response.status === 401 && !isJwtMode.value && isAuthenticated.value) {
-      const switched = await switchToJwtMode();
-
-      if (switched) {
-        // Retry the request with JWT
-        headers.set('Authorization', `Bearer ${jwtToken.value}`);
-        const retryNeedsCookies = urlRequiresCookies(url);
-        return fetch(url, {
-          ...options,
-          headers,
-          credentials: retryNeedsCookies ? 'include' : 'omit',
-        });
-      }
-    }
-
-    // If we get 401 in JWT mode, the bearer is most likely stale: the JWT
-    // expires long before the session (Better Auth: 15 minutes vs. 7 days) and
-    // nothing refreshes it while the user works. The session cookie can mint a
-    // fresh one, so retry once with it. Cookie-carrying paths are skipped — the
-    // bearer was not what failed there.
-    if (response.status === 401 && isJwtMode.value && isAuthenticated.value && !needsCookies) {
-      const freshToken = await refreshStaleJwt();
-
-      if (freshToken) {
-        headers.set('Authorization', `Bearer ${freshToken}`);
-        return fetch(url, {
-          ...options,
-          headers,
-          credentials: 'omit',
-        });
-      }
-    }
-
-    return response;
-  }
-
-  /**
-   * Mint a fresh JWT after a 401, sharing one `/token` call between all
-   * requests that failed in the same burst. Client only: on the server the
-   * module scope is shared across requests, so a shared promise would hand one
-   * request another request's refresh.
-   *
-   * Resolves to the token itself, not to a success flag. Every `useLtAuth()`
-   * call owns its own `useCookie` ref, and Nuxt brings the other refs of the
-   * same name up to date only on a later task (cookieStore / BroadcastChannel).
-   * An instance that joined another instance's refresh would read its own ref
-   * in the same tick, find the expired token still in it, and retry with that.
-   * It adopts the token into its own ref, so its next request starts fresh too.
-   */
-  async function refreshStaleJwt(): Promise<null | string> {
-    const mint = async (): Promise<null | string> => ((await switchToJwtMode()) ? jwtToken.value : null);
-    if (!import.meta.client) {
-      return mint();
-    }
-    if (!staleJwtRefresh) {
-      staleJwtRefresh = mint().finally(() => {
-        staleJwtRefresh = null;
-      });
-    }
-    const token = await staleJwtRefresh;
-    if (token && jwtToken.value !== token) {
-      jwtToken.value = token;
-    }
-    return token;
-  }
+  const fetchWithAuth: UseLtAuthReturn['fetchWithAuth'] = createLtAuthFetchFor({
+    cookiesInJwtMode: 'auth-paths',
+    state: {
+      adoptJwt,
+      isAuthenticated: () => isAuthenticated.value,
+      jwtToken: () => jwtToken.value,
+      mode: () => (isJwtMode.value ? 'jwt' : 'cookie'),
+    },
+  });
 
   /**
    * Authorization-relevant keys the Better-Auth session owns and is the source of
