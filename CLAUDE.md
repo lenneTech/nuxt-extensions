@@ -121,6 +121,27 @@ The API base URL is resolved at runtime from `NUXT_PUBLIC_API_URL` (client + SSR
 3. The backend sets the session as an `httpOnly` cookie (`iam.session_token`); `lt-auth-state` is the non-httpOnly client-side cache used by middleware
 4. Subsequent authenticated requests use `ltAuthFetch` (Cookie mode by default, JWT fallback)
 
+### One authenticated fetch (DEV-4074)
+
+`useLtAuth().fetchWithAuth` and `ltAuthFetch` / `createLtAuthFetch` are ONE implementation:
+`createLtAuthFetchFor` in `lib/auth-state.ts`. They used to be two copies, and only one of them
+renewed an expired JWT. Do not write a third one; a caller with its own state passes it in.
+
+- **A 401 while signed in fetches a JWT once and retries once.** Cookie mode: the switch to JWT.
+  JWT mode: the bearer had expired (15 minutes against a 7-day session). One `GET <basePath>/token`
+  per burst, shared by every caller (`requestLtJwtAfter401`); each caller stores the token where it
+  keeps its own (`adoptJwt`: the cookies, or the composable's `useCookie` refs).
+- **A 401 the bearer did not cause is never retried in JWT mode.** `ltAuthFetch`: Better-Auth's own
+  routes (under the auth base), where a 401 is the verdict of sign-in, 2FA or passkey; sending a wrong
+  password or code again counts twice against the rate limit. `fetchWithAuth`: the cookie-bound paths.
+- **Cookies in JWT mode differ on purpose.** `ltAuthFetch` always sends them: nest-server
+  (>= 11.13.1) falls back to the session cookie when the bearer fails, and Better-Auth's own routes
+  read the session from it. `fetchWithAuth` sends them only to passkey, 2FA and `/get-session`
+  (`cookiesInJwtMode: 'auth-paths'`, as ng-base does). Changing either is a behaviour change.
+- **The JWT comes from `auth.basePath`.** Without an argument, `ltAuthFetch`, `createLtAuthFetch()`
+  and `attemptLtJwtSwitch()` read it from the runtime config. `requestLtJwt()` is the only place a
+  JWT is fetched, `useLtAuth().switchToJwtMode()` included.
+
 ## AI Assistant Flow
 
 - All AI composables route through `ltAuthFetch` (Cookie/JWT dual mode) and `buildLtAiUrl` (SSR/public URL resolution), so they inherit the same auth + URL behaviour as the rest of the library.
