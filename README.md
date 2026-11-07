@@ -175,7 +175,7 @@ export default defineNuxtConfig({
       twoFactorRedirectPath: '/auth/2fa',  // 2FA redirect path
 
       // Plugin options
-      enableAdmin: true,            // Admin plugin
+      enableAdmin: false,           // Admin client plugin (off: nest-server serves no admin routes)
       enableTwoFactor: true,        // 2FA plugin
       enablePasskey: true,          // Passkey/WebAuthn plugin
 

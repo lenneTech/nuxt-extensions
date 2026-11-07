@@ -14,7 +14,17 @@ import type { LtAuthMode, LtAuthState, LtPasskeyAuthResult, LtPasskeyRegisterRes
 
 import { useNuxtApp, useCookie, useState, useRequestHeaders, useRuntimeConfig, ref, computed, watch } from '#imports';
 import { ltArrayBufferToBase64Url, ltBase64UrlToUint8Array } from '../../utils/crypto';
-import { clearLtAuthCookies, createLtAuthFetchFor, getLtApiBase, getLtAuthCookieNames, getLtJwtToken, isLtJwtShaped, requestLtJwt, resolveLtAuthState } from '../../lib/auth-state';
+import {
+  clearLtAuthCookies,
+  createLtAuthFetchFor,
+  getLtApiBase,
+  getLtAuthCookieNames,
+  getLtJwtToken,
+  isLtJwtShaped,
+  requestLtJwt,
+  resolveLtAuthState,
+  warnLtAdminPluginUnserved,
+} from '../../lib/auth-state';
 import { useLtAuthClient } from '../use-lt-auth-client';
 
 /**
@@ -499,6 +509,7 @@ export function useLtAuth(): UseLtAuthReturn {
       if (result) {
         features.value = result;
         featuresFetched.value = true;
+        warnLtAdminPluginUnserved(result);
       }
       return features.value;
     } catch {

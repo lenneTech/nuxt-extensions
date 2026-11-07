@@ -35,7 +35,7 @@ const defaultOptions: LtExtensionsModuleOptions = {
       token: DEFAULT_LT_JWT_TOKEN_COOKIE,
     },
     enabled: true,
-    enableAdmin: true,
+    enableAdmin: false,
     enablePasskey: true,
     enableTwoFactor: true,
     interceptor: {
@@ -199,7 +199,7 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
           token: resolvedOptions.auth?.cookieNames?.token || DEFAULT_LT_JWT_TOKEN_COOKIE,
         },
         enabled: resolvedOptions.auth?.enabled ?? true,
-        enableAdmin: resolvedOptions.auth?.enableAdmin ?? true,
+        enableAdmin: resolvedOptions.auth?.enableAdmin ?? false,
         enablePasskey,
         enableTwoFactor: resolvedOptions.auth?.enableTwoFactor ?? true,
         interceptor: {
