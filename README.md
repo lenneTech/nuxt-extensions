@@ -891,6 +891,48 @@ const base64 = ltArrayBufferToBase64Url(buffer);
 const uint8 = ltBase64UrlToUint8Array(base64String);
 ```
 
+### Error Translation
+
+`useLtErrorTranslation()` turns a backend error such as `#LTNS_0100: Unauthorized - User is
+not logged in` into the text for the user's locale, loaded from the API's
+`GET /i18n/errors/<locale>`.
+
+```typescript
+const { translateError, showErrorToast } = useLtErrorTranslation();
+
+const message = translateError(error); // "Sie sind nicht angemeldet."
+showErrorToast(error, 'Anmeldung fehlgeschlagen');
+```
+
+**The translations load after the app is mounted, and the start does not wait for them.**
+Until they are there, `translateError` returns the developer message (`Unauthorized - User is
+not logged in`), never an empty string. A template that renders `translateError(...)` switches
+to the translation as soon as it arrives. A toast takes the text it had when it was shown. Code
+that has to have the translations first awaits them; a load already in flight is shared, not
+repeated:
+
+```typescript
+const { loadTranslations, translateError } = useLtErrorTranslation();
+await loadTranslations(); // resolves once loaded, or once the load failed (logged, never thrown)
+```
+
+**Messages rendered during SSR carry the developer message.** The server loads no translations
+by default: that would cost one API request and the whole table in the payload of every page,
+for messages that almost always appear after an action in the browser. The client translates
+them after the mount. A project that renders errors on the server, such as an `error.vue` for a
+failed `useAsyncData`, loads the table there itself, in a plugin of its own:
+
+```typescript
+// plugins/error-translations-ssr.server.ts
+export default defineNuxtPlugin(async () => {
+  await useLtErrorTranslation().loadTranslations();
+});
+```
+
+The state reaches the client in the payload, so the browser fetches nothing again and hydration
+sees the same text as the server. This needs `@nuxtjs/i18n`: without it, the server takes
+`errorTranslation.defaultLocale` and the browser its own language, and the two can differ.
+
 ## AI Assistant
 
 Headless, provider-agnostic composables for the `@lenne.tech/nest-server` **AI module**

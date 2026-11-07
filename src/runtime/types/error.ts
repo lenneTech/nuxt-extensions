@@ -70,11 +70,16 @@ export interface UseLtErrorTranslationReturn {
   parseError: (errorOrMessage: unknown) => LtParsedError;
   /** Show translated error as toast notification */
   showErrorToast: (errorOrMessage: unknown, title?: string) => void;
-  /** Manually load translations for a locale */
+  /**
+   * Load the translations for a locale (default: the current one). The plugin calls it after
+   * the app is mounted and does not wait for it; await it where the translations have to be
+   * there first. A load already in flight for that locale is shared, not repeated. Resolves
+   * once they are loaded, or once the load failed (logged, never rejected).
+   */
   loadTranslations: (locale?: string) => Promise<void>;
   /** Check if translations are loaded for current locale */
   isLoaded: ComputedRef<boolean>;
-  /** Check if translations are currently loading */
+  /** `true` while a load is in flight; shared by every instance of the composable */
   isLoading: Ref<boolean>;
   /** Current detected locale */
   currentLocale: ComputedRef<string>;
