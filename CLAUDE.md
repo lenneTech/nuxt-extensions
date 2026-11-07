@@ -436,6 +436,22 @@ optionally behind a setup token (`LTNS_0054` when wrong). `GET /system-setup/sta
 - **One declaration per type** under `src/runtime/types`. `test/package-exports.test.ts` holds
   the last three rules.
 
+## Versioning (since 4.0.0)
+
+**MAJOR is the Nuxt major, and nothing else moves it.** `4.x` is the line for Nuxt 4. A MINOR is a
+change a project has to act on when it updates (behaviour, code or configuration) and always comes
+with a migration guide; a PATCH is a fix or addition it takes as it is. The same scheme as
+nest-server (major = NestJS) and ng-base (major = Angular). Full rules and the release steps:
+`.claude/rules/versioning.md` (in the repository, not in the npm package).
+
+- **A breaking change is a MINOR.** Never raise the major for it, however big the change feels.
+- **2.x and 3.x do not exist.** 4.0.0 follows 1.28.0 directly: 1.x was the Nuxt 4 line, but its
+  major did not say so. Older docs here saying "the major digit tracks Nuxt (1.x is Nuxt 4)" mean
+  that offset.
+- **When updating a project, read the migration guide of every MINOR in between**
+  (`migration-guides/<from>.x-to-<to>.0.md`, from 1.x: `1.x-to-4.0.0.md`). A caret range takes
+  MINORs, so the starters pin the exact version.
+
 ## Error Translation: loaded after mount (DEV-4078)
 
 `plugins/error-translation.client.ts` starts `loadTranslations()` in `app:mounted` and does not

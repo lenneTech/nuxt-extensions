@@ -91,6 +91,24 @@ overrides:
   '@better-auth/core': 1.7.16 # the api of nest-server-starter projects depends on it directly
 ```
 
+## Versioning
+
+Since 4.0.0 the version follows the scheme of `@lenne.tech/nest-server` and `@lenne.tech/ng-base`:
+
+| Part | Meaning |
+|---|---|
+| **MAJOR** | The Nuxt major this module is built for: `4.x.x` = Nuxt 4. It moves only with Nuxt. |
+| **MINOR** | A change you have to act on when you update (behaviour, code or configuration), always with a migration guide in [`migration-guides/`](./migration-guides). A breaking change is a minor. |
+| **PATCH** | A fix or addition you can take as it is. |
+
+**2.x and 3.x do not exist.** 4.0.0 follows 1.28.0 directly; 1.x was already the Nuxt 4 line. Coming
+from 1.x, read [`migration-guides/1.x-to-4.0.0.md`](./migration-guides/1.x-to-4.0.0.md).
+
+**Pin the exact version** (`npm install --save-exact @lenne.tech/nuxt-extensions`), as the starters
+do: a caret range takes minors, which are exactly the changes you have to act on.
+[nuxt-base-starter](https://github.com/lenneTech/nuxt-base-starter) carries the same version as the
+nuxt-extensions release it pins.
+
 ## Features
 
 - **Better-Auth Integration** - Login, 2FA, Passkey/WebAuthn support

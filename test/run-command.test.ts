@@ -26,7 +26,11 @@ function failureOf(fn: () => unknown): unknown {
   throw new Error('expected the command to fail');
 }
 
-describe('runCommandSync', () => {
+// The shim cases start the real npm / pnpm CLI. Alone that takes about 0.3 s; with parallel
+// sessions loading the machine it took 1.2–1.4 s and once ran past vitest's 5 s default, which
+// failed `check` and the pre-push hook on correct code. They prove that the shim starts, not how
+// fast, hence the generous limit.
+describe('runCommandSync', { timeout: 30_000 }, () => {
   it('starts the npm shim and returns its stdout', () => {
     expect(runCommandSync('npm', ['--version']).trim()).toMatch(/^\d+\.\d+\.\d+/);
   });

@@ -2,8 +2,47 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/). Versions follow
+the scheme in the README section "Versioning": MAJOR is the Nuxt major, MINOR is a change you have
+to act on when you update, PATCH is a fix or addition you can take as it is.
+
+## [4.0.0] - 2026-11-07
+
+First release on the new version scheme, with three changed defaults. **The major is now the Nuxt
+major**: 4.x is the line for Nuxt 4. 2.x and 3.x were never published; 4.0.0 follows 1.28.0
+directly and is no rewrite. From here on a MINOR is a change you have to act on when you update
+(behaviour, code or configuration), and a PATCH is a fix or addition you can take as it is. A
+breaking change ships as a MINOR; the major moves only with Nuxt. See
+`migration-guides/1.x-to-4.0.0.md`.
+
+### Breaking
+
+- **The default TUS endpoint is `/tus`** (DEV-4072), nest-server's TUS path. It was
+  `/files/upload`, which nest-server does not serve, so every project had to set the endpoint
+  itself. A project that set `tus.defaultEndpoint` (the starter sets `'/tus'`) is not affected. One
+  that relied on the old default sets `defaultEndpoint: '/files/upload'` or
+  `NUXT_PUBLIC_LT_EXTENSIONS_TUS_DEFAULT_ENDPOINT=/files/upload`.
+- **`auth.enableAdmin` defaults to `false`** (DEV-4076). nest-server registers no Better-Auth
+  `admin()` plugin, so every `admin.*` call answered 404, and `admin.createUser` /
+  `admin.setUserPassword` are the only methods this module sends unhashed. Set `enableAdmin: true`
+  only for a backend that serves the admin routes. `useLtAuth()` warns once when it is on and
+  `/iam/features` reports no `admin`. `isAdmin` is not affected.
+- **`useLtFile()` builds its file URLs on the API** (DEV-4073). `getFileUrl`, `getDownloadUrl` and
+  `getFileInfo` resolve like the auth, AI and TUS requests: `NUXT_PUBLIC_API_URL` + path, or `/api`
+  behind the dev proxy. Before, they were paths on the app origin and reached the API only behind a
+  same-origin proxy. `tus.resolveAgainstApi: false` keeps them relative; an absolute file base is
+  used as it is. The two link helpers return the URL the browser uses, during SSR too, so the
+  server-only `NUXT_API_URL` never ends up in the HTML.
+- **File links point at `GET /files/id/:id`** (DEV-4073), the nest-server route (since 11.8.0) that
+  serves a file by its id. The old targets never worked against nest-server: `/files/<id>` is read
+  as a file name and answers 404, and `/files/download/<id>` does not exist.
+  `getDownloadUrl(id, filename)` returns the same URL and ignores `filename`; nest-server names the
+  download after the stored file.
+
+### Changed
+
+- **The version scheme is written down**: README "Versioning", CLAUDE.md and
+  `.claude/rules/versioning.md`.
 
 ## [1.28.0] - 2026-11-07
 

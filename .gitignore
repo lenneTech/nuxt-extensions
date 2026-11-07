@@ -43,8 +43,11 @@ coverage
 *.iml
 .idea
 
-# Claude Code (agent memory, local settings)
-.claude
+# Claude Code (agent memory, local settings), in every `.claude` folder at any depth. Only the root
+# `.claude/rules/` is tracked: the repository's rules (versioning). `**/.claude/*` rather than
+# `.claude`, or git could not re-include the directory; not `.claude/*`, which matches the root only.
+**/.claude/*
+!/.claude/rules/
 # Agent memory on its own, so it stays ignored if the line above is ever narrowed: it is a symlink
 # into the private notes repository (lt-memory). No trailing slash, or the symlink is not matched.
 **/.claude/agent-memory
