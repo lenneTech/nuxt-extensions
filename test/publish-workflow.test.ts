@@ -5,10 +5,10 @@
  * The workflow runs once per release, after the tag and the GitHub release exist. A mistake here
  * shows on a release day as a half release: tag and release on GitHub, nothing on npm (1.16.0, an
  * expired NPM_TOKEN). These tests pin what the OIDC path needs, offline:
- *  - `id-token: write`, or npm never sees an OIDC token and silently falls back to the token;
+ *  - `id-token: write`, or npm never sees an OIDC token and the publish fails;
  *  - the npm CLI, because JS-DevTools/npm-publish takes a token and cannot do OIDC;
  *  - an npm >= 11.5.1, pinned to a major, so no new npm major arrives in a release run untried;
- *  - every gate before the publish, and NPM_TOKEN in the publish step only, never job-wide.
+ *  - every gate before the publish, and no long-lived token anywhere (4.0.1 proved OIDC).
  */
 
 import { readFileSync } from 'node:fs';
@@ -68,7 +68,7 @@ describe('publish.yml — npm Trusted Publishing (DEV-3143)', () => {
 
   it('publishes the build the gates checked, with no lifecycle script next to the token', () => {
     // npm runs `prepack` (nuxt-module-build) unless told not to: third-party build code in the
-    // step that holds NODE_AUTH_TOKEN, and a second build after check:manifest looked at the first.
+    // step that obtains the publish token, and a second build after check:manifest looked at the first.
     expect(STEPS[PUBLISH]).toMatch(/\brun: npm publish\b[^\n]*\s--ignore-scripts\b/);
   });
 
@@ -103,10 +103,9 @@ describe('publish.yml — npm Trusted Publishing (DEV-3143)', () => {
     expect(setupNode).toMatch(/^\s+registry-url: https:\/\/registry\.npmjs\.org\/?$/m);
   });
 
-  it('hands NPM_TOKEN to the publish step only, never to the gates or the whole job', () => {
-    const everywhere = CODE.match(/secrets\.NPM_TOKEN/g)?.length ?? 0;
-    const inPublish = STEPS[PUBLISH]?.match(/secrets\.NPM_TOKEN/g)?.length ?? 0;
-
-    expect(inPublish).toBe(everywhere);
+  it('uses no long-lived npm token: OIDC only, since 4.0.1 proved it', () => {
+    // With a token configured, npm silently uses it whenever the OIDC exchange fails and
+    // publishes without provenance, so a broken Trusted Publisher would go unnoticed.
+    expect(CODE).not.toMatch(/secrets\.NPM_TOKEN|NODE_AUTH_TOKEN|NPM_CONFIG_\w*AUTH|_authToken/i);
   });
 });
