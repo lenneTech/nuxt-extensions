@@ -142,6 +142,20 @@ describe('ltAuthFetch — an expired JWT', () => {
     expect(tokenCalls()).toHaveLength(0);
   });
 
+  it("recognises Better-Auth's routes behind the dev proxy, where the client sends absolute URLs", async () => {
+    // Without a baseURL better-auth prefixes window.location.origin (utils/url.mjs `getBaseURL`),
+    // while the auth base is the relative `/api/iam`
+    setStubRuntimeConfig({ public: { apiProxy: true, apiUrl: API, ltExtensions: { auth: { basePath: '/iam' } } } });
+    signedIn('jwt');
+    backend();
+
+    const response = await ltAuthFetch(`${location.origin}/api/iam/two-factor/verify-totp`, { body: '{"code":"000000"}', method: 'POST' });
+
+    expect(response.status).toBe(401);
+    expect(callsTo((url) => url.endsWith('/api/iam/two-factor/verify-totp'))).toHaveLength(1);
+    expect(tokenCalls()).toHaveLength(0);
+  });
+
   it('leaves a 401 alone when nobody is signed in', async () => {
     backend();
 

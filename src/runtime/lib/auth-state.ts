@@ -664,10 +664,25 @@ function ltUrlRequiresCookies(url: string): boolean {
   return LT_PATHS_REQUIRING_COOKIES.some((path) => url.includes(path));
 }
 
-/** Whether `url` is one of Better-Auth's own routes (under the auth API base, e.g. `/iam/sign-in/email`). */
+/** The path of an absolute or relative URL (`https://api.example.com/iam/x?y` → `/iam/x`). */
+function ltUrlPath(url: string): string {
+  try {
+    return new URL(url, 'http://lt.invalid').pathname;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Whether `url` is one of Better-Auth's own routes (under the auth API base, e.g. `/iam/sign-in/email`).
+ *
+ * Compared by path: behind the dev proxy the auth base is the relative `/api/iam`, while the
+ * Better-Auth client, built without a baseURL, sends absolute URLs on `window.location.origin`.
+ */
 function isLtAuthRoute(url: string, basePath?: string): boolean {
-  const base = getLtApiBase(basePath);
-  return url === base || url.startsWith(`${base}/`);
+  const base = ltUrlPath(getLtApiBase(basePath)).replace(/\/+$/, '');
+  const path = ltUrlPath(url);
+  return path === base || path.startsWith(`${base}/`);
 }
 
 /**
