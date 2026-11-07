@@ -5,6 +5,71 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.28.0] - 2026-11-07
+
+Fix release. No breaking changes: no option, runtime config or environment variable changed, and
+nothing a project can import was removed. One step for npm-mode projects that use the `LtTransition*`
+components: add the `@source` line below to the stylesheet that imports Tailwind.
+
+### Fixed
+
+- **One authenticated fetch for every caller** (DEV-4074). `useLtAuth().fetchWithAuth` and
+  `ltAuthFetch` / `createLtAuthFetch` are now one implementation. A 401 while signed in fetches a
+  JWT once and retries once, in cookie mode (the switch to JWT) and in JWT mode (an expired bearer:
+  15 minutes against a 7-day session). `ltAuthFetch` used to fail on an expired JWT. Parallel 401s
+  share one `GET <basePath>/token`. A 401 the bearer did not cause is never retried in JWT mode:
+  Better-Auth's own routes for `ltAuthFetch` (a wrong password or 2FA code is not sent twice), the
+  cookie-bound passkey, 2FA and `/get-session` paths for `fetchWithAuth`.
+- **The JWT comes from `auth.basePath`** (DEV-4074). `ltAuthFetch`, `createLtAuthFetch()` and
+  `attemptLtJwtSwitch()` read it from the runtime config; they fetched it from `/iam` whatever the
+  project configured.
+- **`LtTransitionFade` and `LtTransitionFadeScale` honour their duration props under Tailwind 4**
+  (DEV-4071). The classes used the v3 syntax `duration-[--start-duration]`, which Tailwind 4
+  compiles to an invalid declaration, so every transition ran in 0 s. They now use
+  `duration-(--start-duration)`.
+- **Error translations no longer hold back the client start** (DEV-4078). The plugin awaited
+  `GET /i18n/errors/<locale>` before the app mounted, and every server-rendered message caused a
+  hydration mismatch. It now loads after the mount; until then `translateError` returns the
+  developer message, and templates switch to the translation when it arrives. Loads are shared per
+  locale, so `await loadTranslations()` waits for a request in flight instead of returning early, and
+  a load for another locale is no longer swallowed by one in flight. `isLoading` is shared by every
+  instance.
+- **Locale files** (DEV-4069): `lt.auth.passkeyAlreadyRegistered` added to `de.json` and `en.json`;
+  the unused keys `lt.auth.loggingOut`, `lt.auth.sessionExpired` and `lt.error.loadFailed` removed;
+  the German fallback texts match the locale files.
+- **The vendored entry `app/core/index.ts`** (copied from `src/index.ts` by the lt CLI) re-exports
+  every composable, `/lib` helper and utility (DEV-4079). It had stopped at 1.7.1 and missed
+  `useLtAiSettings`, `useLtAiStatus` and `useLtOfflineSync`.
+- **CLAUDE.md shows the `/testing` exports that exist** (DEV-4080). Its example imported
+  `createTestUser` and `loginTestUser`, which were never exported.
+
+### Added
+
+- **Optional peer dependencies `@nuxt/ui >=3.0.0` and `tailwindcss >=4.0.0`** (DEV-4079). Both
+  were used without being declared: `@nuxt/ui` for toasts, Tailwind for the transition classes.
+- **README: the `@source` line npm-mode projects need for the transition classes** (DEV-4071):
+  `@source '../../../node_modules/@lenne.tech/nuxt-extensions/dist/runtime';` in
+  `app/assets/css/tailwind.css`. Nuxt UI only scans the app's own directories.
+- **README: "Error Translation"**, including the opt-in for translating messages during SSR
+  (DEV-4078), and **"Server-side rendering: backend calls are anonymous"** (DEV-4077).
+
+### Changed
+
+- **`auth.enabled` is documented as what it is** (DEV-4075): it only switches the 401 interceptor
+  (the same as `auth.interceptor.enabled`); the auth composables stay available. The development
+  log reads `authInterceptor: on/off`.
+
+### Deprecated
+
+- **`LtAuthResponse`** (DEV-4079). No function returns or accepts it. Removed in a later release.
+
+### Removed
+
+- **`resetLtAuthClient()`** (DEV-4079). No entry point exported it and it was not auto-imported;
+  `resetLtAuthClientSingleton()` from `/lib` does the same.
+- **The second declaration of `LtErrorTranslationModuleOptions`** in `types/error.ts` (DEV-4079).
+  The type is still exported, from `types/module.ts`.
+
 ## [1.27.0] - 2026-11-06
 
 Feature release for `@lenne.tech/nest-server` 12.7.0, which lists disabled AI prompts on request
