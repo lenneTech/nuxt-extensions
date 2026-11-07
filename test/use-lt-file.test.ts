@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { resetStubRuntimeConfig, setStubRuntimeConfig } from './stubs/imports';
+import { resetStubRuntimeConfig, setStubRuntimeConfig, setStubRuntimeConfigThrows } from './stubs/imports';
 import { resetTestRenderScope, setTestRenderScope } from './stubs/render-scope';
 import { useLtFile } from '../src/runtime/composables/use-lt-file';
 
@@ -135,6 +135,20 @@ describe('useLtFile against the API', () => {
     setStubRuntimeConfig({ public: { apiUrl: API, ltExtensions: { tus: { defaultEndpoint: 'https://files.example.com/files/upload' } } } });
 
     expect(useLtFile().getFileUrl('abc')).toBe('https://files.example.com/files/id/abc');
+  });
+
+  it('keeps the API links after an await during SSR, where the Nuxt context (and useRuntimeConfig) is gone', async () => {
+    const fetchMock = vi.fn(async (_url: string, _init?: unknown) => ({}));
+    vi.stubGlobal('$fetch', fetchMock);
+    configure({ serverApiUrl: 'http://api.internal:3000' });
+    setTestRenderScope('server');
+    // Created in setup, used in a useAsyncData handler after its first await
+    const file = useLtFile();
+    setStubRuntimeConfigThrows();
+
+    expect(file.getFileUrl('abc')).toBe(`${API}/files/id/abc`);
+    await file.getFileInfo('0123456789abcdef01234567');
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('http://api.internal:3000/files/info/0123456789abcdef01234567');
   });
 
   it('fetches the file info from the API, during SSR from the server-side API URL', async () => {

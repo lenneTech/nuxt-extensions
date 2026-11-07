@@ -10,7 +10,7 @@
 import type { LtFileInfo, UseLtFileReturn } from '../types';
 
 import { useRuntimeConfig } from '#imports';
-import { buildLtApiUrl, buildLtPublicApiUrl } from '../lib/auth-state';
+import { resolveLtApiBaseUrl, resolveLtPublicApiBaseUrl, warnMissingLtApiUrl } from '../lib/auth-state';
 
 /** `https:` and friends, or protocol-relative `//host`: a file base that names its own origin. */
 const ABSOLUTE_URL = /^(?:[a-z][a-z\d+.-]*:|\/\/)/i;
@@ -35,6 +35,17 @@ const ABSOLUTE_URL = /^(?:[a-z][a-z\d+.-]*:|\/\/)/i;
 export function useLtFile(): UseLtFileReturn {
   const config = useRuntimeConfig();
 
+  // Both API bases are read now, while the Nuxt context exists. A link built after an `await`
+  // during SSR (in a `useAsyncData` handler) has none: `useRuntimeConfig()` would throw there, and
+  // the link would silently fall back to the app origin.
+  const apiBases = (() => {
+    try {
+      return { link: resolveLtPublicApiBaseUrl(), request: resolveLtApiBaseUrl() };
+    } catch {
+      return null;
+    }
+  })();
+
   /**
    * Get the base URL for file operations
    *
@@ -54,15 +65,23 @@ export function useLtFile(): UseLtFileReturn {
    * absolute file base is used as it is.
    *
    * @param path - The path below the file base, e.g. `/download/abc`
-   * @param scope - `'link'` for URLs the browser follows (public URL, also during SSR), `'request'`
-   *   for the request this composable makes itself (during SSR the server-side API URL)
+   * @param scope - `'link'` for URLs the browser follows (public URL, also during SSR, as
+   *   `buildLtPublicApiUrl`), `'request'` for the request this composable makes itself (during SSR
+   *   the server-side API URL, as `buildLtApiUrl`)
    */
   function fileApiUrl(path: string, scope: 'link' | 'request'): string {
     const url = `${getFileApiBase()}${path}`;
     if (config.public.ltExtensions?.tus?.resolveAgainstApi === false || ABSOLUTE_URL.test(url)) {
       return url;
     }
-    return scope === 'link' ? buildLtPublicApiUrl(url) : buildLtApiUrl(url);
+    if (!apiBases) {
+      return url;
+    }
+    const base = scope === 'link' ? apiBases.link : apiBases.request;
+    if (base.missing) {
+      warnMissingLtApiUrl(scope === 'link' ? 'client' : apiBases.request.scope);
+    }
+    return `${base.baseUrl}${url}`;
   }
 
   /**

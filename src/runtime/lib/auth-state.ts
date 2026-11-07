@@ -416,18 +416,31 @@ export function buildLtApiUrl(path: string): string {
  */
 export function buildLtPublicApiUrl(path: string): string {
   try {
-    if (isLtApiProxyConfigured()) {
-      return `/api${path}`;
-    }
-    const pub = useRuntimeConfig().public as Record<string, any>;
-    const publicUrl = pub.apiUrl || pub.ltExtensions?.auth?.baseURL || '';
-    if (!publicUrl) {
+    const { baseUrl, missing } = resolveLtPublicApiBaseUrl();
+    if (missing) {
       warnMissingLtApiUrl('client');
     }
-    return `${stripTrailingSlashes(publicUrl)}${path}`;
+    return `${baseUrl}${path}`;
   } catch {
     return path;
   }
+}
+
+/**
+ * The base of {@link buildLtPublicApiUrl}: `'/api'` behind the dev proxy, otherwise the public API
+ * URL; `missing` when neither is configured.
+ *
+ * INTERNAL — for callers that read the base once, while the Nuxt context exists, and build URLs
+ * later (`useLtFile()`: after an `await` in a `useAsyncData` handler, `useRuntimeConfig()` throws
+ * during SSR). Throws outside a Nuxt runtime-config context; callers catch.
+ */
+export function resolveLtPublicApiBaseUrl(): { baseUrl: string; missing: boolean } {
+  if (isLtApiProxyConfigured()) {
+    return { baseUrl: '/api', missing: false };
+  }
+  const pub = useRuntimeConfig().public as Record<string, any>;
+  const publicUrl = pub.apiUrl || pub.ltExtensions?.auth?.baseURL || '';
+  return { baseUrl: stripTrailingSlashes(publicUrl), missing: !publicUrl };
 }
 
 // =============================================================================
