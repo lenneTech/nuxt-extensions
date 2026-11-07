@@ -24,6 +24,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { packedFilePaths } from "./lib/npm-pack-report.mjs";
 import { describeCommandFailure, runCommandSync } from "./lib/run-command.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -42,7 +43,14 @@ try {
   process.exit(1);
 }
 
-const packed = JSON.parse(raw)[0].files.map((f) => f.path);
+let packed;
+try {
+  packed = packedFilePaths(raw, pkg.name);
+} catch (error) {
+  console.error("[package-manifest] could not read the `npm pack --dry-run --json` report:");
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
 const problems = [];
 
 // 1. Every `files` entry must contribute at least one file.

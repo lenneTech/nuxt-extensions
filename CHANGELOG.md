@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 the scheme in the README section "Versioning": MAJOR is the Nuxt major, MINOR is a change you have
 to act on when you update, PATCH is a fix or addition you can take as it is.
 
+## [4.0.1] - 2026-11-07
+
+Nothing in the package changes for projects. This release changes how it is published, and it is
+the first one published that way.
+
+### Changed
+
+- **Releases are published through npm Trusted Publishing (OIDC)** (DEV-3143). `publish.yml`
+  runs `npm publish` with a short-lived token that npm issues for each workflow run. It no longer
+  uses `JS-DevTools/npm-publish` with a long-lived `NPM_TOKEN`; an expired one left 1.16.0 tagged
+  but missing from npm. Each version now carries a provenance attestation on npm, so you can check
+  which commit and which workflow run built it. The workflow publishes the build the release gates
+  checked (`--ignore-scripts`, as before) and pins npm to major 12.
+
+### Fixed
+
+- **`check:manifest` works with npm 12.** npm 12 prints `npm pack --json` as an object keyed by
+  package name instead of an array, and the script stopped with a `TypeError`. This affects only
+  this repository's `check`; the package is unchanged.
+
 ## [4.0.0] - 2026-11-07
 
 First release on the new version scheme, with three changed defaults. **The major is now the Nuxt

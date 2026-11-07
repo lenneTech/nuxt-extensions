@@ -45,7 +45,10 @@ The same scheme in every lenne.Tech base repository, modelled on `@lenne.tech/ne
 4. `pnpm run release` (format, lint, version check, types, tests, consumer build, pack) and `pnpm run check`
 5. Commit `<version>: <summary>` on `main` and push
 6. `gh release create <version>` with the bare version as tag (no `v`) and consumer-oriented English notes;
-   `.github/workflows/publish.yml` publishes to npm with provenance when the release is published
+   `.github/workflows/publish.yml` publishes to npm when the release is published, through Trusted Publishing
+   (OIDC) with provenance. Until DEV-3143 removes it, a failed OIDC exchange falls back to `NPM_TOKEN`, which
+   publishes without provenance. Which one ran:
+   `https://registry.npmjs.org/-/npm/v1/attestations/@lenne.tech%2fnuxt-extensions@<version>` answers 200 only for OIDC
 7. Wait until `https://registry.npmjs.org/@lenne.tech/nuxt-extensions/<version>` answers 200, then release
    nuxt-base-starter with the same version (rule 2); `/lt-dev:publish nuxt-extensions` runs steps 2 to 7
 

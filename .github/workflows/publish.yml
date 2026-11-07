@@ -5,6 +5,16 @@ on:
     types:
       - released
 
+# Trusted Publishing (OIDC): npm exchanges this run's GitHub OIDC token for a publish token that
+# expires within minutes, instead of a long-lived NPM_TOKEN that expires on a release day (1.16.0),
+# and signs a provenance statement, because the repository is public. It needs the Trusted
+# Publisher on npmjs.com: lenneTech / nuxt-extensions / publish.yml, no environment. Renaming this
+# file breaks publishing until that entry is changed too. `id-token: write` lets the job request
+# the OIDC token; nothing here writes to the repository.
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   publish:
     name: Publish
@@ -19,11 +29,15 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v4
 
+      # Node 24: npm 12 needs ^24.15.0, and Node 22.22.2's bundled npm cannot `npm install -g`
+      # (actions/runner-images#13883). `registry-url` writes the .npmrc entry the NPM_TOKEN
+      # fallback of the publish step reads.
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'pnpm'
+          registry-url: https://registry.npmjs.org
 
       - name: Install dependencies
         run: pnpm install
@@ -53,7 +67,23 @@ jobs:
       - name: Package manifest check
         run: pnpm run check:manifest
 
-      - uses: JS-DevTools/npm-publish@v3
-        with:
-          access: public
-          token: ${{ secrets.NPM_TOKEN }}
+      # Trusted Publishing needs npm >= 11.5.1. npm 12 is the major lenneTech/cli publishes with
+      # through OIDC. Pinned to that major, not `@latest`, so a new npm major never reaches a
+      # release run without having been tried first.
+      - name: npm for Trusted Publishing
+        run: npm install -g npm@12
+
+      # The npm CLI itself, because JS-DevTools/npm-publish takes a token and cannot do OIDC.
+      # npm tries OIDC first and uses NODE_AUTH_TOKEN only when that exchange fails, which is the
+      # case while no Trusted Publisher is configured on npmjs.com. The token path publishes
+      # WITHOUT provenance: a release with no provenance on npm went out with the token.
+      # NPM_TOKEN stays as the fallback until one release went out through OIDC (DEV-3143);
+      # then delete the `env` block.
+      #
+      # `--ignore-scripts`, as the old action did by default: without it npm runs `prepack`
+      # (nuxt-module-build and the whole @nuxt/kit tree) in this step, with the token in its
+      # environment, and publishes a second build instead of the one the gates above checked.
+      - name: Publish
+        run: npm publish --access public --ignore-scripts
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
