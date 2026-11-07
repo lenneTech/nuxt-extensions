@@ -1239,20 +1239,23 @@ The package works **with or without** `@nuxtjs/i18n`:
 ## Development
 
 ```bash
-# Install dependencies
-npm install
+# Install dependencies (the repository pins pnpm in `packageManager`)
+pnpm install
 
 # Generate type stubs
-npm run dev:prepare
+pnpm run dev:prepare
 
 # Develop with playground
-npm run dev
+pnpm run dev
 
 # Build the module
-npm run build
+pnpm run build
 
 # Run tests
-npm run test
+pnpm test
+
+# Everything a merge needs: audit, lint, types, tests, build, package manifest
+pnpm run check
 ```
 
 ## License

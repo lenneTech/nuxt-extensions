@@ -5,11 +5,12 @@
  * Two silent failure modes this catches — both produce a green `check` and a
  * broken release:
  *
- *   1. A `files` pattern that matches nothing. Rename `.claude/rules/` or move
- *      `src/`, and npm packs zero files for that entry without any warning. The
- *      published package is simply missing them — vendor mode (which consumes
- *      `src/**`) or the lt-dev agent rules then break in consuming projects,
- *      not here.
+ *   1. A `files` pattern that matches nothing. Move the build output out of
+ *      `dist/` or rename `CLAUDE.md`, and npm packs zero files for that entry
+ *      without any warning. The published package is simply missing them, and
+ *      consuming projects lose the module or the agent instructions that ship
+ *      with it; nothing fails here. (Vendor mode does not read the tarball: the
+ *      lt CLI copies `src/` from a clone of the repository.)
  *   2. `main` / `types` / `bin` pointing at a path that is not packed, e.g.
  *      after a build-output move. `check` builds into dist/ and is happy; the
  *      installed package cannot be required at all.
