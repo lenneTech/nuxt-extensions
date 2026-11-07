@@ -205,11 +205,28 @@ A service worker must never cache `/sync` or `/iam` responses (nest-server
 
 ## Testing Helpers
 
-Import from `@lenne.tech/nuxt-extensions/testing`:
+Playwright helpers, imported from `@lenne.tech/nuxt-extensions/testing` (the starter's E2E tests use
+them this way):
 
 ```typescript
-import { createTestUser, loginTestUser } from '@lenne.tech/nuxt-extensions/testing';
+import { fillInput, generateTestUser, gotoAndWaitForHydration, waitForURLAndHydration } from '@lenne.tech/nuxt-extensions/testing';
+
+const user = generateTestUser('e2e');
+await gotoAndWaitForHydration(page, '/auth/register');
+await fillInput(page, 'input[name="email"]', user.email);
 ```
+
+| Group | Exports |
+|-------|---------|
+| Hydration | `waitForHydration`, `gotoAndWaitForHydration`, `waitForURLAndHydration`, `DEFAULT_HYDRATION_TIMEOUT` |
+| Input | `fillInput`, `fillInputs` |
+| Test data | `generateTestUser` (type `TestUser`), `generateRandomString` |
+| TOTP / 2FA | `generateTOTP`, `extractTOTPSecret`, `parseTOTPUrl` |
+| Waiting, reading | `waitForElement`, `waitForNetworkIdle`, `hasText`, `getAllText` |
+
+There is no `createTestUser` or `loginTestUser`. A test registers and signs in through the pages, as
+the starter's specs do. `test/doc-imports.test.ts` fails when this file or the README imports a
+name that `/testing` or `/lib` does not export.
 
 ## Authentication Cookie Rules
 
