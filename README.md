@@ -540,6 +540,36 @@ the AI composables and offline sync) run through one implementation.
   and `attemptLtJwtSwitch()` read it from the module config; they used to fetch it from `/iam`
   whatever was configured. A path passed explicitly still wins.
 
+#### Server-side rendering: backend calls are anonymous
+
+During SSR, `ltAuthFetch`, the AI composables and offline sync call the API **without** a session:
+on the server `getLtAuthMode()` is `'cookie'`, `getLtJwtToken()` is `null` and `isLtAuthenticated()`
+is `false`. The one exception is `useLtAuth().fetchWithAuth` (see the last point below). That is deliberate. The auth helpers are module singletons shared by every request a
+Nitro process renders, so they may not carry one request's cookies. And the session cookie
+(`iam.session_token`) belongs to the API host: nest-server sets it host-only unless
+`crossSubDomainCookies` is configured, so the app server never receives it. `validateSession()` on
+the server therefore relies on the `lt-auth-state` cookie only, which is a display cache, not proof
+of a session.
+
+For pages that show user data:
+
+- **Load it in the browser.** `useAsyncData(key, fetcher, { server: false })` or `onMounted`, with a
+  skeleton or loading state for the first paint. This is what nuxt-base-starter does.
+  `useLazyAsyncData` alone is not enough: `lazy` only stops it from blocking navigation, the
+  fetcher still runs during SSR, and its anonymous answer (a 401 or the public subset) goes into
+  the payload, which the browser does not fetch again. Add `server: false` there too.
+- **Render only public data on the server**, and never decide access there: an SSR guard that reads
+  `lt-auth-state` decides what to render, the API decides what the user may see.
+- If a page truly needs user data in the SSR HTML, that needs a server route of the app that
+  forwards the request's own session to the API, set up per project together with a shared cookie
+  domain. `ltAuthFetch` does not do it.
+- **`useLtAuth().fetchWithAuth` during SSR is not anonymous.** It reads the request's cookies through
+  `useCookie`, and in JWT mode (the normal state after sign-in) it sends the request's `lt-jwt-token`
+  as the bearer. It cannot renew that token on the server, so the call works until the JWT expires
+  (15 minutes) and then answers 401. Do not use it for SSR-rendered user data, and never cache
+  (`swr`, `isr`, a CDN) a route whose SSR output went through it: one user's data would be served to
+  the next.
+
 #### Admin detection (`role` vs `roles`)
 
 `isAdmin` accepts **both** user shapes, so the same frontend works against either backend:
