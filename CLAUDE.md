@@ -527,6 +527,19 @@ fields at `app:beforeMount` and restores them at `app:mounted`, dispatching a sy
   else.** Vendoring turns them into project source, where they cause TS2310, and the cli removes a
   block only while it holds that one interface. Type server-only config where it is read.
 
+## Transition Components and Tailwind 4
+
+The `LtTransition*` components are the only place this module uses Tailwind classes.
+
+- **Tailwind 4 syntax: `duration-(--start-duration)`, never `duration-[--start-duration]`.**
+  Tailwind 4 compiles the v3 shorthand to `transition-duration: --start-duration`, which the browser
+  drops: the fade ran in 0 s and the duration props did nothing (DEV-4071).
+  `test/transition-classes.test.ts` compiles every class with the stack's Tailwind version.
+- **npm mode needs a `@source` line** for `node_modules/@lenne.tech/nuxt-extensions/dist/runtime` in
+  the stylesheet that imports Tailwind (README, "Transition Components"). Nuxt UI only adds the
+  layers' `app` directories, without a hook a module could use. A missing `@source` path is
+  ignored, so the line is harmless in vendor mode.
+
 ## Development Rules
 
 1. **ALWAYS read source code** in `dist/runtime/` to understand available composables and components
