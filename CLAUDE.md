@@ -74,7 +74,7 @@ export default defineNuxtConfig({
       defaultLocale: 'de',
     },
     tus: {
-      defaultEndpoint: '/files/upload',
+      defaultEndpoint: '/tus',       // nest-server's TUS path (default)
       defaultChunkSize: 5 * 1024 * 1024,  // 5MB
     },
     i18n: {

@@ -108,12 +108,12 @@ async function endpointFor(options: Parameters<typeof useLtTusUpload>[0] = {}): 
 }
 
 describe('useLtTusUpload option defaults', () => {
-  it('keeps the default endpoint when the caller passes endpoint: undefined', async () => {
+  it("keeps the default endpoint, nest-server's /tus, when the caller passes endpoint: undefined", async () => {
     const { addFiles } = useLtTusUpload({ autoStart: false, endpoint: undefined });
 
     await addFiles(new File(['a'], 'a.txt'));
 
-    expect(created[0]?.options.endpoint).toBe('/files/upload');
+    expect(created[0]?.options.endpoint).toBe('/tus');
   });
 
   it('keeps the configured module endpoint when the caller passes endpoint: undefined', async () => {

@@ -200,7 +200,7 @@ export default defineNuxtConfig({
 
     // TUS upload configuration
     tus: {
-      defaultEndpoint: '/tus',            // nest-server's TUS path (module default: '/files/upload')
+      defaultEndpoint: '/tus',            // nest-server's TUS path (the module default)
       defaultChunkSize: 5 * 1024 * 1024,  // 5MB
       resolveAgainstApi: true,            // relative endpoint = path on the API, like auth/AI requests
     },
