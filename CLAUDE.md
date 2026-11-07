@@ -402,6 +402,21 @@ optionally behind a setup token (`LTNS_0054` when wrong). `GET /system-setup/sta
   configuration. Pass the error itself to `translateError(error)`: the `#LTNS_` code is in the
   body, `error.message` holds only the transport line.
 
+## Package Entry Points (DEV-4079)
+
+- **npm `.`** is `dist/module.mjs`, built from `src/module.ts`: the module and every type
+  (`export type * from './runtime/types'`). Runtime values come from auto-imports or `./lib`;
+  `./testing` holds the Playwright helpers.
+- **`src/index.ts` is the entry of the VENDORED core, not dead code.** npm mode never builds it,
+  but the lt CLI copies it to `app/core/index.ts` and rewrites `from '@lenne.tech/nuxt-extensions'`
+  to `app/core`. Deleting it breaks every type import of a vendored project. It re-exports whole
+  barrels (`export *`); never turn it back into a hand-written list, which lost three composables.
+- **Every package `src/` imports is declared**, as a dependency or a peer. A package that is only
+  there when the project installs it is an optional peer, with a stub alias in `module.ts` if it is
+  imported statically (`test/optional-peers.test.ts`).
+- **One declaration per type** under `src/runtime/types`. `test/package-exports.test.ts` holds
+  the last three rules.
+
 ## Error Translation: loaded after mount (DEV-4078)
 
 `plugins/error-translation.client.ts` starts `loadTranslations()` in `app:mounted` and does not

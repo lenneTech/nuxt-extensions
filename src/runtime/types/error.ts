@@ -26,16 +26,6 @@ export interface LtParsedError {
 }
 
 /**
- * Error translation module options
- */
-export interface LtErrorTranslationModuleOptions {
-  /** Enable error translation feature (default: true) */
-  enabled?: boolean;
-  /** Default locale if not detected (default: 'de') */
-  defaultLocale?: string;
-}
-
-/**
  * Return type for useLtErrorTranslation composable
  */
 export interface UseLtErrorTranslationReturn {

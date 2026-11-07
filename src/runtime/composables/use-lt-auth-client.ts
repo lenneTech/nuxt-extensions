@@ -19,15 +19,8 @@
 
 import { useRuntimeConfig } from '#imports';
 
-import { getOrCreateLtAuthClient, resetLtAuthClientSingleton, type LtAuthClient } from '../lib/auth-client';
+import { getOrCreateLtAuthClient, type LtAuthClient } from '../lib/auth-client';
 import { isLocalDevApiProxy } from '../lib/auth-state';
-
-/**
- * Reset the auth client singleton (useful for testing or config changes)
- */
-export function resetLtAuthClient(): void {
-  resetLtAuthClientSingleton();
-}
 
 /**
  * Returns the Better-Auth client singleton

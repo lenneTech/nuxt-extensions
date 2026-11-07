@@ -32,6 +32,8 @@ Reusable Nuxt 4 composables, components, and Better-Auth integration for lenne.t
 | `better-auth` | `>=1.7.16 <1.8.0` | **required peer** — pin it, see below |
 | `@better-auth/passkey` | `>=1.7.16 <1.8.0` | optional peer, passkey/WebAuthn only |
 | `tus-js-client` | `>=4.0.0` | optional peer, resumable uploads only |
+| `@nuxt/ui` | `>=3.0.0` | optional peer: toasts of `showErrorToast` and the auth flows; without it they go to the console |
+| `tailwindcss` | `>=4.0.0` | optional peer, `LtTransition*` components only (Tailwind 4 class syntax, see "Transition Components") |
 | `@lenne.tech/nest-server` | `>= 11.37.0` | **only if you use the backend** — see the lock-step rule |
 
 **Why `better-auth` is pinned to one minor line, and why you must not widen it:**

@@ -100,6 +100,11 @@ export interface LtAuthClientConfig {
 /**
  * Normalized response type for Better-Auth operations
  * The Vue client returns complex union types - this provides a consistent interface
+ *
+ * @deprecated No function of this module returns or accepts it. Its `data.token` invites
+ * storing whatever token an answer carries, and Better-Auth's 2FA answer carries the session
+ * token there, which application code must never hold. Type the result of the method you
+ * call instead. Removed in the next major version.
  */
 export interface LtAuthResponse {
   data?: null | {
