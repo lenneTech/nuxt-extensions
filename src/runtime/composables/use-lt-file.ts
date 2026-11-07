@@ -10,6 +10,10 @@
 import type { LtFileInfo, UseLtFileReturn } from '../types';
 
 import { useRuntimeConfig } from '#imports';
+import { resolveLtApiBaseUrl, resolveLtPublicApiBaseUrl, warnMissingLtApiUrl } from '../lib/auth-state';
+
+/** `https:` and friends, or protocol-relative `//host`: a file base that names its own origin. */
+const ABSOLUTE_URL = /^(?:[a-z][a-z\d+.-]*:|\/\/)/i;
 
 /**
  * File utilities composable
@@ -31,6 +35,17 @@ import { useRuntimeConfig } from '#imports';
 export function useLtFile(): UseLtFileReturn {
   const config = useRuntimeConfig();
 
+  // Both API bases are read now, while the Nuxt context exists. A link built after an `await`
+  // during SSR (in a `useAsyncData` handler) has none: `useRuntimeConfig()` would throw there, and
+  // the link would silently fall back to the app origin.
+  const apiBases = (() => {
+    try {
+      return { link: resolveLtPublicApiBaseUrl(), request: resolveLtApiBaseUrl() };
+    } catch {
+      return null;
+    }
+  })();
+
   /**
    * Get the base URL for file operations
    *
@@ -41,6 +56,32 @@ export function useLtFile(): UseLtFileReturn {
   function getFileApiBase(): string {
     const endpoint = config.public.ltExtensions?.tus?.defaultEndpoint;
     return (endpoint?.endsWith('/upload') ? endpoint.slice(0, -'/upload'.length) : '') || '/files';
+  }
+
+  /**
+   * A file route on the API, by the rule of the auth, AI and TUS requests (DEV-4073): the file
+   * routes are API routes, and a path relative to the app only reached them behind a same-origin
+   * proxy. `tus.resolveAgainstApi: false` (exactly that proxy setup) keeps the path relative; an
+   * absolute file base is used as it is.
+   *
+   * @param path - The path below the file base, e.g. `/download/abc`
+   * @param scope - `'link'` for URLs the browser follows (public URL, also during SSR, as
+   *   `buildLtPublicApiUrl`), `'request'` for the request this composable makes itself (during SSR
+   *   the server-side API URL, as `buildLtApiUrl`)
+   */
+  function fileApiUrl(path: string, scope: 'link' | 'request'): string {
+    const url = `${getFileApiBase()}${path}`;
+    if (config.public.ltExtensions?.tus?.resolveAgainstApi === false || ABSOLUTE_URL.test(url)) {
+      return url;
+    }
+    if (!apiBases) {
+      return url;
+    }
+    const base = scope === 'link' ? apiBases.link : apiBases.request;
+    if (base.missing) {
+      warnMissingLtApiUrl(scope === 'link' ? 'client' : apiBases.request.scope);
+    }
+    return `${base.baseUrl}${url}`;
   }
 
   /**
@@ -66,8 +107,7 @@ export function useLtFile(): UseLtFileReturn {
     }
 
     try {
-      const apiBase = getFileApiBase();
-      const response = await $fetch<LtFileInfo>(`${apiBase}/info/${id}`, {
+      const response = await $fetch<LtFileInfo>(fileApiUrl(`/info/${id}`, 'request'), {
         credentials: 'include',
         method: 'GET',
       });
@@ -79,27 +119,28 @@ export function useLtFile(): UseLtFileReturn {
   }
 
   /**
-   * Get the direct URL to view/access a file
+   * Get the URL of a file by its id: nest-server's `GET /files/id/:id` (since 11.8.0), which streams
+   * the file. `/files/:id` would be read as a file NAME (`GET /files/:filename`) and answer 404.
    *
    * @param id - The file ID
    * @returns The file URL
    */
   function getFileUrl(id: string): string {
-    const apiBase = getFileApiBase();
-    return `${apiBase}/${id}`;
+    return fileApiUrl(`/id/${encodeURIComponent(id)}`, 'link');
   }
 
   /**
-   * Get the download URL for a file
+   * Get the download URL for a file: the same route as {@link getFileUrl}. nest-server sends
+   * `Content-Disposition: attachment` with the stored filename there and has no rename parameter,
+   * so `filename` is accepted for compatibility and ignored (as in ng-base). There is no
+   * `/files/download/:id` route.
    *
    * @param id - The file ID
-   * @param filename - Optional filename for the download
+   * @param _filename - Ignored; the server names the download after the stored file
    * @returns The download URL
    */
-  function getDownloadUrl(id: string, filename?: string): string {
-    const apiBase = getFileApiBase();
-    const base = `${apiBase}/download/${id}`;
-    return filename ? `${base}?filename=${encodeURIComponent(filename)}` : base;
+  function getDownloadUrl(id: string, _filename?: string): string {
+    return getFileUrl(id);
   }
 
   /**

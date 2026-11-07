@@ -224,7 +224,17 @@ export function isLocalDevApiProxy(): boolean {
   if (import.meta.server) {
     return false;
   }
+  return isLtApiProxyConfigured();
+}
 
+/**
+ * Whether the browser's requests use the dev-proxy prefix, read from the runtime config alone.
+ *
+ * Same answer during SSR and in the browser, unlike {@link isLocalDevApiProxy}, which is `false` on
+ * the server because the server itself never goes through the proxy. For URLs the server renders
+ * and the browser follows (see {@link buildLtPublicApiUrl}).
+ */
+function isLtApiProxyConfigured(): boolean {
   try {
     const runtimeConfig = useRuntimeConfig();
     const apiProxy = (runtimeConfig.public as Record<string, unknown>)?.apiProxy;
@@ -388,6 +398,49 @@ export function buildLtApiUrl(path: string): string {
   } catch {
     return path;
   }
+}
+
+/**
+ * The URL the browser uses for an API path, built the same way during SSR.
+ *
+ * For links and `src` attributes the server renders and the browser then follows (file links of
+ * `useLtFile()`): {@link buildLtApiUrl} would put the server-only `NUXT_API_URL` (an internal
+ * cluster address) into the HTML during SSR, and behind the dev proxy the server and the browser
+ * would render different strings, a hydration mismatch. Requests the server makes itself keep
+ * using {@link buildLtApiUrl}.
+ *
+ * `/api` + path while the dev proxy is on, otherwise `NUXT_PUBLIC_API_URL` (or `auth.baseURL`) +
+ * path; relative (with the one-shot warning) when neither is configured.
+ *
+ * @param path - The API path (e.g. `/files/abc`)
+ */
+export function buildLtPublicApiUrl(path: string): string {
+  try {
+    const { baseUrl, missing } = resolveLtPublicApiBaseUrl();
+    if (missing) {
+      warnMissingLtApiUrl('client');
+    }
+    return `${baseUrl}${path}`;
+  } catch {
+    return path;
+  }
+}
+
+/**
+ * The base of {@link buildLtPublicApiUrl}: `'/api'` behind the dev proxy, otherwise the public API
+ * URL; `missing` when neither is configured.
+ *
+ * INTERNAL — for callers that read the base once, while the Nuxt context exists, and build URLs
+ * later (`useLtFile()`: after an `await` in a `useAsyncData` handler, `useRuntimeConfig()` throws
+ * during SSR). Throws outside a Nuxt runtime-config context; callers catch.
+ */
+export function resolveLtPublicApiBaseUrl(): { baseUrl: string; missing: boolean } {
+  if (isLtApiProxyConfigured()) {
+    return { baseUrl: '/api', missing: false };
+  }
+  const pub = useRuntimeConfig().public as Record<string, any>;
+  const publicUrl = pub.apiUrl || pub.ltExtensions?.auth?.baseURL || '';
+  return { baseUrl: stripTrailingSlashes(publicUrl), missing: !publicUrl };
 }
 
 // =============================================================================

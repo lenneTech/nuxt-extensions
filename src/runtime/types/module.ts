@@ -119,6 +119,9 @@ export interface LtTusModuleOptions {
    * `/api` dev-proxy prefix while `NUXT_PUBLIC_API_PROXY` is on. Without it, a relative endpoint
    * goes to the app origin, where nothing serves TUS unless the project put its own proxy in
    * front. Set it to `false` for exactly that setup. Absolute endpoints are never rewritten.
+   *
+   * Also governs the file routes of `useLtFile()` (links, downloads, file info), which are API
+   * routes as well.
    */
   resolveAgainstApi?: boolean;
 }
