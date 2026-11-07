@@ -29,7 +29,7 @@ src/
 | `useLtAuthClient()` | Raw Better Auth client access (`twoFactor.*`, `admin.*`, `passkey`) |
 | `useSystemSetup()` | First-admin setup flow: status, HTTP-setup release + setup token (nest-server >= 12.4.0) |
 | `useLtTusUpload()` | TUS resumable file uploads |
-| `useLtFile()` | File utilities (size formatting, URLs) |
+| `useLtFile()` | File utilities (size formatting; file links on the API, the public URL also during SSR) |
 | `useLtShare()` | Web Share API with clipboard fallback |
 | `useLtErrorTranslation()` | Translate backend error codes |
 

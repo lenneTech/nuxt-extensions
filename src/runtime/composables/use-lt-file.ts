@@ -10,6 +10,10 @@
 import type { LtFileInfo, UseLtFileReturn } from '../types';
 
 import { useRuntimeConfig } from '#imports';
+import { buildLtApiUrl, buildLtPublicApiUrl } from '../lib/auth-state';
+
+/** `https:` and friends, or protocol-relative `//host`: a file base that names its own origin. */
+const ABSOLUTE_URL = /^(?:[a-z][a-z\d+.-]*:|\/\/)/i;
 
 /**
  * File utilities composable
@@ -44,6 +48,24 @@ export function useLtFile(): UseLtFileReturn {
   }
 
   /**
+   * A file route on the API, by the rule of the auth, AI and TUS requests (DEV-4073): the file
+   * routes are API routes, and a path relative to the app only reached them behind a same-origin
+   * proxy. `tus.resolveAgainstApi: false` (exactly that proxy setup) keeps the path relative; an
+   * absolute file base is used as it is.
+   *
+   * @param path - The path below the file base, e.g. `/download/abc`
+   * @param scope - `'link'` for URLs the browser follows (public URL, also during SSR), `'request'`
+   *   for the request this composable makes itself (during SSR the server-side API URL)
+   */
+  function fileApiUrl(path: string, scope: 'link' | 'request'): string {
+    const url = `${getFileApiBase()}${path}`;
+    if (config.public.ltExtensions?.tus?.resolveAgainstApi === false || ABSOLUTE_URL.test(url)) {
+      return url;
+    }
+    return scope === 'link' ? buildLtPublicApiUrl(url) : buildLtApiUrl(url);
+  }
+
+  /**
    * Check if a string is a valid MongoDB ObjectId
    */
   function isValidMongoID(id: string): boolean {
@@ -66,8 +88,7 @@ export function useLtFile(): UseLtFileReturn {
     }
 
     try {
-      const apiBase = getFileApiBase();
-      const response = await $fetch<LtFileInfo>(`${apiBase}/info/${id}`, {
+      const response = await $fetch<LtFileInfo>(fileApiUrl(`/info/${id}`, 'request'), {
         credentials: 'include',
         method: 'GET',
       });
@@ -85,8 +106,7 @@ export function useLtFile(): UseLtFileReturn {
    * @returns The file URL
    */
   function getFileUrl(id: string): string {
-    const apiBase = getFileApiBase();
-    return `${apiBase}/${id}`;
+    return fileApiUrl(`/${id}`, 'link');
   }
 
   /**
@@ -97,8 +117,7 @@ export function useLtFile(): UseLtFileReturn {
    * @returns The download URL
    */
   function getDownloadUrl(id: string, filename?: string): string {
-    const apiBase = getFileApiBase();
-    const base = `${apiBase}/download/${id}`;
+    const base = fileApiUrl(`/download/${id}`, 'link');
     return filename ? `${base}?filename=${encodeURIComponent(filename)}` : base;
   }
 

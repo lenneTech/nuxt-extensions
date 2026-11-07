@@ -821,6 +821,14 @@ from the `X-File-Id` response header (nest-server 11.42.13+). Use it for file li
 is undefined when the backend sends no such header (an older nest-server, or an `onUploadComplete()`
 override that never calls `super.onUploadComplete(upload)`).
 
+**File links.** `useLtFile().getFileUrl(id)`, `getDownloadUrl(id, filename?)` and `getFileInfo(id)`
+follow the same rule: the file routes are paths on the API (`/files/<id>`, `/files/download/<id>`,
+`/files/info/<id>`, below the base derived from an endpoint ending in `/upload`, otherwise `/files`).
+`tus.resolveAgainstApi: false` keeps them on the app origin, and an absolute base is used as it is.
+The two link helpers return the URL the browser uses, during SSR too: they never contain the
+server-only `NUXT_API_URL`, and server and browser render the same `src`. Only the request
+`getFileInfo()` makes on the server goes to the server-side API URL.
+
 ### Transition Components
 
 ```vue
