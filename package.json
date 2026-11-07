@@ -82,9 +82,11 @@
   },
   "peerDependencies": {
     "@better-auth/passkey": ">=1.7.16 <1.8.0",
+    "@nuxt/ui": ">=3.0.0",
     "@playwright/test": ">=1.0.0",
     "better-auth": ">=1.7.16 <1.8.0",
     "nuxt": "^4.0.0",
+    "tailwindcss": ">=4.0.0",
     "tus-js-client": ">=4.0.0"
   },
   "peerDependenciesMeta": {
@@ -94,7 +96,13 @@
     "@better-auth/passkey": {
       "optional": true
     },
+    "@nuxt/ui": {
+      "optional": true
+    },
     "@playwright/test": {
+      "optional": true
+    },
+    "tailwindcss": {
       "optional": true
     },
     "tus-js-client": {
