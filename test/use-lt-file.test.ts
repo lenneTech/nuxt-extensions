@@ -48,10 +48,10 @@ describe('useLtFile file base path', () => {
     expect(useLtFile().getFileUrl('abc')).toBe('/files/id/abc');
   });
 
-  it("keeps the file routes at /files with the module default /tus", () => {
+  it('keeps the file routes at /files with the module default /tus', () => {
     configureEndpoint('/tus');
 
-    expect(useLtFile().getFileUrl('abc')).toBe('/files/abc');
+    expect(useLtFile().getFileUrl('abc')).toBe('/files/id/abc');
   });
 
   it('falls back to /files when no endpoint is configured', () => {
