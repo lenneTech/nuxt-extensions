@@ -192,20 +192,37 @@ describe('peer dependency ranges', () => {
     // must not admit a `better-auth` that the passkey package would refuse, or we
     // publish a combination that cannot install cleanly.
     //
-    // Concretely caught here: `>=1.7.0` admitted better-auth 1.7.0, while
-    // @better-auth/passkey@1.7.1 requires `^1.7.1`.
+    // Until 2026-11-09 this compared our floor with the TESTED passkey's requirement (written when
+    // `>=1.7.0` met a devDependency passkey 1.7.1 that requires `^1.7.1`). That fails on every
+    // devDependency newer than the floor, although the floor pair itself installs.
+    //
+    // Every passkey release requires better-auth `^<its own version>` (1.7.0 → ^1.7.0, 1.7.12 → ^1.7.12,
+    // 1.7.16 → ^1.7.16, 1.7.18 → ^1.7.18), and both peer ranges are identical (test above). So
+    // every passkey version we bless has its better-auth inside our range, the floor pair
+    // included. The floor itself moves only in lock-step with nest-server's identical range; the
+    // devDependency here may be newer than the floor (better-auth 1.7.18 lock-step, 2026-11-09:
+    // nest-server 12.8.5 kept `>=1.7.16 <1.8.0`). Should passkey ever require more than its own
+    // version, the pattern assertion fails and the floor has to be looked at again.
     const passkeyPkg = JSON.parse(readFileSync(resolve(ROOT, 'node_modules/@better-auth/passkey/package.json'), 'utf8'));
     const required: string = passkeyPkg.peerDependencies?.['better-auth'];
     expect(required, 'expected @better-auth/passkey to declare a better-auth peer').toBeTruthy();
+    expect(
+      required,
+      `@better-auth/passkey@${passkeyPkg.version} requires better-auth "${required}" instead of "^${passkeyPkg.version}": ` +
+        'a passkey version may now reject better-auth versions inside our range. Check the floor.',
+    ).toBe(`^${passkeyPkg.version}`);
 
+    // The pair this package is tested with installs cleanly.
+    const betterAuthPkg = JSON.parse(readFileSync(resolve(ROOT, 'node_modules/better-auth/package.json'), 'utf8'));
+    expect(
+      satisfies(betterAuthPkg.version, required),
+      `the tested better-auth@${betterAuthPkg.version} is rejected by @better-auth/passkey@${passkeyPkg.version} ("${required}").`,
+    ).toBe(true);
+
+    // The passkey version we test with is one we bless.
     const ourRange: string = pkg.peerDependencies['better-auth'];
     const ourFloor = /(?:^|\s)>=\s*(\d+\.\d+\.\d+)/.exec(ourRange)?.[1];
     expect(ourFloor, `expected a ">=" floor in "${ourRange}"`).toBeTruthy();
-
-    expect(
-      satisfies(ourFloor as string, required),
-      `our peer floor better-auth@${ourFloor} is rejected by @better-auth/passkey@${passkeyPkg.version}, ` +
-        `which requires "${required}". Raise the floor so every version we bless can actually install.`,
-    ).toBe(true);
+    expect(satisfies(passkeyPkg.version, pkg.peerDependencies['@better-auth/passkey'])).toBe(true);
   });
 });

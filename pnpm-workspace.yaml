@@ -438,24 +438,8 @@ overrides:
 # 2026-10-24; every override target is older than 24h. Add an entry only for a target younger than
 # 24h that cannot wait, with the date it can be removed.
 #
-# 2026-11-04 (1.23.0, lock-step with nest-server 12.3.1): better-auth 1.7.16 closes twelve better-auth
-# advisories published 2026-11-03 (among them GHSA-9hm7, GHSA-fvxx, GHSA-hwq2, GHSA-gv75) and pins
-# better-call 1.4.5 (GHSA-23w8-wx9r-vm57; a second layer, not reachable through better-auth's
-# per-request router). Published 2026-11-03 21:24 UTC, taken the same day on Kai's decision; every
-# version below carries SLSA provenance from the projects' own GitHub Actions. The list is
-# byte-identical to nest-server's. Inert from 2026-11-04 21:24 UTC on — drop the entries with the next
-# maintenance.
-minimumReleaseAgeExclude:
-  - '@better-auth/core@1.7.16'
-  - '@better-auth/drizzle-adapter@1.7.16'
-  - '@better-auth/kysely-adapter@1.7.16'
-  - '@better-auth/memory-adapter@1.7.16'
-  - '@better-auth/mongo-adapter@1.7.16'
-  - '@better-auth/passkey@1.7.16'
-  - '@better-auth/prisma-adapter@1.7.16'
-  - '@better-auth/telemetry@1.7.16'
-  - better-auth@1.7.16
-  - better-call@1.4.5
+# The 1.7.16 entries (lock-step with nest-server 12.3.1, 2026-11-04) were removed with the
+# better-auth 1.7.18 lock-step on 2026-11-09; they had been inert since 2026-11-04 21:24 UTC.
 
 # ----------------------------------------------------------------------------------
 # Accepted peer drift.
