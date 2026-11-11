@@ -110,7 +110,7 @@
     }
   },
   "devDependencies": {
-    "@better-auth/passkey": "1.7.18",
+    "@better-auth/passkey": "1.7.19",
     "@nuxt/module-builder": "1.0.3",
     "@nuxt/schema": "4.6.4",
     "@nuxt/ui": "4.12.0",
@@ -118,7 +118,7 @@
     "@types/node": "26.6.6",
     "@vitest/coverage-v8": "5.1.0",
     "@vue/server-renderer": "3.5.45",
-    "better-auth": "1.7.18",
+    "better-auth": "1.7.19",
     "cross-spawn": "7.0.6",
     "fake-indexeddb": "6.2.7",
     "happy-dom": "21.0.4",
