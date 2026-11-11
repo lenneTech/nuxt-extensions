@@ -23,7 +23,9 @@
  * Usage: node scripts/check-consumer-build.mjs [--keep]
  *   --keep  leave the temp project in place for inspection
  */
+import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -44,6 +46,66 @@ const requiredPeers = Object.entries(pkg.peerDependencies ?? {})
   .map(([name]) => name);
 
 const omitted = Object.keys(optional).filter((name) => optional[name]?.optional === true);
+
+// `.invalid` never resolves (RFC 6761), so the SSR request to it fails at once instead of hanging.
+const SSR_INTERNAL_HOST = "api.lt-consumer-internal.invalid:3000";
+const SSR_PUBLIC_API = "https://api.example.com";
+
+/** A TCP port that was free a moment ago, on the loopback interface. */
+function freePort() {
+  return new Promise((resolvePort, reject) => {
+    const probe = createServer();
+    probe.unref();
+    probe.on("error", reject);
+    probe.listen(0, "127.0.0.1", () => {
+      const { port } = probe.address();
+      probe.close(() => resolvePort(port));
+    });
+  });
+}
+
+/**
+ * Start the built Nitro server of the consumer with an internal NUXT_API_URL and a public
+ * NUXT_PUBLIC_API_URL, fetch `/`, stop the server. Gives up after 30 s.
+ */
+async function renderOnBuiltServer(projectDir) {
+  const port = await freePort();
+  const server = spawn(process.execPath, [join(projectDir, ".output", "server", "index.mjs")], {
+    cwd: projectDir,
+    env: {
+      ...process.env,
+      HOST: "127.0.0.1",
+      NITRO_HOST: "127.0.0.1",
+      NITRO_PORT: String(port),
+      NUXT_API_URL: `http://${SSR_INTERNAL_HOST}`,
+      NUXT_PUBLIC_API_URL: SSR_PUBLIC_API,
+      PORT: String(port),
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let log = "";
+  server.stdout.on("data", (chunk) => (log += chunk));
+  server.stderr.on("data", (chunk) => (log += chunk));
+  try {
+    const deadline = Date.now() + 30_000;
+    let lastError;
+    while (Date.now() < deadline) {
+      if (server.exitCode !== null) {
+        return { html: "", log, status: `exit ${server.exitCode} (the server stopped)` };
+      }
+      try {
+        const response = await fetch(`http://127.0.0.1:${port}/`);
+        return { html: await response.text(), log, status: response.status };
+      } catch (error) {
+        lastError = error;
+        await new Promise((wait) => setTimeout(wait, 250));
+      }
+    }
+    return { html: "", log, status: `no answer within 30 s (${lastError?.message ?? "unknown"})` };
+  } finally {
+    server.kill();
+  }
+}
 
 function run(cmd, args, cwd, label) {
   try {
@@ -108,7 +170,33 @@ try {
     join(dir, "nuxt.config.ts"),
     `export default defineNuxtConfig({ modules: ['${pkg.name}'], ltExtensions: { auth: { enabled: true }, ai: { enabled: true } } })\n`,
   );
-  writeFileSync(join(dir, "app.vue"), "<template><div>smoke</div></template>\n");
+  // Rendered by the built server below with an internal NUXT_API_URL (see renderOnBuiltServer):
+  // every API URL this page puts into HTML must carry the public address. The AI status request
+  // goes to the unreachable internal address on purpose, so its failure lands in the SSR payload.
+  writeFileSync(
+    join(dir, "app.vue"),
+    [
+      '<script setup lang="ts">',
+      "// From #imports, which holds exactly what the module registered: the typecheck below only",
+      "// sees the files it includes, not the global auto-import declarations.",
+      "import { buildLtPublicApiUrl, useLtAiStatus, useLtFile } from '#imports';",
+      "",
+      "const file = useLtFile();",
+      "const avatar = buildLtPublicApiUrl('/users/1/avatar');",
+      "await useLtAiStatus().load();",
+      "</script>",
+      "",
+      "<template>",
+      "  <div>",
+      "    <img alt=\"\" :src=\"file.getFileUrl('abc')\">",
+      "    <a :href=\"file.getDownloadUrl('abc', 'report.pdf')\">download</a>",
+      '    <img alt="" :src="avatar">',
+      "    <span>smoke</span>",
+      "  </div>",
+      "</template>",
+      "",
+    ].join("\n"),
+  );
 
   // A consumer that USES the auth client the way real projects do, so the packed
   // TYPES are exercised and not just the packed runtime.
@@ -231,7 +319,27 @@ try {
     process.exit(1);
   }
 
-  console.log(`\n✓ consumer build passed (${((Date.now() - started) / 1000).toFixed(1)}s)`);
+  // The server-only API address must never reach the HTML. During SSR `buildLtApiUrl()` returns
+  // NUXT_API_URL, in a cluster an internal address; a project that built image `src` with it
+  // shipped `http://api:3000/...` to every visitor, broken in production only (2026-11-11).
+  // test/ssr-api-url-in-html.test.ts covers the same in `check`; this renders through a real server.
+  console.log("[consumer-build] rendering the page on the built server with an internal NUXT_API_URL…");
+  const { status, html, log } = await renderOnBuiltServer(dir);
+  const problems = [];
+  if (status !== 200) problems.push(`the page answered ${status}, expected 200`);
+  if (html.includes(SSR_INTERNAL_HOST)) {
+    const at = html.indexOf(SSR_INTERNAL_HOST);
+    problems.push(`the HTML contains the server-only NUXT_API_URL: …${html.slice(Math.max(0, at - 80), at + 80)}…`);
+  }
+  for (const expected of [`${SSR_PUBLIC_API}/files/id/abc`, `${SSR_PUBLIC_API}/users/1/avatar`]) {
+    if (!html.includes(expected)) problems.push(`the HTML lacks the public URL ${expected}`);
+  }
+  if (problems.length > 0) {
+    console.error(`✗ server-rendered HTML:\n  - ${problems.join("\n  - ")}\n\nserver output:\n${log.slice(-2000)}`);
+    process.exitCode = 1;
+  } else {
+    console.log(`\n✓ consumer build passed (${((Date.now() - started) / 1000).toFixed(1)}s)`);
+  }
 } finally {
   rmSync(tarball, { force: true });
   if (KEEP) console.log(`[consumer-build] kept: ${dir}`);

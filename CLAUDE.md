@@ -106,6 +106,21 @@ export default defineNuxtConfig({
 
 The API base URL is resolved at runtime from `NUXT_PUBLIC_API_URL` (client + SSR fallback) and the optional `NUXT_API_URL` (SSR-only, e.g. for internal cluster addresses). `NUXT_API_URL` is never promoted into the public bundle.
 
+**URLs that end up in HTML use `buildLtPublicApiUrl()`, never `buildLtApiUrl()`.** During SSR
+`buildLtApiUrl()` and `getLtApiBase()` return `NUXT_API_URL`: they build the URLs the server
+requests itself. Rendered into `src`, `href`, `srcset`, a CSS `url()` or a `useState` value, that
+internal address (`http://api:3000`) reaches every visitor, and images and downloads break in
+production only, where it differs from the public one. A project with a vendored core did exactly
+that in November 2026. `buildLtPublicApiUrl()` (auto-imported, also in `/lib`) and the file links
+of `useLtFile()` use the browser's address during SSR too.
+
+- **Nothing this module renders or stores in state may use the request URL.** Error texts count:
+  Node's fetch names the request URL in some errors, so `useLtAiStatus()` stores fixed texts, never
+  `error.message`.
+- **Guards:** `test/ssr-api-url-in-html.test.ts` renders in the server scope with an internal and a
+  public address (part of `check`), and `check:consumer` renders a page on the built Nitro server
+  with `NUXT_API_URL` set (part of `release`). Both fail as soon as the internal host is in the HTML.
+
 ## Authentication (Better Auth)
 
 - SSR-safe session management via `useLtAuth()`

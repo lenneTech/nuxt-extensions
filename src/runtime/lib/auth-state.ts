@@ -380,6 +380,14 @@ export function warnMissingLtApiUrl(scope: 'client' | 'server'): void {
 /**
  * Build a full API URL for a given path, handling SSR, proxy, and direct modes.
  *
+ * **For requests only, never for a URL that ends up in HTML.** During SSR this returns the
+ * server-only `NUXT_API_URL`, an internal address such as `http://api:3000`. Anything rendered with
+ * it (`src`, `href`, `srcset`, a CSS `url()`, a value in `useState` or another part of the SSR
+ * payload) ships that address to every visitor, whose browser cannot reach it: images and
+ * downloads break in production only, where the internal address differs from the public one. For
+ * links and images use {@link buildLtPublicApiUrl} or `useLtFile()`. This function is for requests
+ * the code makes itself (`fetch`, `$fetch`, `ltAuthFetch`).
+ *
  * ## Resolution Strategy
  *
  * All environment variables are resolved **at runtime** by Nuxt's built-in
@@ -430,11 +438,16 @@ export function buildLtApiUrl(path: string): string {
 /**
  * The URL the browser uses for an API path, built the same way during SSR.
  *
- * For links and `src` attributes the server renders and the browser then follows (file links of
- * `useLtFile()`): {@link buildLtApiUrl} would put the server-only `NUXT_API_URL` (an internal
- * cluster address) into the HTML during SSR, and behind the dev proxy the server and the browser
- * would render different strings, a hydration mismatch. Requests the server makes itself keep
- * using {@link buildLtApiUrl}.
+ * Use it for every API URL that ends up in HTML: `src`, `href`, `srcset`, avatars, images,
+ * downloads, a CSS `url()`, or a value stored in `useState` (the SSR payload is part of the HTML).
+ * {@link buildLtApiUrl} would put the server-only `NUXT_API_URL` (an internal cluster address
+ * such as `http://api:3000`) into the HTML during SSR, and behind the dev proxy the server and the
+ * browser would render different strings, a hydration mismatch. File links of `useLtFile()` use
+ * this already. Requests the server makes itself keep using {@link buildLtApiUrl}.
+ *
+ * ```vue
+ * <img :src="buildLtPublicApiUrl(`/users/${user.id}/avatar`)" alt="">
+ * ```
  *
  * `/api` + path while the dev proxy is on, otherwise `NUXT_PUBLIC_API_URL` (or `auth.baseURL`) +
  * path; relative (with the one-shot warning) when neither is configured.
@@ -650,6 +663,9 @@ export function setLtAuthMode(mode: LtAuthMode): void {
  *   (e.g., `/api/iam`) so the Vite dev proxy forwards the request to the backend.
  * - **Direct mode** (proxy disabled or not set): Returns `{baseURL}{basePath}`
  *   (e.g., `https://api.example.com/iam`) for direct backend calls.
+ *
+ * For requests only: during SSR it holds the server-only `NUXT_API_URL`, so it must never be
+ * rendered into HTML (see {@link buildLtApiUrl}).
  *
  * @param basePath - The auth API base path. If not provided, reads from runtime config (default: '/iam')
  */

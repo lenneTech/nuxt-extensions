@@ -147,6 +147,12 @@ All requests go to `/api/{path}` — the Vite dev proxy forwards them to the bac
 
 > **Security:** `NUXT_API_URL` is never exposed to the client bundle. It stays in `runtimeConfig.apiUrl` (server only). This is important when using internal network addresses like `http://api.svc.cluster.local`.
 
+> **URLs that end up in HTML: `buildLtPublicApiUrl()`, never `buildLtApiUrl()`.** During SSR `buildLtApiUrl()` (and `getLtApiBase()`) return `NUXT_API_URL`, because they build the URLs the server requests itself. Rendered into a `src`, `href`, `srcset`, a CSS `url()` or a `useState` value, that internal address reaches every visitor's HTML, and images and downloads break in production only, where it differs from the public one. `buildLtPublicApiUrl()` (auto-imported, also exported from `/lib`) and the file links of `useLtFile()` use the browser's address during SSR too:
+>
+> ```vue
+> <img :src="buildLtPublicApiUrl(`/users/${user.id}/avatar`)" alt="">
+> ```
+
 ### Deployment Scenarios
 
 **Local development** — Frontend and backend on different ports, proxy ensures same-origin cookies:

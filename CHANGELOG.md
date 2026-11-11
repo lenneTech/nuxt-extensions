@@ -6,6 +6,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 the scheme in the README section "Versioning": MAJOR is the Nuxt major, MINOR is a change you have
 to act on when you update, PATCH is a fix or addition you can take as it is.
 
+## [4.0.2] - 2026-11-11
+
+Nothing to do when you update. `buildLtPublicApiUrl()` is now auto-imported, and the documentation
+says which of the two URL builders belongs in HTML.
+
+### Added
+
+- **`buildLtPublicApiUrl()` is auto-imported and exported from `@lenne.tech/nuxt-extensions/lib`.**
+  It returns the API URL the browser uses, during SSR too: `NUXT_PUBLIC_API_URL` + path, or `/api`
+  + path behind the dev proxy. Use it for every API URL that ends up in HTML: `src`, `href`,
+  `srcset`, a CSS `url()`, a `useState` value. `buildLtApiUrl()` and `getLtApiBase()` are for
+  requests only: during SSR they return the server-only `NUXT_API_URL`, and rendered into a page
+  that internal address (`http://api:3000`) reaches every visitor, so images and downloads break in
+  production only. A project with a vendored core shipped exactly that. The file links of
+  `useLtFile()` already use the public address (since 4.0.0).
+
+  ```vue
+  <img :src="buildLtPublicApiUrl(`/users/${user.id}/avatar`)" alt="">
+  ```
+
+### Changed
+
+- **Tested against better-auth 1.7.19** (from 1.7.16). The peer range stays `>=1.7.16 <1.8.0`;
+  nuxt-base-starter and nest-server-starter pin 1.7.19, so keep api and app on the same version.
+- Publishing goes through npm Trusted Publishing (OIDC) only; the `NPM_TOKEN` fallback is removed
+  (DEV-3143). A failed OIDC exchange now fails the publish instead of publishing without provenance.
+- Two release gates fail as soon as the internal API host appears in rendered HTML:
+  `test/ssr-api-url-in-html.test.ts` (part of `check`) and `check:consumer`, which now renders a
+  page on the built Nitro server with `NUXT_API_URL` set (part of `release`).
+- Development dependencies: oxlint 1.93.0, oxfmt 0.78.0, fake-indexeddb 6.2.8, and a lockfile
+  refresh within the existing ranges (node-forge 1.4.3 in the development tree for the advisories
+  of 2026-11-10). The runtime dependency ranges are unchanged.
+
 ## [4.0.1] - 2026-11-07
 
 Nothing in the package changes for projects. This release changes how it is published, and it is

@@ -5,6 +5,7 @@
 // Auth State utilities
 export {
   attemptLtJwtSwitch,
+  buildLtPublicApiUrl,
   clearLtAuthCookies,
   createLtAuthFetch,
   getLtApiBase,

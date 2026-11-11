@@ -13,7 +13,7 @@ import type { LtExtensionsModuleOptions } from './runtime/types';
 
 // Module meta
 export const name = '@lenne.tech/nuxt-extensions';
-export const version = '4.0.1';
+export const version = '4.0.2';
 export const configKey = 'ltExtensions';
 
 // Default cookie names — re-exported from auth-state so consumers can read
@@ -269,6 +269,9 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
       { name: 'getLtApiBase', from: resolve('./runtime/lib/auth-state') },
       { name: 'getLtAuthCookieNames', from: resolve('./runtime/lib/auth-state') },
       { name: 'buildLtApiUrl', from: resolve('./runtime/lib/auth-state') },
+      // The URL for HTML (`src`, `href`): buildLtApiUrl is for requests and renders the server-only
+      // NUXT_API_URL during SSR. Auto-imported so the right one is as close at hand as the wrong one.
+      { name: 'buildLtPublicApiUrl', from: resolve('./runtime/lib/auth-state') },
       { name: 'isLocalDevApiProxy', from: resolve('./runtime/lib/auth-state') },
       { name: 'attemptLtJwtSwitch', from: resolve('./runtime/lib/auth-state') },
       { name: 'isLtAuthenticated', from: resolve('./runtime/lib/auth-state') },
