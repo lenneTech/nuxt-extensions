@@ -137,7 +137,7 @@ describe('auth client — the passthrough list is the whole surface', () => {
  * subject, is what let the second half through.
  */
 const EXPECTED_SUB_METHODS: Record<string, readonly string[]> = {
-  signIn: ['email', 'passkey'],
+  signIn: ['email', 'passkey', 'social'],
   signUp: ['email'],
   twoFactor: ['disable', 'enable', 'generateBackupCodes', 'verifyBackupCode', 'verifyTotp'],
 };
@@ -167,11 +167,14 @@ describe('auth client — sub-objects are listed, not spread', () => {
 
   it('does not re-declare the Better-Auth methods that are not listed', async () => {
     const client = await buildClient();
-    // The four that 1.17.0 still promised. `getTotpUri` is the one to watch: it renders the
+    // The three that 1.17.0 still promised and nobody asked for since. `getTotpUri` is the one to watch: it renders the
     // TOTP QR code, so it is what a project reaches for next.
     expect(client.twoFactor.getTotpUri, 'twoFactor.getTotpUri appeared without being listed').toBeUndefined();
     expect(client.twoFactor.sendOtp, 'twoFactor.sendOtp appeared without being listed').toBeUndefined();
     expect(client.twoFactor.verifyOtp, 'twoFactor.verifyOtp appeared without being listed').toBeUndefined();
-    expect(client.signIn.social, 'signIn.social appeared without being listed').toBeUndefined();
+    // `signIn.social` was the fourth until 4.0.3. It is listed now (see
+    // `auth-client-social-sign-in.test.ts`); its siblings on the same routes are not.
+    expect(client.signIn.oauth2, 'signIn.oauth2 appeared without being listed').toBeUndefined();
+    expect(client.signIn.sso, 'signIn.sso appeared without being listed').toBeUndefined();
   });
 });

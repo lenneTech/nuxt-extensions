@@ -61,7 +61,7 @@ vi.mock('better-auth/vue', () => ({
     passkey: {},
     requestPasswordReset: record('requestPasswordReset'),
     resetPassword: record('resetPassword'),
-    signIn: { email: record('signIn.email'), passkey: vi.fn() },
+    signIn: { email: record('signIn.email'), passkey: vi.fn(), social: record('signIn.social') },
     signOut: vi.fn(),
     signUp: { email: record('signUp.email') },
     twoFactor: {
@@ -162,6 +162,22 @@ describe('auth client — what reaches the wire', () => {
 
     expect(recorded('requestPasswordReset').params.redirectTo).toBe('https://app.example.com/auth/reset');
     expect(recorded('requestPasswordReset').params.email).toBe('a@test.com');
+  });
+
+  it('signIn.social forwards every field untouched and hashes nothing', async () => {
+    // No credential travels on this route. `callbackURL` and `errorCallbackURL` are resolved by
+    // Better Auth against the API origin like `redirectTo`, and `additionalParams` carries
+    // `prompt: 'none'` for the silent attempt; a wrapper that rebuilt the payload would drop them.
+    const params = {
+      additionalParams: { prompt: 'none' },
+      callbackURL: 'https://app.example.com/auth/callback',
+      errorCallbackURL: 'https://app.example.com/auth/login',
+      provider: 'microsoft',
+    };
+
+    await client.signIn.social(params);
+
+    expect(recorded('signIn.social').params).toEqual(params);
   });
 
   it('resetPassword forwards the token unchanged', async () => {

@@ -169,6 +169,50 @@ export interface LtPasskeyRegisterResult {
  */
 type NoStrayCredential<T, Own extends string> = Omit<{ currentPassword?: never; newPassword?: never; password?: never }, Own> & T;
 
+/**
+ * Parameters of a sign-in through a social provider (`POST <basePath>/sign-in/social`), as
+ * Better-Auth takes them. `provider` is the key the API configured under
+ * `betterAuth.socialProviders` (`'google'`, `'github'`, `'microsoft'`, …); `/iam/features` lists
+ * the enabled ones as `socialProviders`.
+ *
+ * Without `idToken` the answer is the provider's authorization URL and the browser goes there.
+ * It comes back to `callbackURL` signed in, or to `errorCallbackURL` with `?error=`. Both must be
+ * absolute URLs of an origin the API trusts (`trustedOrigins`): Better-Auth resolves a relative
+ * value against the API.
+ */
+export interface LtSocialSignInParams {
+  /** Data Better-Auth carries through the OAuth flow and hands to its hooks. */
+  additionalData?: Record<string, unknown>;
+  /**
+   * Extra query parameters for the provider's authorization URL, for this request only.
+   * `{ prompt: 'none' }` asks for a silent sign-in: the provider answers without showing
+   * anything, with the session if the user has one there and with an error otherwise
+   * (`errorCallbackURL`). `{ prompt: 'select_account' }` lets the user pick another account.
+   */
+  additionalParams?: Record<string, string>;
+  /** Where the browser lands after a successful sign-in. */
+  callbackURL?: string;
+  /** Answer with the authorization URL without navigating to it. */
+  disableRedirect?: boolean;
+  /** Where the browser lands when the provider or Better-Auth refuses; the reason is in `?error=`. */
+  errorCallbackURL?: string;
+  /**
+   * Sign in with an ID token the provider already issued for this application, without a
+   * redirect: an app inside a host that knows the user (Microsoft Teams, a native shell).
+   */
+  idToken?: { accessToken?: string; nonce?: string; refreshToken?: string; token: string };
+  /** The account to suggest to the provider (an e-mail address), which skips its account picker. */
+  loginHint?: string;
+  /** Where the browser lands after a sign-in that created the account. */
+  newUserCallbackURL?: string;
+  /** The provider's key on the API. */
+  provider: string;
+  /** Ask for a new account where the provider is configured with `disableImplicitSignUp`. */
+  requestSignUp?: boolean;
+  /** Scopes to request on top of the ones the API configured. */
+  scopes?: string[];
+}
+
 export interface UseLtAuthReturn {
   // Auth state
   authMode: ComputedRef<LtAuthMode>;
@@ -308,6 +352,12 @@ export interface UseLtAuthReturn {
   signIn: {
     email: <T extends { email: string; password: string; rememberMe?: boolean }>(params: NoStrayCredential<T, 'password'>, options?: unknown) => Promise<unknown>;
     passkey?: (options?: unknown) => Promise<unknown>;
+    /**
+     * Sign-in through a social provider the API configured (see {@link LtSocialSignInParams}).
+     * A redirect answer leaves the page; an ID-token answer signs the user in at once, on the
+     * cookie session, with the JWT fetched from `/iam/token`.
+     */
+    social: (params: LtSocialSignInParams, options?: unknown) => Promise<unknown>;
   };
   signOut: (options?: unknown) => Promise<unknown>;
   signUp: {

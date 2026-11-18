@@ -102,6 +102,29 @@ describe('the reset pair is on the composable at all', () => {
   });
 });
 
+describe('signIn.social takes what Better Auth takes', () => {
+  it('is on the composable', () => {
+    expectTypeOf<UseLtAuthReturn['signIn']>().toHaveProperty('social');
+  });
+
+  it('takes the redirect shape with a silent prompt, and the ID-token shape', () => {
+    assertType(
+      auth.signIn.social({
+        additionalParams: { prompt: 'none' },
+        callbackURL: 'https://app.example.com/auth/callback',
+        errorCallbackURL: 'https://app.example.com/auth/login',
+        provider: 'microsoft',
+      }),
+    );
+    assertType(auth.signIn.social({ idToken: { token: 'provider-id-token' }, provider: 'microsoft' }));
+  });
+
+  it('needs the provider', () => {
+    // @ts-expect-error `provider` names the API's provider key and has no default
+    auth.signIn.social({ callbackURL: 'https://app.example.com/auth/callback' });
+  });
+});
+
 /**
  * The auth CLIENT's type surface — the half a runtime test provably cannot guard.
  *
@@ -128,11 +151,12 @@ describe('LtAuthClient promises exactly what it has', () => {
   });
 
   it('does not declare sub-object methods that are not listed', () => {
-    // The four that survived 1.17.0, because that release removed only the top-level spread.
+    // The ones that survived 1.17.0, because that release removed only the top-level spread.
     expectTypeOf<LtAuthClient['twoFactor']>().not.toHaveProperty('getTotpUri');
     expectTypeOf<LtAuthClient['twoFactor']>().not.toHaveProperty('sendOtp');
     expectTypeOf<LtAuthClient['twoFactor']>().not.toHaveProperty('verifyOtp');
-    expectTypeOf<LtAuthClient['signIn']>().not.toHaveProperty('social');
+    // `signIn.social` was the fourth; it is passed through since 4.0.3 (asserted below).
+    expectTypeOf<LtAuthClient['signIn']>().not.toHaveProperty('oauth2');
   });
 
   it('still declares everything it does pass through', () => {
@@ -143,6 +167,7 @@ describe('LtAuthClient promises exactly what it has', () => {
     expectTypeOf<LtAuthClient['twoFactor']>().toHaveProperty('verifyTotp');
     expectTypeOf<LtAuthClient['signIn']>().toHaveProperty('email');
     expectTypeOf<LtAuthClient['signIn']>().toHaveProperty('passkey');
+    expectTypeOf<LtAuthClient['signIn']>().toHaveProperty('social');
   });
 });
 

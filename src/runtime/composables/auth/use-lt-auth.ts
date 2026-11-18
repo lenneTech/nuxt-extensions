@@ -10,7 +10,7 @@
  * - If cookies fail (401) -> switch to JWT mode
  */
 
-import type { LtAuthMode, LtAuthState, LtPasskeyAuthResult, LtPasskeyRegisterResult, LtUser, LtUserInput, UseLtAuthReturn } from '../../types';
+import type { LtAuthMode, LtAuthState, LtPasskeyAuthResult, LtPasskeyRegisterResult, LtSocialSignInParams, LtUser, LtUserInput, UseLtAuthReturn } from '../../types';
 
 import { useNuxtApp, useCookie, useState, useRequestHeaders, useRuntimeConfig, ref, computed, watch } from '#imports';
 import { ltArrayBufferToBase64Url, ltBase64UrlToUint8Array } from '../../utils/crypto';
@@ -552,6 +552,22 @@ export function useLtAuth(): UseLtAuthReturn {
         isLoading.value = false;
       }
     },
+    /**
+     * Sign in through a social provider the API configured. A redirect answer carries no user and
+     * leaves the page: the user arrives with `validateSession()` on the page the provider sends the
+     * browser back to. An ID-token answer carries the user and is completed here, see
+     * `completeForwardedSignIn`.
+     */
+    social: async (params: LtSocialSignInParams, options?: unknown) => {
+      isLoading.value = true;
+      try {
+        const result = await authClient.signIn.social(params, options);
+        await completeForwardedSignIn(result);
+        return result;
+      } finally {
+        isLoading.value = false;
+      }
+    },
   };
 
   /**
@@ -883,14 +899,17 @@ export function useLtAuth(): UseLtAuthReturn {
   }
 
   /**
-   * Completes a sign-in that stopped at the second factor.
+   * Completes a sign-in Better-Auth answered itself: one that stopped at the second factor, or
+   * one through a social provider with an ID token.
    *
-   * Better-Auth answers `verify-totp` / `verify-backup-code` with `{ token, user }`, the token
-   * being its session token, and has set the httpOnly session cookie. That token is never stored:
-   * the user is signed in on the cookie session and the JWT comes from `/iam/token`. Only a JWT a
-   * server already put into the body (JWT mode, `cookies: false`) is taken as it is.
+   * Better-Auth answers `verify-totp`, `verify-backup-code` and `sign-in/social` (with `idToken`)
+   * with `{ token, user }`, the token being its session token, and has set the httpOnly session
+   * cookie. That token is never stored: the user is signed in on the cookie session and the JWT
+   * comes from `/iam/token`. Only a JWT a server already put into the body (JWT mode,
+   * `cookies: false`) is taken as it is. An answer without a user (an error, the redirect of a
+   * social sign-in) changes nothing.
    */
-  async function completeTwoFactorSignIn(result: unknown): Promise<void> {
+  async function completeForwardedSignIn(result: unknown): Promise<void> {
     const answer = result as null | undefined | { data?: null | { token?: unknown; user?: LtUserInput }; error?: unknown };
     const data = answer?.data;
     if (answer?.error || !data?.user) {
@@ -906,14 +925,14 @@ export function useLtAuth(): UseLtAuthReturn {
   }
 
   // The client's two-factor methods; the two that finish a sign-in also put the user into the
-  // auth state, the safe way (see `completeTwoFactorSignIn`).
+  // auth state, the safe way (see `completeForwardedSignIn`).
   const verifyingTwoFactor =
     (method: 'verifyBackupCode' | 'verifyTotp') =>
     async <T extends { code: string }>(params: T, options?: unknown): Promise<unknown> => {
       isLoading.value = true;
       try {
         const result = await authClient.twoFactor[method](params, options as Parameters<typeof authClient.twoFactor.verifyTotp>[1]);
-        await completeTwoFactorSignIn(result);
+        await completeForwardedSignIn(result);
         return result;
       } finally {
         isLoading.value = false;

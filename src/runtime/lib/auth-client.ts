@@ -41,7 +41,7 @@ import { adminClient, twoFactorClient } from 'better-auth/client/plugins';
 import { createAuthClient } from 'better-auth/vue';
 
 import { navigateTo } from '#imports';
-import type { LtAuthClientConfig } from '../types';
+import type { LtAuthClientConfig, LtSocialSignInParams } from '../types';
 
 import { ltSha256 } from '../utils/crypto';
 import { createLtAuthFetch, isLocalDevApiProxy, isLtJwtShaped } from './auth-state';
@@ -404,6 +404,18 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
        * @see https://www.better-auth.com/docs/plugins/passkey
        */
       passkey: (baseClient.signIn as any).passkey,
+      /**
+       * Sign in through a social provider the API configured (`betterAuth.socialProviders` in
+       * nest-server). No password is involved, so the parameters go through as they are,
+       * `additionalParams` included (`{ prompt: 'none' }` asks the provider for a silent sign-in).
+       *
+       * Without `idToken` Better-Auth answers with the provider's authorization URL and its
+       * client navigates there. With `idToken` it answers `{ token, user }` at once; that token
+       * is the session token, removed here like in the 2FA answers, see
+       * {@link withoutSessionToken}.
+       * @see https://www.better-auth.com/docs/authentication/social-sign-in
+       */
+      social: async (params: LtSocialSignInParams, options?: unknown) => withoutSessionToken(await (baseClient.signIn as any).social(params, options)),
     },
 
     // Explicitly pass through signOut (not captured by spread operator)

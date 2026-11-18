@@ -87,6 +87,13 @@ describe('auth-client forwards caller parameters', () => {
     ).toEqual([...HASHING_WRAPPERS].sort());
   });
 
+  it('signIn.social hands its parameters on as they are', () => {
+    // A social sign-in carries no password, so there is nothing to hash. Its only change to the
+    // call is on the ANSWER (`withoutSessionToken`); the parameters, `callbackURL`,
+    // `errorCallbackURL` and `additionalParams` among them, go through unchanged.
+    expect(SOURCE).toContain('withoutSessionToken(await (baseClient.signIn as any).social(params, options))');
+  });
+
   it('requestPasswordReset stays a bare passthrough', () => {
     // It takes an email address, never a password, so there is nothing to hash. Wrapping it would
     // only add a place for `redirectTo` to get lost.
