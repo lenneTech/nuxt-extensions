@@ -18,6 +18,11 @@ export interface LtUser {
   /**
    * Stored as `string | undefined`, never `null` — see {@link LtUserInput}, which is what
    * `setUser` accepts. Reading code therefore has one empty case to handle, not two.
+   *
+   * An inline image (a `data:` URL, as Better-Auth's Microsoft provider stores the profile photo)
+   * is never stored, because it would push the `lt-auth-state` cookie past the browser's limit, so
+   * it reads as `undefined` here. Read the photo from the session answer
+   * (`GET <basePath>/get-session`) where an avatar needs it; an `http(s)` URL or a path is kept.
    */
   image?: string;
   name?: string;
@@ -54,6 +59,8 @@ export interface LtUser {
  * `setUser` normalises `null` to `undefined` on the way in, so the stored user and every
  * reader keep the single empty case. Widening `LtUser.image` itself would have done the
  * opposite: pushed a second empty value onto everyone who only READS it.
+ *
+ * An `image` that is a `data:` URL is stored as `undefined` as well (see {@link LtUser.image}).
  */
 export type LtUserInput = Omit<LtUser, 'image'> & { image?: null | string };
 
@@ -346,7 +353,8 @@ export interface UseLtAuthReturn {
    *
    * Accepts {@link LtUserInput}, so `getSession().data.user` can be handed over unchanged —
    * Better Auth writes "no picture" as `image: null`, which this normalises to `undefined`
-   * before storing. Readers of {@link LtUser} keep a single empty case.
+   * before storing. Readers of {@link LtUser} keep a single empty case. An inline `data:` image
+   * is not stored either (see {@link LtUser.image}).
    */
   setUser: (userData: LtUserInput | null, mode?: LtAuthMode) => void;
   signIn: {

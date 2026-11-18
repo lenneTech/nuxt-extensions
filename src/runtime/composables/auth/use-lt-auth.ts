@@ -23,6 +23,7 @@ import {
   isLtJwtShaped,
   requestLtJwt,
   resolveLtAuthState,
+  toLtStoredAuthState,
   warnLtAdminPluginUnserved,
 } from '../../lib/auth-state';
 import { useLtAuthClient } from '../use-lt-auth-client';
@@ -117,9 +118,11 @@ export function useLtAuth(): UseLtAuthReturn {
   if (import.meta.client) {
     try {
       const resolved = resolveLtAuthState(document.cookie, stateCookieName);
-      // Only adopt when the browser carries a user but useCookie didn't pick it.
+      // Only adopt when the browser carries a user but useCookie didn't pick it. Nuxt writes the
+      // ref back to the cookie, so it gets what every writer stores (an earlier version may have
+      // stored an inline image there).
       if (resolved?.user && !authState.value?.user) {
-        authState.value = resolved;
+        authState.value = toLtStoredAuthState(resolved);
       }
     } catch {
       // Ignore parse errors
@@ -232,11 +235,12 @@ export function useLtAuth(): UseLtAuthReturn {
       void switchToJwtMode();
     }
 
-    // Normalise Better Auth's `image: null` to `undefined` at the boundary, so the stored
-    // user and every reader keep ONE empty case. See `LtUserInput` for why this is not done
-    // by widening `LtUser.image` instead.
-    const normalised: LtUser | null = userData ? { ...userData, image: userData.image ?? undefined } : null;
-    const newState = { user: normalised, authMode: mode };
+    // What every writer stores (`toLtStoredAuthState`): Better Auth's `image: null` becomes
+    // `undefined`, so the stored user and every reader keep ONE empty case (see `LtUserInput` for
+    // why `LtUser.image` is not widened instead), and an inline `data:` image is left out. The
+    // Microsoft provider stores the profile photo as one, and it pushed this cookie past the
+    // browser's 4 KB limit: the browser dropped it, and the next page load read as a logout.
+    const newState = toLtStoredAuthState({ user: userData, authMode: mode });
 
     // Cookie-backed state write rules:
     //  - On the CLIENT: always update (login/logout/2FA happen here).
@@ -311,7 +315,7 @@ export function useLtAuth(): UseLtAuthReturn {
       jwtToken.value = token;
     }
     if (authState.value && authState.value.authMode !== 'jwt') {
-      authState.value = { ...authState.value, authMode: 'jwt' };
+      authState.value = toLtStoredAuthState({ ...authState.value, authMode: 'jwt' });
     }
   }
 
@@ -393,6 +397,9 @@ export function useLtAuth(): UseLtAuthReturn {
    * key the session omits is dropped rather than kept, so a backend downgrade is
    * never masked by a stale cached value. Reads the duplicate-tolerant
    * `resolvedAuthState` (consistent with `user`/`isAdmin`), never a raw cookie twin.
+   *
+   * Stores nothing itself: the result reaches the auth state only through `setUser`, which
+   * leaves an inline `data:` image out (`toLtStoredAuthState`), also one kept from the cache.
    */
   function mergeSessionUser(sessionUser: LtUser): LtUser {
     const cached = resolvedAuthState.value?.user;

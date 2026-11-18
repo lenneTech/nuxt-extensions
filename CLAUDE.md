@@ -363,6 +363,16 @@ holds. `useLtAuthClient().signIn.social` is the same call without the auth state
   `test/social-sign-in-session.test.ts` and the `signIn.social` case in
   `test/better-auth-contract.test.ts` (real better-auth client, stubbed `fetch`) hold this.
 
+**An inline image never reaches the auth state.** Better Auth's Microsoft provider stores the
+profile photo in `user.image` as a `data:` URL. In `lt-auth-state` a few KB of it push the cookie
+past the browser's 4096 bytes, the browser drops it without an error, and the next page load reads
+as a logout (with a silent sign-in on the login page: a loop through app, API and provider). Every
+writer of the auth state goes through `toLtStoredAuthState()` in `lib/auth-state.ts`, which leaves a
+`data:` image out at any size and keeps an `http(s)` URL or a path; `user.value.image` is then
+`undefined`, and an app reads the photo from `GET <basePath>/get-session`. An API that does not need
+the photo sets `disableProfilePhoto: true` on the Microsoft provider. A new writer of the auth state
+uses the same function. `test/auth-state-inline-image.test.ts` emulates the browser's limit.
+
 ## Password Handling: Reset, Change, and Client-Side Hashing
 
 **Every password leaves the browser SHA256-hashed.** `auth-client.ts` wraps each Better-Auth

@@ -620,6 +620,14 @@ onMounted(async () => {
   `disableRedirect: true` answers the URL without navigating. `LtSocialSignInParams` documents every
   field.
 
+**An inline profile photo is not kept in the auth state.** Better Auth's Microsoft provider stores
+the user's photo in `user.image` as a `data:` URL. In the `lt-auth-state` cookie a few KB of it push
+the cookie past the browser's limit of 4096 bytes; the browser drops it without an error, and the
+next page load reads as a logout. So `useLtAuth().user.value.image` is `undefined` for such a user,
+while an `http(s)` URL or a path stays. Where you render an avatar, read the photo from the session
+answer (`GET <basePath>/get-session`, e.g. `useLtAuthClient().getSession()`). An API that does not
+need the photo sets `disableProfilePhoto: true` on the Microsoft provider.
+
 #### Authenticated requests: `fetchWithAuth` and `ltAuthFetch`
 
 `useLtAuth().fetchWithAuth` and `ltAuthFetch` (from `/lib`, also used by the Better-Auth client,
