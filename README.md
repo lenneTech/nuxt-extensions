@@ -111,7 +111,7 @@ nuxt-extensions release it pins.
 
 ## Features
 
-- **Better-Auth Integration** - Login, 2FA, Passkey/WebAuthn support
+- **Better-Auth Integration** - Login, 2FA, Passkey/WebAuthn, sign-in through social providers (SSO)
 - **Cookie/JWT Dual-Mode** - Automatic fallback from cookies to JWT
 - **TUS File Upload** - Resumable uploads with pause/resume
 - **Offline Sync** - Read and write offline, reconcile with the nest-server sync module (opt-in)
@@ -547,6 +547,86 @@ JWT from `/iam/token`.
 - **`useLtAuthClient().twoFactor.verifyTotp()` / `verifyBackupCode()` no longer return the
   session token.**
 - **`authenticateWithPasskey()` returns no `session`.**
+
+#### Sign-in through a social provider
+
+`useLtAuth().signIn.social()` (since 4.0.3; `useLtAuthClient().signIn.social()` is the same call
+without the auth state) signs in through a provider the API configured, for example Microsoft
+Entra ID for single sign-on (`betterAuth.socialProviders` in nest-server). `GET /iam/features`
+lists the enabled providers as `socialProviders`; `useLtAuth().features` holds that answer, so a
+login page can show one button per entry.
+
+Both shapes go to `POST <basePath>/sign-in/social`:
+
+- **Redirect, the usual one.** The answer is the provider's authorization URL, and Better Auth's
+  client navigates there: the page is left, and nothing is stored yet. The provider sends the
+  browser to the API, which sets the session cookie and redirects to `callbackURL`. The user
+  arrives through `validateSession()` on the page behind it.
+- **ID token**, for an app inside a host that already knows the user (Microsoft Teams, a native
+  shell). With `idToken` the API answers `{ user }` at once, without navigation. `useLtAuth()` signs
+  the user in on the cookie session and fetches the JWT from `/iam/token`, as after 2FA. The
+  session token Better Auth puts into that answer is removed, as in the 2FA answers. This covers
+  the default `{ data, error }` answer only: with `throw: true` (as `options` or in `fetchOptions`)
+  the body comes back unchanged, token included, and an `onSuccess` hook sees the answer before the
+  token is removed.
+
+```vue
+<script setup lang="ts">
+const { features, signIn } = useLtAuth();
+const config = useRuntimeConfig();
+
+const providers = computed(() => (Array.isArray(features.value.socialProviders) ? features.value.socialProviders : []));
+
+// Interactive: the provider shows its account picker.
+async function signInWith(provider: string) {
+  await signIn.social({
+    additionalParams: { prompt: 'select_account' },
+    callbackURL: new URL('/auth/callback', config.public.siteUrl).toString(),
+    errorCallbackURL: new URL('/auth/login', config.public.siteUrl).toString(),
+    provider,
+  });
+}
+</script>
+```
+
+```vue
+<!-- pages/auth/callback.vue: the session cookie is set, the user is not loaded yet -->
+<script setup lang="ts">
+const { validateSession } = useLtAuth();
+
+onMounted(async () => {
+  const signedIn = await validateSession();
+  await navigateTo(signedIn ? '/app' : '/auth/login', { replace: true });
+});
+</script>
+```
+
+- **A silent attempt is `additionalParams: { prompt: 'none' }`.** The provider answers without
+  showing anything: with the session when the user has one there, otherwise through
+  `errorCallbackURL` with `?error=login_required` (or `interaction_required`). That way back is the
+  only one, so the page behind it must not start the attempt again: remember it per tab, and do
+  not try silently after an explicit sign-out, or the user is signed in again at once.
+  nuxt-base-starter does both on its login page.
+- **`?error=` on `errorCallbackURL` is a code from the provider or from Better Auth**
+  (`access_denied`, `signup_disabled`, …). Map it to your own text. Never render `error_description`
+  or anything else from the query: anybody can put text there and send the link around.
+- **`callbackURL` and `errorCallbackURL` must be absolute URLs of a trusted origin, and never come
+  from user input.** Better Auth resolves a relative value against the API origin, like
+  `redirectTo` (see "Password Change and Reset"), and checks the result against `trustedOrigins`,
+  which is all that stands between a value from `route.query` and a redirect to another site. Build
+  both from your own origin and a fixed path; a deep link the user should land on afterwards goes
+  into their query only after it was validated (nuxt-base-starter: `safeRedirectTarget()`).
+- `additionalParams` applies to this request only, `loginHint` suggests an account, and
+  `disableRedirect: true` answers the URL without navigating. `LtSocialSignInParams` documents every
+  field.
+
+**An inline profile photo is not kept in the auth state.** Better Auth's Microsoft provider stores
+the user's photo in `user.image` as a `data:` URL. In the `lt-auth-state` cookie a few KB of it push
+the cookie past the browser's limit of 4096 bytes; the browser drops it without an error, and the
+next page load reads as a logout. So `useLtAuth().user.value.image` is `undefined` for such a user,
+while an `http(s)` URL or a path stays. Where you render an avatar, read the photo from the session
+answer (`GET <basePath>/get-session`, e.g. `useLtAuthClient().getSession()`). An API that does not
+need the photo sets `disableProfilePhoto: true` on the Microsoft provider.
 
 #### Authenticated requests: `fetchWithAuth` and `ltAuthFetch`
 
@@ -1207,8 +1287,8 @@ The package works **with or without** `@nuxtjs/i18n`:
 
 | Composable | Description |
 |------------|-------------|
-| `useLtAuth()` | Better-Auth integration with session, passkey, 2FA, password change + reset |
-| `useLtAuthClient()` | Direct access to the Better-Auth client singleton (`twoFactor.*`, `admin.*`, `passkey`) |
+| `useLtAuth()` | Better-Auth integration with session, passkey, 2FA, social sign-in, password change + reset |
+| `useLtAuthClient()` | Direct access to the Better-Auth client singleton (`twoFactor.*`, `admin.*`, `passkey`, `signIn.social`) |
 | `useLtErrorTranslation()` | Translate backend error codes to user-friendly messages |
 | `useLtTusUpload()` | TUS protocol file uploads with pause/resume |
 | `useLtFile()` | File utilities (size formatting, URLs) |

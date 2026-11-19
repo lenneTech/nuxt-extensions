@@ -25,8 +25,8 @@ src/
 
 | Composable | Purpose |
 |-----------|---------|
-| `useLtAuth()` | Authentication state, login, logout, session management, password change + reset |
-| `useLtAuthClient()` | Raw Better Auth client access (`twoFactor.*`, `admin.*`, `passkey`) |
+| `useLtAuth()` | Authentication state, login (password, passkey, social provider), logout, session management, password change + reset |
+| `useLtAuthClient()` | Raw Better Auth client access (`twoFactor.*`, `admin.*`, `passkey`, `signIn.social`) |
 | `useSystemSetup()` | First-admin setup flow: status, HTTP-setup release + setup token (nest-server >= 12.4.0) |
 | `useLtTusUpload()` | TUS resumable file uploads |
 | `useLtFile()` | File utilities (size formatting; file links on the API, the public URL also during SSR) |
@@ -128,6 +128,7 @@ of `useLtFile()` use the browser's address during SSR too.
 - Protected-route gating is the consumer's own middleware (see "Custom Auth Middleware Pattern" below); the module only registers the optional `lt-system-setup` middleware
 - Passkey (WebAuthn) support via `@better-auth/passkey` peer dependency
 - 2FA (TOTP) support built-in
+- Sign-in through a social provider the API configured (`signIn.social`, see below)
 
 ### Auth Flow
 
@@ -279,9 +280,9 @@ unchanged. That token is the session token, the value the API keeps in the httpO
 - **`setUser(user, 'jwt')` without a stored JWT falls back to `'cookie'`** and fetches the JWT.
   Without that fallback, the refusal above would turn a hand-written 2FA page into a sign-in that
   sends no credentials at all.
-- **`useLtAuthClient().twoFactor.verify*` strips a non-JWT `token` from the answer**, and
-  `authenticateWithPasskey()` returns no `session`. Keep both: application code that never
-  receives the session token cannot store it.
+- **`useLtAuthClient().twoFactor.verify*` and `signIn.social` strip a non-JWT `token` from the
+  answer**, and `authenticateWithPasskey()` returns no `session`. Keep all three: application code
+  that never receives the session token cannot store it.
 
 ### How Auth Cookies Work:
 1. `setUser()` writes the cookie via both `useCookie().value` (for SSR sync) and `document.cookie` (for immediate availability)
@@ -326,6 +327,51 @@ export default defineNuxtRouteMiddleware((to) => {
   return navigateTo('/auth/login');
 });
 ```
+
+## Social Sign-In (`signIn.social`, since 4.0.3)
+
+`useLtAuth().signIn.social(params)` signs in through a provider the API configured
+(`betterAuth.socialProviders` in nest-server; first use: Microsoft Entra ID as single sign-on).
+`GET /iam/features` lists the enabled providers as `socialProviders`, which `useLtAuth().features`
+holds. `useLtAuthClient().signIn.social` is the same call without the auth state. Parameters:
+`LtSocialSignInParams` in `runtime/types/auth.ts`.
+
+- **Redirect shape (no `idToken`): the page is left.** The answer is the provider's authorization
+  URL and Better Auth's client navigates there; nothing is stored. The API's callback sets the
+  session cookie and redirects to `callbackURL`, where the user arrives through `validateSession()`.
+- **ID-token shape: signed in at once.** For an app inside a host that already knows the user
+  (Microsoft Teams, a native shell). The answer is `{ token, user }`; the wrapper strips the session
+  token, and `completeForwardedSignIn()` signs the user in on the cookie session and fetches the
+  JWT from `/iam/token`, exactly as after 2FA. `withoutSessionToken` strips only `result.data`, as
+  for 2FA: with `throw: true` (as `options` or in `fetchOptions`) the body comes back with the
+  token, and a caller's `onSuccess` hook sees the answer before the token is removed.
+- **Silent attempt: `additionalParams: { prompt: 'none' }`.** The provider answers without showing
+  anything, and the way back without a provider session is `errorCallbackURL` with
+  `?error=login_required` (or `interaction_required`). A page that starts the attempt on load must
+  remember per tab that it tried, and must not try after an explicit sign-out; otherwise it loops
+  or signs the user straight back in. nuxt-base-starter's login page shows the pattern.
+- **`?error=` is a code; map it, never render the query.** The provider's own codes
+  (`access_denied`, `consent_required`, …) and Better Auth's (`signup_disabled`, …) arrive there,
+  next to an `error_description` anybody can write into a link.
+- **`callbackURL` / `errorCallbackURL` must be absolute URLs of a trusted origin, never user
+  input.** Same reasoning as `redirectTo` below: Better Auth resolves a relative value against the
+  API origin, and `trustedOrigins` is the only check on the result. Build both from the app's own
+  origin and a fixed path (`appUrl()` in the starters); a deep link goes into their query only after
+  `safeRedirectTarget()`.
+- **Nothing is hashed.** No credential travels, so the parameters go through unchanged; the
+  wrapper changes only the answer. `test/auth-client-social-sign-in.test.ts`,
+  `test/social-sign-in-session.test.ts` and the `signIn.social` case in
+  `test/better-auth-contract.test.ts` (real better-auth client, stubbed `fetch`) hold this.
+
+**An inline image never reaches the auth state.** Better Auth's Microsoft provider stores the
+profile photo in `user.image` as a `data:` URL. In `lt-auth-state` a few KB of it push the cookie
+past the browser's 4096 bytes, the browser drops it without an error, and the next page load reads
+as a logout (with a silent sign-in on the login page: a loop through app, API and provider). Every
+writer of the auth state goes through `toLtStoredAuthState()` in `lib/auth-state.ts`, which leaves a
+`data:` image out at any size and keeps an `http(s)` URL or a path; `user.value.image` is then
+`undefined`, and an app reads the photo from `GET <basePath>/get-session`. An API that does not need
+the photo sets `disableProfilePhoto: true` on the Microsoft provider. A new writer of the auth state
+uses the same function. `test/auth-state-inline-image.test.ts` emulates the browser's limit.
 
 ## Password Handling: Reset, Change, and Client-Side Hashing
 

@@ -10,7 +10,7 @@
  * - If cookies fail (401) -> switch to JWT mode
  */
 
-import type { LtAuthMode, LtAuthState, LtPasskeyAuthResult, LtPasskeyRegisterResult, LtUser, LtUserInput, UseLtAuthReturn } from '../../types';
+import type { LtAuthMode, LtAuthState, LtPasskeyAuthResult, LtPasskeyRegisterResult, LtSocialSignInParams, LtUser, LtUserInput, UseLtAuthReturn } from '../../types';
 
 import { useNuxtApp, useCookie, useState, useRequestHeaders, useRuntimeConfig, ref, computed, watch } from '#imports';
 import { ltArrayBufferToBase64Url, ltBase64UrlToUint8Array } from '../../utils/crypto';
@@ -23,6 +23,7 @@ import {
   isLtJwtShaped,
   requestLtJwt,
   resolveLtAuthState,
+  toLtStoredAuthState,
   warnLtAdminPluginUnserved,
 } from '../../lib/auth-state';
 import { useLtAuthClient } from '../use-lt-auth-client';
@@ -117,9 +118,11 @@ export function useLtAuth(): UseLtAuthReturn {
   if (import.meta.client) {
     try {
       const resolved = resolveLtAuthState(document.cookie, stateCookieName);
-      // Only adopt when the browser carries a user but useCookie didn't pick it.
+      // Only adopt when the browser carries a user but useCookie didn't pick it. Nuxt writes the
+      // ref back to the cookie, so it gets what every writer stores (an earlier version may have
+      // stored an inline image there).
       if (resolved?.user && !authState.value?.user) {
-        authState.value = resolved;
+        authState.value = toLtStoredAuthState(resolved);
       }
     } catch {
       // Ignore parse errors
@@ -232,11 +235,12 @@ export function useLtAuth(): UseLtAuthReturn {
       void switchToJwtMode();
     }
 
-    // Normalise Better Auth's `image: null` to `undefined` at the boundary, so the stored
-    // user and every reader keep ONE empty case. See `LtUserInput` for why this is not done
-    // by widening `LtUser.image` instead.
-    const normalised: LtUser | null = userData ? { ...userData, image: userData.image ?? undefined } : null;
-    const newState = { user: normalised, authMode: mode };
+    // What every writer stores (`toLtStoredAuthState`): Better Auth's `image: null` becomes
+    // `undefined`, so the stored user and every reader keep ONE empty case (see `LtUserInput` for
+    // why `LtUser.image` is not widened instead), and an inline `data:` image is left out. The
+    // Microsoft provider stores the profile photo as one, and it pushed this cookie past the
+    // browser's 4 KB limit: the browser dropped it, and the next page load read as a logout.
+    const newState = toLtStoredAuthState({ user: userData, authMode: mode });
 
     // Cookie-backed state write rules:
     //  - On the CLIENT: always update (login/logout/2FA happen here).
@@ -311,7 +315,7 @@ export function useLtAuth(): UseLtAuthReturn {
       jwtToken.value = token;
     }
     if (authState.value && authState.value.authMode !== 'jwt') {
-      authState.value = { ...authState.value, authMode: 'jwt' };
+      authState.value = toLtStoredAuthState({ ...authState.value, authMode: 'jwt' });
     }
   }
 
@@ -393,6 +397,9 @@ export function useLtAuth(): UseLtAuthReturn {
    * key the session omits is dropped rather than kept, so a backend downgrade is
    * never masked by a stale cached value. Reads the duplicate-tolerant
    * `resolvedAuthState` (consistent with `user`/`isAdmin`), never a raw cookie twin.
+   *
+   * Stores nothing itself: the result reaches the auth state only through `setUser`, which
+   * leaves an inline `data:` image out (`toLtStoredAuthState`), also one kept from the cache.
    */
   function mergeSessionUser(sessionUser: LtUser): LtUser {
     const cached = resolvedAuthState.value?.user;
@@ -547,6 +554,22 @@ export function useLtAuth(): UseLtAuthReturn {
           switchToJwtMode().catch(() => {});
         }
 
+        return result;
+      } finally {
+        isLoading.value = false;
+      }
+    },
+    /**
+     * Sign in through a social provider the API configured. A redirect answer carries no user and
+     * leaves the page: the user arrives with `validateSession()` on the page the provider sends the
+     * browser back to. An ID-token answer carries the user and is completed here, see
+     * `completeForwardedSignIn`.
+     */
+    social: async (params: LtSocialSignInParams, options?: unknown) => {
+      isLoading.value = true;
+      try {
+        const result = await authClient.signIn.social(params, options);
+        await completeForwardedSignIn(result);
         return result;
       } finally {
         isLoading.value = false;
@@ -883,14 +906,17 @@ export function useLtAuth(): UseLtAuthReturn {
   }
 
   /**
-   * Completes a sign-in that stopped at the second factor.
+   * Completes a sign-in Better-Auth answered itself: one that stopped at the second factor, or
+   * one through a social provider with an ID token.
    *
-   * Better-Auth answers `verify-totp` / `verify-backup-code` with `{ token, user }`, the token
-   * being its session token, and has set the httpOnly session cookie. That token is never stored:
-   * the user is signed in on the cookie session and the JWT comes from `/iam/token`. Only a JWT a
-   * server already put into the body (JWT mode, `cookies: false`) is taken as it is.
+   * Better-Auth answers `verify-totp`, `verify-backup-code` and `sign-in/social` (with `idToken`)
+   * with `{ token, user }`, the token being its session token, and has set the httpOnly session
+   * cookie. That token is never stored: the user is signed in on the cookie session and the JWT
+   * comes from `/iam/token`. Only a JWT a server already put into the body (JWT mode,
+   * `cookies: false`) is taken as it is. An answer without a user (an error, the redirect of a
+   * social sign-in) changes nothing.
    */
-  async function completeTwoFactorSignIn(result: unknown): Promise<void> {
+  async function completeForwardedSignIn(result: unknown): Promise<void> {
     const answer = result as null | undefined | { data?: null | { token?: unknown; user?: LtUserInput }; error?: unknown };
     const data = answer?.data;
     if (answer?.error || !data?.user) {
@@ -906,14 +932,14 @@ export function useLtAuth(): UseLtAuthReturn {
   }
 
   // The client's two-factor methods; the two that finish a sign-in also put the user into the
-  // auth state, the safe way (see `completeTwoFactorSignIn`).
+  // auth state, the safe way (see `completeForwardedSignIn`).
   const verifyingTwoFactor =
     (method: 'verifyBackupCode' | 'verifyTotp') =>
     async <T extends { code: string }>(params: T, options?: unknown): Promise<unknown> => {
       isLoading.value = true;
       try {
         const result = await authClient.twoFactor[method](params, options as Parameters<typeof authClient.twoFactor.verifyTotp>[1]);
-        await completeTwoFactorSignIn(result);
+        await completeForwardedSignIn(result);
         return result;
       } finally {
         isLoading.value = false;

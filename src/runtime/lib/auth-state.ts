@@ -13,7 +13,7 @@
  */
 
 import { useRuntimeConfig } from '#imports';
-import type { LtAuthMode, LtAuthState } from '../types';
+import type { LtAuthMode, LtAuthState, LtUserInput } from '../types';
 
 // =============================================================================
 // Cookie Name Resolution
@@ -488,6 +488,40 @@ export function resolveLtPublicApiBaseUrl(): { baseUrl: string; missing: boolean
 // =============================================================================
 
 /**
+ * Whether `value` is an inline image: a string with the `data:` scheme, in any case and after
+ * leading whitespace, as a browser takes it in `src`.
+ */
+function isLtInlineImage(value: unknown): boolean {
+  return typeof value === 'string' && /^\s*data:/i.test(value);
+}
+
+/**
+ * The auth state as it is stored: in the `lt-auth-state` cookie, in the `useCookie` ref Nuxt
+ * serialises into that cookie (also during SSR), and therefore in `useLtAuth().user`. Every writer
+ * of the auth state goes through this function, so they all store the same thing.
+ *
+ * - `image: null` (Better-Auth's "no picture") becomes `undefined`: readers have one empty case.
+ * - An inline image (a `data:` URL) is left out, whatever its size. Better-Auth's Microsoft provider
+ *   stores the profile photo as one unless the API sets `disableProfilePhoto`, and a few KB of it
+ *   push the cookie past the browser's limit of 4096 bytes. The browser drops such a cookie without
+ *   an error, and the next page load finds a signed-in user signed out. An app that shows the photo
+ *   reads it from the session answer (`GET <basePath>/get-session`).
+ * - An `http(s)` URL or a path stays as it is, and so does every other field.
+ *
+ * INTERNAL: used by `useLtAuth()` and {@link setLtAuthMode}. Not part of the public API (absent
+ * from the barrels and auto-imports).
+ */
+export function toLtStoredAuthState(state: { authMode: LtAuthMode; user: LtUserInput | null }): LtAuthState {
+  const { user } = state;
+  if (user === null || typeof user !== 'object') {
+    // Signed out, or a malformed value from the client-writable cookie: nothing to clean.
+    return state as LtAuthState;
+  }
+  const image = user.image ?? undefined;
+  return { ...state, user: { ...user, image: isLtInlineImage(image) ? undefined : image } };
+}
+
+/**
  * Get the current auth mode from cookie
  */
 export function getLtAuthMode(): LtAuthMode {
@@ -645,7 +679,7 @@ export function setLtAuthMode(mode: LtAuthMode): void {
     // Duplicate-tolerant read so we merge `authMode` INTO the user-bearing twin
     // instead of a stale `{ user: null }` shadow (which would drop the user).
     const existing = resolveLtAuthState(document.cookie, stateCookieName);
-    const state = { ...(existing ?? { user: null }), authMode: mode };
+    const state = toLtStoredAuthState({ ...(existing ?? { user: null }), authMode: mode });
 
     const maxAge = 60 * 60 * 24 * 7; // 7 days
     const secure = globalThis.location?.protocol === 'https:' ? '; secure' : '';

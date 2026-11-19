@@ -113,6 +113,48 @@ describe('createLtAuthClient plugin surfaces', () => {
   });
 });
 
+describe('signIn.social reaches the route nest-server serves', () => {
+  // The wrapper in `auth-client.ts` hands its parameters to `baseClient.signIn.social`, and the
+  // dynamic-path proxy turns that name into a path. A unit test with a mocked client cannot see
+  // what path and body the real client builds from it; this one runs the installed better-auth
+  // with only `fetch` replaced. `disableRedirect: true` keeps its redirect plugin from navigating.
+  it('sends POST <basePath>/sign-in/social with the caller’s fields intact', async () => {
+    const requests: { body: unknown; method: string; url: string }[] = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: Request | string | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      requests.push({ body: await request.clone().json(), method: request.method, url: request.url });
+      return new Response(JSON.stringify({ redirect: false, url: 'https://login.example.com/authorize' }), {
+        headers: { 'content-type': 'application/json' },
+        status: 200,
+      });
+    }) as typeof fetch;
+
+    try {
+      const { createLtAuthClient } = await import('../src/runtime/lib/auth-client');
+      const client = createLtAuthClient({ baseURL: 'http://localhost:3000', basePath: '/iam', enableAdmin: false, enablePasskey: false, enableTwoFactor: false });
+      const params = {
+        additionalParams: { prompt: 'none' },
+        callbackURL: 'https://app.example.com/auth/callback?redirect=%2Fapp',
+        disableRedirect: true,
+        errorCallbackURL: 'https://app.example.com/auth/login?redirect=%2Fapp',
+        loginHint: 'someone@test.com',
+        provider: 'microsoft',
+      };
+
+      const result = (await client.signIn.social(params)) as { data: { url: string } | null };
+
+      expect(requests).toHaveLength(1);
+      expect(requests[0]?.method).toBe('POST');
+      expect(new URL(requests[0]!.url).pathname).toBe('/iam/sign-in/social');
+      expect(requests[0]?.body).toEqual(params);
+      expect(result.data?.url).toBe('https://login.example.com/authorize');
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+});
+
 describe('peer declaration matches what is imported', () => {
   it('every better-auth package this module imports is declared as a peer', () => {
     const imported = ['better-auth', '@better-auth/passkey'];
