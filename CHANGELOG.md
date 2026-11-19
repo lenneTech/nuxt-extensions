@@ -6,6 +6,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 the scheme in the README section "Versioning": MAJOR is the Nuxt major, MINOR is a change you have
 to act on when you update, PATCH is a fix or addition you can take as it is.
 
+## [4.0.3] - 2026-11-19
+
+Nothing to do when you update. Sign-in through a social provider is now part of the auth client and
+`useLtAuth()`, and a profile photo stored inline no longer signs users out on the next page load.
+
+### Added
+
+- **`signIn.social` on `useLtAuth()` and `useLtAuthClient()`** for the social providers the API
+  configures (`betterAuth.socialProviders` in nest-server; `GET /iam/features` lists them as
+  `socialProviders`). Without `idToken` the browser goes to the provider and comes back to
+  `callbackURL` signed in, or to `errorCallbackURL` with `?error=`; both must be absolute URLs of an
+  origin the API trusts. With `idToken` (an app inside a host that already knows the user, such as
+  Microsoft Teams) the user is signed in at once, on the cookie session, with the JWT fetched from
+  `/iam/token`. `additionalParams: { prompt: 'none' }` asks the provider for a silent sign-in. As in
+  the 2FA answers, the session token Better-Auth puts into the body is removed before your code sees
+  it. New type `LtSocialSignInParams`; README section "Social Sign-In".
+
+### Fixed
+
+- **An inline profile photo no longer signs users out.** Better-Auth's Microsoft provider stores the
+  photo as a `data:` URL in `user.image`. Written into the `lt-auth-state` cookie, a few KB of it
+  pushed the cookie past the browser's limit of 4096 bytes; the browser dropped it without an error,
+  and the next page load found a signed-in user signed out (with a silent sign-in on the login page,
+  a loop). Every writer of the auth state now leaves a `data:` image out: `user.value.image` is
+  `undefined` for such a user, while an `http(s)` URL or a path stays as it is. An app that shows the
+  photo reads it from the session answer (`GET <basePath>/get-session`).
+
+### Changed
+
+- The audit suppression of GHSA-gcqx-w48m-w2h4 (deepmerge, build tooling only) is gone: GitHub
+  withdrew the advisory on 2026-11-16, and `pnpm audit` is clean without it. This affects only this
+  repository's `check`.
+- Development dependencies: @nuxt/module-builder 1.0.4, @nuxt/ui 4.12.2, vitest 5.1.1,
+  @playwright/test 1.65.1, oxlint 1.94.0, oxfmt 0.79.0, oxlint-tsgolint 7.0.2007, security
+  overrides raised to the newest patch in their major, and a lockfile refresh within the existing
+  ranges. The built JavaScript is unchanged by them; six type declarations in `dist/` now import
+  their types from `nuxt/app` instead of `#app`. Still tested against better-auth 1.7.19; the runtime
+  dependency and peer ranges are unchanged.
+
 ## [4.0.2] - 2026-11-11
 
 Nothing to do when you update. `buildLtPublicApiUrl()` is now auto-imported, and the documentation

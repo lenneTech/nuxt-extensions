@@ -291,8 +291,8 @@ describe('countSuppressions', () => {
     expect(withWorkspace(yaml)).toBe(1);
   });
 
-  it('counts exactly the one documented suppression this repo carries (deepmerge)', () => {
-    // A further entry must be a deliberate edit here, not something that slips in unnoticed.
+  it('counts no suppression in this repo, which carries none at the moment', () => {
+    // A new entry must be a deliberate edit here, not something that slips in unnoticed.
     // `process.cwd()`, as in check-audit-wiring.test.ts. This test used `new URL('..',
     // import.meta.url)`, which under the happy-dom environment resolves to `/dist/module.mjs`:
     // it read a file that does not exist and reported 0 whatever the workspace declared.
@@ -300,7 +300,8 @@ describe('countSuppressions', () => {
     // The deepmerge entry (GHSA-gcqx-w48m-w2h4) joined on 2026-10-28: no patched release exists.
     // The node-forge entry (GHSA-86w9-cpqp-85rv) left the same day: node-forge 1.4.1 is outside
     // the advisory's range.
-    expect(countSuppressions(process.cwd())).toBe(1);
+    // The deepmerge entry left on 2026-11-18: GitHub withdrew the advisory on 2026-11-16.
+    expect(countSuppressions(process.cwd())).toBe(0);
   });
 
   it('reports none for a directory with no manifest at all', () => {

@@ -714,7 +714,8 @@ describe('minimumReleaseAgeOf', () => {
 describe('listSuppressions', () => {
   it('returns the ids this repo suppresses, in file order', () => {
     // `process.cwd()`, as in check-audit-wiring.test.ts (see the note in audit-report.test.ts).
-    expect(listSuppressions(process.cwd())).toEqual(['GHSA-gcqx-w48m-w2h4']);
+    // None at the moment: the deepmerge entry (GHSA-gcqx-w48m-w2h4) left on 2026-11-18, withdrawn.
+    expect(listSuppressions(process.cwd())).toEqual([]);
   });
 });
 
