@@ -21,6 +21,8 @@ import {
   getLtAuthCookieNames,
   getLtJwtToken,
   isLtJwtShaped,
+  noteLtJwtServedBy,
+  noteLtJwtServedByPayload,
   requestLtJwt,
   resolveLtAuthState,
   toLtStoredAuthState,
@@ -512,7 +514,10 @@ export function useLtAuth(): UseLtAuthReturn {
   async function fetchFeatures(): Promise<Record<string, boolean | number | string[]>> {
     try {
       const apiBase = getLtApiBase();
-      const result = await $fetch<Record<string, boolean | number | string[]>>(`${apiBase}/features`);
+      const request = $fetch<Record<string, boolean | number | string[]>>(`${apiBase}/features`);
+      // `jwt: false` (a cookie-only API): no JWT is requested from it any more (noteLtJwtServedBy)
+      noteLtJwtServedBy(request);
+      const result = await request;
       if (result) {
         features.value = result;
         featuresFetched.value = true;
@@ -951,10 +956,15 @@ export function useLtAuth(): UseLtAuthReturn {
     verifyTotp: verifyingTwoFactor('verifyTotp'),
   };
 
-  // Auto-fetch features once on first client-side useLtAuth() call
-  if (import.meta.client && !featuresFetched.value) {
-    featuresFetched.value = true; // Set immediately to prevent duplicate fetches
-    void fetchFeatures();
+  // Auto-fetch features once on first client-side useLtAuth() call. Features an SSR render
+  // fetched arrive in the payload instead, and their `jwt` flag counts too (noteLtJwtServedByPayload).
+  if (import.meta.client) {
+    if (!featuresFetched.value) {
+      featuresFetched.value = true; // Set immediately to prevent duplicate fetches
+      void fetchFeatures();
+    } else {
+      noteLtJwtServedByPayload(features.value);
+    }
   }
 
   return {

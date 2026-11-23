@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 the scheme in the README section "Versioning": MAJOR is the Nuxt major, MINOR is a change you have
 to act on when you update, PATCH is a fix or addition you can take as it is.
 
+## [4.0.4] - 2026-11-23
+
+Nothing to do when you update. An API that hands out no JWT (nest-server with `betterAuth.jwt: false`)
+is no longer asked for one.
+
+### Fixed
+
+- **No `/iam/token` request against an API without JWT.** nest-server with `betterAuth.jwt: false`
+  reports `jwt: false` in `GET /iam/features` and answers `/iam/token` with 404. `useLtAuth()` and
+  `ltAuthFetch` still asked for a JWT after every sign-in, every session check and every 401: one or
+  two 404s with a console error on every page load of a cookie-only project. Once the features say
+  `jwt: false`, no JWT is requested any more, and a request at app start waits for features still on
+  their way. This also holds when the features were fetched during SSR and reached the browser in the
+  payload. An API that reports `jwt: true`, an API without the flag, and a failed features request
+  keep the previous behaviour. There is no module option for it: the API is the one source.
+
+### Changed
+
+- Development dependencies: @vue/server-renderer 3.5.46 (vue 3.5.46 in the lockfile with it),
+  oxlint-tsgolint 7.0.2008, security overrides raised to the newest patch (@tiptap/core and
+  @tiptap/pm 3.35.0, source-map-js 1.2.4), and a lockfile refresh within the existing ranges.
+  The built output is unchanged by them. Still tested against better-auth 1.7.19; the runtime
+  dependency and peer ranges are unchanged.
+
 ## [4.0.3] - 2026-11-19
 
 Nothing to do when you update. Sign-in through a social provider is now part of the auth client and

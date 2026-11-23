@@ -119,6 +119,8 @@ overrides:
   # newest in their majors, no advisory attached), keys unchanged — no new brace-expansion advisory.
   # Still latent: minimatch 11.0.9 requests `^5.0.12`, outside the key, and fresh resolves with and
   # without the block both pick one 5.0.13; no 2.x copy is in the tree.
+  # Verified 2026-11-23: no new brace-expansion advisory, 2.1.8 / 5.0.13 still the newest in their majors.
+  # Still latent: fresh resolves with and without the block both pick one 5.0.13; no 2.x copy.
   'brace-expansion@>=2.0.0 <2.1.7': '2.1.8'
   'brace-expansion@>=5.0.0 <5.0.12': '5.0.13'
   # `minimatch@>=5.0.0 <10.2.6` -> 10.2.6 was removed on 2026-10-24. It existed because only
@@ -183,6 +185,12 @@ overrides:
   # `^3.0.0`, whose 3.0.0 asks for minimatch `^10.2.2`; without the block minimatch 10.2.6 returns and
   # `pnpm audit` reports GHSA-g3hv-75wg-m249. readdir-glob 4.0.0 (2026-11-09) requests `^11.0.1`, so the
   # entry goes once archiver moves to readdir-glob 4.
+  #
+  # Verified 2026-11-23: no new glob or minimatch advisory, 14.0.6 and 11.0.9 still the newest in their
+  # majors. `@vercel/nft>glob` and `archiver-utils>glob` still LATENT (@vercel/nft 1.11.11 requests
+  # `^14.0.6`, archiver-utils is not in the tree). `readdir-glob>minimatch` still LOAD-BEARING: archiver
+  # 8.0.0 (latest) still requests readdir-glob `^3.0.0`; a fresh resolve without the block brings back
+  # minimatch 10.2.6, and `pnpm audit` reports GHSA-g3hv-75wg-m249.
   '@vercel/nft>glob@<14.0.2': '14.0.6'
   'archiver-utils>glob@<14.0.2': '14.0.6'
   'readdir-glob>minimatch@<11.0.1': '11.0.9'
@@ -199,6 +207,8 @@ overrides:
   # unchanged — no new tar advisory. 7.5.22 had become a downgrade lock: @mapbox/node-pre-gyp 2.0.3
   # (via @vercel/nft) requests `^7.4.0`, which intersects the key, so the old target held tar at 7.5.22
   # while a fresh resolve without the block takes 7.5.23. With the new target both resolves agree.
+  # Verified 2026-11-23: unchanged — no new tar advisory, 7.5.23 still the newest 7.x; fresh resolves
+  # with and without the block identical, still latent.
   'tar@<7.5.21': '7.5.23'
   # shell-quote — two advisories in one line, both via nuxt > @nuxt/devtools > launch-editor
   # (requests ^1.8.4, which intersects the key, so the target is a PIN, not a floor):
@@ -231,6 +241,8 @@ overrides:
   # and `^1.10.0`; fresh resolves with and without the block identical, still latent.
   # Verified 2026-11-19: unchanged — no new advisory, 1.12.0 still the newest 1.x, launch-editor 2.14.2
   # still latest and `^1.10.0`; fresh resolves with and without the block identical, still latent.
+  # Verified 2026-11-23: unchanged — the same findings (no new advisory, 1.12.0 newest, launch-editor
+  # 2.14.2 latest with `^1.10.0`, fresh resolves with and without the block identical), still latent.
   'shell-quote@<1.11.0': '1.12.0'
   # svgo — the removeScripts plugin left executable content intact: some scripts
   # (GHSA-2p49-hgcm-8545, patched 4.0.2), links smuggled through namespace and control-character
@@ -247,6 +259,8 @@ overrides:
   # Verified 2026-11-03: unchanged — 4.1.0 still the newest 4.x, still latent.
   # Verified 2026-11-19 (module-builder 1.0.3 -> 1.0.4, still on mkdist 2.4.1, the newest): unchanged —
   # no new advisory, 4.1.0 still the newest 4.x, still latent.
+  # Verified 2026-11-23: unchanged — no new advisory, 4.1.0 still the newest 4.x, mkdist 2.4.1 still the
+  # newest; still latent.
   'svgo@>=4.0.0 <4.1.0': '4.1.0'
   # postcss — arbitrary .map file disclosure through an attacker-controlled sourceMappingURL:
   # GHSA-6g55-p6wh-862q (HIGH, patched 8.5.12), GHSA-r28c-9q8g-f849 (HIGH, path traversal in
@@ -298,6 +312,8 @@ overrides:
   # attached), key unchanged — no new postcss advisory since GHSA-fxqj-rqcc-2cmp. 8.5.32 had become a
   # downgrade lock: a fresh resolve with it carried 8.5.32 (autoprefixer 10.6.2's peer, inside the key)
   # next to the free 8.5.33; the new target and a resolve WITHOUT the block both yield one 8.5.33 copy.
+  # Verified 2026-11-23: unchanged — no new postcss advisory, 8.5.33 still the newest 8.x; fresh resolves
+  # with and without the block both yield one 8.5.33 copy (no downgrade lock).
   'postcss@<8.5.23': '8.5.33'
   # nanoid 3.x — GHSA-2v37-7h3g-55p8 (HIGH, custom generators loop indefinitely when size is 0,
   # patched 3.3.18), GHSA-28wg-ghj8-5hjv (HIGH, non-secure generators loop with a negative size,
@@ -326,6 +342,7 @@ overrides:
   # Verified 2026-11-03: unchanged — 3.3.20 still the newest 3.x, still latent.
   # Verified 2026-11-19: unchanged — no new advisory, 3.3.20 still the newest 3.x, postcss 8.5.33
   # requests ^3.3.20; still latent.
+  # Verified 2026-11-23: unchanged — the same findings, still latent.
   'nanoid@<3.3.18': '3.3.20'
   # esbuild — the dev server accepts requests from any origin on Windows, letting a malicious
   # page read arbitrary files through it (GHSA-g7r4-m6w7-qqqr, patched >=0.28.1). Entered this
@@ -362,6 +379,13 @@ overrides:
   # @nuxt/fonts ^0.14.0. @nuxt/ui 4.13.0 (2026-11-18T16:50Z) moves to @nuxt/fonts ^1.2.0, which meets the
   # drop condition, but was younger than 24h on this run and is a minor nuxt-base-template has not
   # taken; re-check this entry when @nuxt/ui moves to 4.13.
+  # Re-verified 2026-11-23 (fresh resolves with and without the block, pnpm 11.28.10): still
+  # load-bearing — without it esbuild 0.27.7 returns via fontless 0.2.1 and `pnpm audit` reports
+  # GHSA-g7r4-m6w7-qqqr. 0.28.2 still the newest 0.28.x. @nuxt/ui stays on 4.12.2 (@nuxt/fonts ^0.14.0)
+  # in this tree: 4.13.0's useToast() reads useAppConfig() from `#imports`, which the unit-test stub
+  # (test/stubs/imports.ts) does not provide. Measured with 4.13.0 on this run: it takes @nuxt/fonts
+  # 1.2.0 > fontless 1.3.4, which has no esbuild dependency, so the entry turns INERT with that bump and
+  # fresh resolves with and without the block carry the same esbuild set. Remove it then.
   'fontless>esbuild': '0.28.2'
   # @tiptap/core — mergeAttributes() promotes an own `__proto__` key into inherited,
   # executable DOM attributes (GHSA-cp6q-959q-f8rh, MODERATE, patched >=3.30.4), and a
@@ -434,8 +458,14 @@ overrides:
   # downgrade lock: a fresh resolve with it carried 3.32.2 next to the 3.34.0 that @nuxt/ui 4.12.2's
   # `^3.31.4` dependencies take. Fresh resolves with the new targets and without the block both put the
   # whole family on one 3.34.0 copy.
-  '@tiptap/core@<3.30.5': '3.34.0'
-  '@tiptap/pm@<3.30.5': '3.34.0'
+  #
+  # Raised 2026-11-23: both targets 3.34.0 -> 3.35.0 (published 2026-11-20T11:15Z / 11:13Z, npm `latest`
+  # for the whole family), keys unchanged — no new @tiptap/core or @tiptap/pm advisory. 3.34.0 had become a
+  # downgrade lock: a fresh resolve with it carried 3.34.0 next to the 3.35.0 that @nuxt/ui 4.12.2's
+  # `^3.31.4` dependencies take (4.13.0 requests `^3.33.0`, same result). Fresh resolves with the new
+  # targets and without the block both put the whole family (37 packages) on one 3.35.0 copy.
+  '@tiptap/core@<3.30.5': '3.35.0'
+  '@tiptap/pm@<3.30.5': '3.35.0'
   # `simple-git@<4.0.1` -> 4.0.2 (two critical, two high advisories in the 3.x line) was removed on
   # 2026-10-24, together with its patch: simple-git left the tree. Its only parent was
   # @nuxt/devtools 3.4.2; 3.4.3 and later no longer depend on it, and nuxt 4.6.2 requests
@@ -455,7 +485,12 @@ overrides:
   # 1.2.4 (2026-11-19T12:11Z) exist: both were younger than 24h on this run, and the free resolve under
   # the 24h gate still picks 1.2.2, so the entry is latent and no lock today. Raise it to the newest
   # 1.2.x on the next run, once the free resolve takes it.
-  'source-map-js@>=1.0.0 <1.2.2': '1.2.2'
+  # Raised 2026-11-23: target 1.2.2 -> 1.2.4 (2026-11-19T12:11Z, the newest 1.x, no advisory attached),
+  # key unchanged — no new source-map-js advisory. 1.2.2 had become a downgrade lock: vue 3.5.46's
+  # @vue/compiler-sfc requests `^1.2.3`, outside the key, while @tailwindcss/node, css-tree, magicast and
+  # vite-plugin-vue-tracer request `^1.0.1` / `^1.2.1`, inside it, so a fresh resolve with the old target
+  # carried 1.2.2 next to 1.2.4. The new target and a resolve WITHOUT the block both yield one 1.2.4 copy.
+  'source-map-js@>=1.0.0 <1.2.2': '1.2.4'
 
 # No `minimumReleaseAge` is set in this repo, so pnpm 11's built-in 24h default applies in LOOSE
 # mode: an immature pick is not blocked — pnpm appends it to a `minimumReleaseAgeExclude` list and
@@ -500,4 +535,7 @@ peerDependencyRules:
     # itself (1.0.3: `^0.2.3`) while mkdist 2.4.1, still the newest, keeps `^0.1.1`; module-builder's
     # own release pairs the two. 0.3.4 (2026-11-18T16:54Z) was younger than 24h; when an update
     # moves the tree to it, `pnpm peers check` fails until this version follows.
-    'mkdist>vue-sfc-transformer': '0.3.3'
+    #
+    # 2026-11-23: 0.3.3 -> 0.3.5 (2026-11-20T19:28Z, the newest 0.3.x): this run's fresh resolve moves the
+    # tree there (module-builder 1.0.4 `^0.3.1`), while mkdist 2.4.1, still the newest, keeps `^0.1.1`.
+    'mkdist>vue-sfc-transformer': '0.3.5'

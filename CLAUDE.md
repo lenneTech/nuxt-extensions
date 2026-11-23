@@ -157,6 +157,18 @@ renewed an expired JWT. Do not write a third one; a caller with its own state pa
 - **The JWT comes from `auth.basePath`.** Without an argument, `ltAuthFetch`, `createLtAuthFetch()`
   and `attemptLtJwtSwitch()` read it from the runtime config. `requestLtJwt()` is the only place a
   JWT is fetched, `useLtAuth().switchToJwtMode()` included.
+- **An API that reports `jwt: false` in `/features` is never asked for a JWT.** nest-server with
+  `betterAuth.jwt: false` answers `/token` with 404; before this, every sign-in, session check and
+  401 cost one 404 with a console error. `fetchFeatures()` hands its request to
+  `noteLtJwtServedBy()`, and `requestLtJwt()` returns `null` without a request once the answer said
+  `false`. It awaits a features request still in flight (at app start `validateSession()` asks for
+  the JWT while it is). Features an SSR render fetched (the starter's register page) reach the
+  client in the payload, and the client fetches none of its own: `useLtAuth()` then hands the
+  payload state to `noteLtJwtServedByPayload()`, which counts only while nothing in the tab was
+  noted, so a second `useLtAuth()` call never replaces a request in flight. Client only; a missing
+  flag or a failed request keeps today's behaviour.
+  No module option on purpose: the API is the one source, and a second switch in the app could
+  disagree with it. `test/jwt-disabled-api.test.ts` holds this.
 
 ## AI Assistant Flow
 

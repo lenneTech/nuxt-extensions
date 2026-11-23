@@ -716,7 +716,72 @@ export function getLtApiBase(basePath?: string): string {
 }
 
 /**
- * `GET <auth>/token` with the session cookie: a fresh JWT, or `null` (refused, not JWT-shaped, offline).
+ * Whether the API hands out JWTs, from the `jwt` flag of `GET <auth>/features` (client only, since
+ * the module scope is shared across requests on the server). `undefined` until a features answer
+ * carried the flag.
+ *
+ * A promise, so that a JWT request issued while the features are still on their way waits for them
+ * instead of racing them: at app start `validateSession()` asks for the JWT while the first
+ * `useLtAuth()` call is still fetching the features. Both requests go to the same API, so the wait
+ * cannot hold up anything the token request itself would not.
+ */
+let ltJwtServed: Promise<boolean | undefined> | undefined;
+
+/**
+ * Learn from a `GET <auth>/features` request whether the API hands out JWTs at all (its `jwt` flag).
+ *
+ * nest-server with `betterAuth.jwt: false` reports `jwt: false`, and its `/token` answers 404. Once
+ * the API said so, {@link requestLtJwt} asks no more, so a cookie-only API sees no `/token` request
+ * after a sign-in, a session check or a 401. An answer without the flag (an older API) or a failed
+ * request changes nothing: the JWT is fetched as before, and a failed request keeps what an
+ * earlier answer said.
+ *
+ * INTERNAL — called by `useLtAuth().fetchFeatures()` with its request. Not part of the public API.
+ */
+export function noteLtJwtServedBy(featuresRequest: Promise<unknown>): void {
+  if (!import.meta.client) {
+    return;
+  }
+  const before = ltJwtServed;
+  ltJwtServed = featuresRequest.then(
+    (features) => {
+      const jwt = (features as null | Record<string, unknown> | undefined)?.jwt;
+      return typeof jwt === 'boolean' ? jwt : undefined;
+    },
+    () => before,
+  );
+}
+
+/**
+ * Learn the `jwt` flag from features an SSR render already fetched.
+ *
+ * A page that awaits `fetchFeatures()` on the server (nuxt-base-starter's register page, against a
+ * hydration mismatch) sends them in the payload, and the client then fetches none of its own: without
+ * this, a cookie-only API got `/token` requests in that tab after all. Taken only while nothing in
+ * this tab was noted yet, so a second `useLtAuth()` call never replaces a features request still in
+ * flight, and a later live answer wins.
+ *
+ * INTERNAL — called by `useLtAuth()` on the client. Not part of the public API.
+ */
+export function noteLtJwtServedByPayload(features: Record<string, unknown>): void {
+  if (import.meta.client && !ltJwtServed) {
+    noteLtJwtServedBy(Promise.resolve(features));
+  }
+}
+
+/**
+ * Forget what any features request said about JWT.
+ *
+ * INTERNAL — test-only. Module-scope state survives every test in a file that does not call
+ * `vi.resetModules()`. Production code must never call this.
+ */
+export function resetLtJwtServedState(): void {
+  ltJwtServed = undefined;
+}
+
+/**
+ * `GET <auth>/token` with the session cookie: a fresh JWT, or `null` (refused, not JWT-shaped,
+ * offline, or an API whose `/features` said `jwt: false`, see {@link noteLtJwtServedBy}).
  *
  * INTERNAL — the one place a JWT is fetched: {@link attemptLtJwtSwitch}, the 401 recovery of
  * {@link createLtAuthFetch} and `useLtAuth().switchToJwtMode()` all go through it. Not part of the
@@ -725,6 +790,9 @@ export function getLtApiBase(basePath?: string): string {
  * @param basePath - The auth API base path; `auth.basePath` from the runtime config when omitted
  */
 export async function requestLtJwt(basePath?: string): Promise<null | string> {
+  if (import.meta.client && ltJwtServed && (await ltJwtServed) === false) {
+    return null;
+  }
   try {
     const response = await fetch(`${getLtApiBase(basePath)}/token`, {
       credentials: 'include',

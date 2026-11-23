@@ -645,6 +645,13 @@ the AI composables and offline sync) run through one implementation.
 - **The JWT comes from `auth.basePath`.** Without an argument, `ltAuthFetch`, `createLtAuthFetch()`
   and `attemptLtJwtSwitch()` read it from the module config; they used to fetch it from `/iam`
   whatever was configured. A path passed explicitly still wins.
+- **An API without JWT is not asked for one.** When `GET <basePath>/features` reports `jwt: false`
+  (nest-server with `betterAuth.jwt: false`, whose `/token` answers 404), neither a sign-in, a
+  session check nor a 401 requests `/token`: the app stays on the cookie session, and a 401 reaches
+  the caller unchanged. Nothing to configure in the app; the features request `useLtAuth()` makes on
+  its first client-side call decides, and a JWT request at app start waits for it. Features a page
+  fetched during SSR (`await fetchFeatures()` in `import.meta.server`) count the same, from the
+  payload. An API that reports `jwt: true`, or no `jwt` at all, is asked as before.
 
 #### Server-side rendering: backend calls are anonymous
 
