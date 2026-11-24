@@ -44,7 +44,7 @@ import { navigateTo } from '#imports';
 import type { LtAuthClientConfig, LtSocialSignInParams } from '../types';
 
 import { ltSha256 } from '../utils/crypto';
-import { createLtAuthFetch, isLocalDevApiProxy, isLtJwtShaped } from './auth-state';
+import { createLtAuthFetch, isLocalDevApiProxy, isLtJwtShaped, setLtJwtToken } from './auth-state';
 
 // =============================================================================
 // Plugin Registry & Singleton Management
@@ -356,7 +356,9 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
      * Change password for an authenticated user (both passwords are hashed).
      *
      * `revokeOtherSessions` is the option that made the whitelist bug matter — see the
-     * file header.
+     * file header. With it, Better-Auth deletes every session of the user and answers with the
+     * token of a new one: a session token is removed ({@link withoutSessionToken}), a JWT is
+     * stored ({@link storingAnswerJwt}).
      */
     changePassword: async <T extends { currentPassword: string; newPassword: string }>(params: T, options?: any) => {
       const [hashedCurrent, hashedNew] = await Promise.all([ltSha256(params.currentPassword), ltSha256(params.newPassword)]);
@@ -365,7 +367,7 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
         // no `error` on it and report success, and the password would be unchanged.
         throw new Error('[lt-auth] changePassword is unavailable on the Better-Auth client — the password was NOT changed.');
       }
-      return baseClient.changePassword({ ...params, currentPassword: hashedCurrent, newPassword: hashedNew }, options);
+      return storingAnswerJwt(withoutSessionToken(await baseClient.changePassword({ ...params, currentPassword: hashedCurrent, newPassword: hashedNew }, options)));
     },
 
     /**
@@ -440,20 +442,25 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
     // this package then keeps across versions. Ask, and it gets a line.
     twoFactor: {
       /**
-       * Disable 2FA (password is hashed before sending)
+       * Disable 2FA (password is hashed before sending). Better-Auth replaces the session; a JWT
+       * of the new session in the answer (nest-server >= 12.11.1) is stored, see
+       * {@link storingAnswerJwt}, and any other token is removed ({@link withoutSessionToken}).
        */
       disable: async <T extends { password: string }>(params: T, options?: any) => {
         const hashedPassword = await ltSha256(params.password);
         // Spread, never a whitelist — see the note above `resetPassword`.
-        return (baseClient as any).twoFactor.disable({ ...params, password: hashedPassword }, options);
+        return storingAnswerJwt(withoutSessionToken(await (baseClient as any).twoFactor.disable({ ...params, password: hashedPassword }, options)));
       },
       /**
-       * Enable 2FA (password is hashed before sending)
+       * Enable 2FA (password is hashed before sending). With `method: 'otp'` or
+       * `skipVerificationOnEnable`, Better-Auth replaces the session here already; a JWT of the
+       * new session in the answer (nest-server >= 12.11.1) is stored, see {@link storingAnswerJwt},
+       * and any other token is removed ({@link withoutSessionToken}).
        */
       enable: async <T extends { password: string }>(params: T, options?: any) => {
         const hashedPassword = await ltSha256(params.password);
         // Spread, never a whitelist — see the note above `resetPassword`.
-        return (baseClient as any).twoFactor.enable({ ...params, password: hashedPassword }, options);
+        return storingAnswerJwt(withoutSessionToken(await (baseClient as any).twoFactor.enable({ ...params, password: hashedPassword }, options)));
       },
       /**
        * Generate backup codes (password is hashed before sending)
@@ -465,13 +472,14 @@ export function createLtAuthClient(config: LtAuthClientConfig = {}) {
       },
       /**
        * Verify TOTP code. The session token Better-Auth puts into the answer is removed first,
-       * see {@link withoutSessionToken}.
+       * see {@link withoutSessionToken}; a JWT the answer carries is stored, see
+       * {@link storingAnswerJwt}.
        */
-      verifyTotp: async (...args: unknown[]) => withoutSessionToken(await (baseClient as any).twoFactor.verifyTotp(...args)),
+      verifyTotp: async (...args: unknown[]) => storingAnswerJwt(withoutSessionToken(await (baseClient as any).twoFactor.verifyTotp(...args))),
       /**
        * Verify backup code. Same as `verifyTotp`.
        */
-      verifyBackupCode: async (...args: unknown[]) => withoutSessionToken(await (baseClient as any).twoFactor.verifyBackupCode(...args)),
+      verifyBackupCode: async (...args: unknown[]) => storingAnswerJwt(withoutSessionToken(await (baseClient as any).twoFactor.verifyBackupCode(...args))),
     },
   };
 }
@@ -490,6 +498,31 @@ function withoutSessionToken<T>(result: T): T {
   const data = (result as { data?: unknown } | null | undefined)?.data;
   if (data && typeof data === 'object' && 'token' in data && !isLtJwtShaped((data as { token?: unknown }).token)) {
     delete (data as { token?: unknown }).token;
+  }
+  return result;
+}
+
+/**
+ * Stores the JWT an answer carries in the token cookie, in place of the one stored before.
+ *
+ * Where the body may carry a token (`cookies: false`, or `exposeTokenInBody`), nest-server answers
+ * `verify-totp`, `verify-backup-code` and `change-password` with the JWT of the session that is
+ * valid after the answer, and from 12.11.1 on also `two-factor/disable` and `two-factor/enable`
+ * when they replaced the session. Since 12.11.0 every JWT is bound to its session (`sid`), and
+ * turning 2FA on or off or changing the password with `revokeOtherSessions` replaces the session:
+ * the JWT stored before is refused from then on. The starter turns 2FA on through this client, not through
+ * `useLtAuth()`, and its next request in JWT mode would go out with the refused JWT. The auth mode
+ * stays as it is: a page that signs in with the second factor finishes through
+ * `useLtAuth().twoFactor.verify*`, which sets it.
+ *
+ * Only `result.data` is read, as in {@link withoutSessionToken}: with `throw: true` the body comes
+ * back on its own and nothing is stored.
+ */
+function storingAnswerJwt<T>(result: T): T {
+  const data = (result as { data?: unknown } | null | undefined)?.data;
+  const token = data && typeof data === 'object' ? (data as { token?: unknown }).token : undefined;
+  if (isLtJwtShaped(token)) {
+    setLtJwtToken(token);
   }
   return result;
 }

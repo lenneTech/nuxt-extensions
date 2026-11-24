@@ -5,6 +5,16 @@
       "to": "7.0.2008",
       "templateFollowsIn": "4.0.4",
       "reason": "Dependency maintenance for 4.0.4: this package ships first, nuxt-base-starter 4.0.4 raises the template to the same version"
+    },
+    "oxfmt": {
+      "to": "0.80.0",
+      "templateFollowsIn": "4.0.5",
+      "reason": "Dependency maintenance for 4.0.5: this package ships first, nuxt-base-starter 4.0.5 raises the template to the same version"
+    },
+    "oxlint": {
+      "to": "1.95.0",
+      "templateFollowsIn": "4.0.5",
+      "reason": "Dependency maintenance for 4.0.5: this package ships first, nuxt-base-starter 4.0.5 raises the template to the same version"
     }
   }
 }

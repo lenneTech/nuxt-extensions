@@ -355,6 +355,11 @@ export interface UseLtAuthReturn {
    * Better Auth writes "no picture" as `image: null`, which this normalises to `undefined`
    * before storing. Readers of {@link LtUser} keep a single empty case. An inline `data:` image
    * is not stored either (see {@link LtUser.image}).
+   *
+   * Without `mode`, an update of the signed-in user (same `id`, e.g. `{ ...user.value,
+   * twoFactorEnabled: true }`) keeps the current auth mode, and any other user starts on the
+   * cookie session (since 4.0.5; before, every call without `mode` meant `'cookie'`). `'jwt'`
+   * without a stored JWT falls back to `'cookie'` and fetches the JWT.
    */
   setUser: (userData: LtUserInput | null, mode?: LtAuthMode) => void;
   signIn: {

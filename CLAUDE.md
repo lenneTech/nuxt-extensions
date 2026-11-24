@@ -270,7 +270,7 @@ The `useLtAuth()` composable manages the `lt-auth-state` cookie for authenticati
 - Don't call `useCookie('lt-auth-state')` with different options than `useLtAuth()` uses (`maxAge: 604800, sameSite: 'lax'`)
 - Don't URL-decode or JSON-parse the cookie value manually on the server — `useCookie` handles this automatically
 - Don't write to `authState.value` from custom middleware — this generates a `Set-Cookie` header in the SSR response that may overwrite the browser's cookie
-- Don't store the `token` of a 2FA or passkey answer anywhere. Finish a 2FA sign-in with `useLtAuth().twoFactor.verifyTotp()` / `verifyBackupCode()`.
+- Don't store the `token` of a 2FA or passkey answer yourself. Finish a 2FA sign-in with `useLtAuth().twoFactor.verifyTotp()` / `verifyBackupCode()`; a JWT in the answer is stored by the client (below), a session token never.
 
 ### The session token never reaches `lt-jwt-token`:
 Better-Auth answers `two-factor/verify-totp` and `verify-backup-code` with `{ token, user }`, and
@@ -285,16 +285,40 @@ unchanged. That token is the session token, the value the API keeps in the httpO
   `isLtJwtShaped()` says so. That is the same test as nest-server's `isJwtShaped`: three segments,
   header `eyJ`. Test fixtures need JWT-shaped tokens too; `'a.b.c'` is refused.
 - **A JWT comes from `GET /iam/token`, or from a body the server already converted** (sign-in with
-  `cookies: false`; nest-server's `resolveJwtToken` never returns the session token there).
+  `cookies: false`; nest-server's `resolveJwtToken` never returns the session token there). The
+  forwarded routes count too: where the body may carry a token (`cookies: false` or
+  `exposeTokenInBody`), nest-server's `presentSessionTokens` (12.6.1, rotation 12.7.1) answers
+  `verify-totp`, `verify-backup-code` and `change-password` with the JWT of the session that is
+  valid after the answer, from 12.11.1 on also `two-factor/disable` and `two-factor/enable` when
+  they replaced the session (12.11.0 sends no token there).
 - **Anything else found in `lt-jwt-token` is deleted** on start (`useLtAuth()`) and on read
   (`getLtJwtToken()`), along with its JWT mode, because leaked values from before 1.26.0 are
   still in users' browsers. Never write such a value there "temporarily".
 - **`setUser(user, 'jwt')` without a stored JWT falls back to `'cookie'`** and fetches the JWT.
   Without that fallback, the refusal above would turn a hand-written 2FA page into a sign-in that
   sends no credentials at all.
-- **`useLtAuthClient().twoFactor.verify*` and `signIn.social` strip a non-JWT `token` from the
-  answer**, and `authenticateWithPasskey()` returns no `session`. Keep all three: application code
-  that never receives the session token cannot store it.
+- **`setUser(user)` without a mode keeps the mode for the signed-in user (same `id`), and starts
+  any other user on `'cookie'`** (since 4.0.5). The starter's security.vue calls
+  `setUser({ ...user.value, twoFactorEnabled: true })` after turning 2FA on; with the old default
+  `'cookie'` that left JWT mode, and the JWT the client had just stored was no longer sent: the
+  app then depended on a session cookie, which JWT mode exists not to rely on. Never let another
+  user keep JWT mode: the stored JWT is the previous user's.
+- **`useLtAuthClient().twoFactor.verify*` / `enable` / `disable`, `changePassword` and
+  `signIn.social` strip a non-JWT `token` from the answer**, and `authenticateWithPasskey()`
+  returns no `session`. Keep all of them: application code that never receives the session token
+  cannot store it.
+- **`useLtAuthClient().twoFactor.verify*` / `enable` / `disable` and `changePassword` store a JWT
+  the answer carries** (`storingAnswerJwt`, since 4.0.5), strip any other token
+  (`withoutSessionToken`) and leave the auth mode alone. Since nest-server 12.11.0 every JWT is
+  bound to its session (`sid`), and turning 2FA on or off or changing the password with
+  `revokeOtherSessions` replaces the session. From then on the JWT stored before is refused. The starter turns 2FA on through this client, not
+  through `useLtAuth()`, so without the store its next request in JWT mode would carry the refused
+  JWT. `useLtAuth().twoFactor.verify*` takes the same JWT in `completeForwardedSignIn()`, with no
+  `/iam/token` request. Only `result.data` is read: with `throw: true` nothing is stored.
+  The store writes `document.cookie`; the composable's `useCookie` refs follow through Nuxt's
+  cookieStore change event, not in the same tick. The client side is held by
+  `test/auth-client-session-token.test.ts`, the composable side by
+  `test/session-token-guard.test.ts`.
 
 ### How Auth Cookies Work:
 1. `setUser()` writes the cookie via both `useCookie().value` (for SSR sync) and `document.cookie` (for immediate availability)
@@ -357,6 +381,12 @@ holds. `useLtAuthClient().signIn.social` is the same call without the auth state
   JWT from `/iam/token`, exactly as after 2FA. `withoutSessionToken` strips only `result.data`, as
   for 2FA: with `throw: true` (as `options` or in `fetchOptions`) the body comes back with the
   token, and a caller's `onSuccess` hook sees the answer before the token is removed.
+  **nest-server 12.11.0 closes this shape by default** (`ID_TOKEN_NOT_SUPPORTED`). A project opens
+  it per provider with `disableIdTokenSignIn: false`. The redirect shape is not affected.
+- **`emailAndPassword` in `/iam/features`** (nest-server 12.11.0 or later): `false` means the API
+  offers no sign-in with email and password. The starter's login page hides the form when it
+  sees that; a missing field (older API) means on. `features` is a
+  `Record<string, boolean | number | string[]>`, so no type in this module has to change.
 - **Silent attempt: `additionalParams: { prompt: 'none' }`.** The provider answers without showing
   anything, and the way back without a provider session is `errorCallbackURL` with
   `?error=login_required` (or `interaction_required`). A page that starts the attempt on load must

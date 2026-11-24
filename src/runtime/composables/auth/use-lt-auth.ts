@@ -227,13 +227,20 @@ export function useLtAuth(): UseLtAuthReturn {
    * Set user data after successful login/signup
    * Also manually writes to browser cookie for SSR compatibility
    */
-  function setUser(userData: LtUserInput | null, requestedMode: LtAuthMode = 'cookie'): void {
+  function setUser(userData: LtUserInput | null, mode?: LtAuthMode): void {
+    // Without a mode, an update of the signed-in user (same id) keeps the mode it has; anything
+    // else is a sign-in and starts on the cookie session. A settings page calls
+    // `setUser({ ...user.value, twoFactorEnabled: true })` after turning 2FA on; up to 4.0.4 that
+    // switched JWT mode to cookie mode, and the JWT stored a moment before was no longer sent.
+    // Another user never keeps JWT mode: the stored JWT belongs to the one before.
+    const requestedMode: LtAuthMode = mode ?? (userData && user.value && userData.id === user.value.id ? authMode.value : 'cookie');
+
     // JWT mode sends the stored JWT instead of the cookies. Without one (a session token handed
     // to `jwtToken` is refused), it would send nothing: stay on the cookie session and fetch the
     // JWT from `/iam/token`. A hand-written 2FA page that stores the body token and then calls
     // `setUser(user, 'jwt')` therefore still signs in, without the session token leaking.
-    const mode: LtAuthMode = requestedMode === 'jwt' && !jwtToken.value ? 'cookie' : requestedMode;
-    if (mode !== requestedMode && import.meta.client && userData) {
+    const storedMode: LtAuthMode = requestedMode === 'jwt' && !jwtToken.value ? 'cookie' : requestedMode;
+    if (storedMode !== requestedMode && import.meta.client && userData) {
       void switchToJwtMode();
     }
 
@@ -242,7 +249,7 @@ export function useLtAuth(): UseLtAuthReturn {
     // why `LtUser.image` is not widened instead), and an inline `data:` image is left out. The
     // Microsoft provider stores the profile photo as one, and it pushed this cookie past the
     // browser's 4 KB limit: the browser dropped it, and the next page load read as a logout.
-    const newState = toLtStoredAuthState({ user: userData, authMode: mode });
+    const newState = toLtStoredAuthState({ user: userData, authMode: storedMode });
 
     // Cookie-backed state write rules:
     //  - On the CLIENT: always update (login/logout/2FA happen here).

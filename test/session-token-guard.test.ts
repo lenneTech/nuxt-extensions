@@ -195,6 +195,54 @@ describe('useLtAuth().jwtToken — a JWT or nothing', () => {
   });
 });
 
+/**
+ * `setUser(user)` without a mode. A settings page updates the signed-in user after a change, as the
+ * starter's security.vue does after turning 2FA on or off (`setUser({ ...user.value,
+ * twoFactorEnabled: true })`). Up to 4.0.4 that call switched JWT mode to cookie mode, and the JWT
+ * the client had just stored was no longer sent.
+ */
+describe('useLtAuth().setUser — without a mode', () => {
+  it('keeps JWT mode when it updates the signed-in user', async () => {
+    const lt = await auth();
+    lt.jwtToken.value = JWT;
+    lt.setUser(USER, 'jwt');
+
+    lt.setUser({ ...USER, twoFactorEnabled: true });
+
+    expect(lt.authMode.value).toBe('jwt');
+    expect(lt.user.value?.twoFactorEnabled).toBe(true);
+    expect(tokenRequests()).toHaveLength(0);
+  });
+
+  it('keeps cookie mode when it updates the signed-in user', async () => {
+    const lt = await auth();
+    lt.setUser(USER, 'cookie');
+
+    lt.setUser({ ...USER, twoFactorEnabled: true });
+
+    expect(lt.authMode.value).toBe('cookie');
+  });
+
+  it('signs another user in on the cookie session, never with the JWT of the one before', async () => {
+    const lt = await auth();
+    lt.jwtToken.value = JWT;
+    lt.setUser(USER, 'jwt');
+
+    lt.setUser({ email: 'other@test.com', id: 'user-2' });
+
+    expect(lt.authMode.value).toBe('cookie');
+    expect(lt.user.value?.id).toBe('user-2');
+  });
+
+  it('signs in on the cookie session when nobody is signed in', async () => {
+    const lt = await auth();
+
+    lt.setUser(USER);
+
+    expect(lt.authMode.value).toBe('cookie');
+  });
+});
+
 describe('useLtAuth().signIn / signUp — only a JWT from the body', () => {
   it.each(['signIn', 'signUp'] as const)('%s.email treats a session token in the body as a cookie sign-in', async (flow) => {
     client[flow].email.mockResolvedValue({ data: { token: SESSION_TOKEN, user: USER }, error: null });

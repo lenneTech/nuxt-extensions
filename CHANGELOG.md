@@ -6,6 +6,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 the scheme in the README section "Versioning": MAJOR is the Nuxt major, MINOR is a change you have
 to act on when you update, PATCH is a fix or addition you can take as it is.
 
+## [4.0.5] - 2026-11-24
+
+Nothing to do when you update. Against nest-server 12.11.0 in JWT mode, turning 2FA on and changing
+the password with `revokeOtherSessions` keep the app signed in on the new session; turning 2FA off
+does so from nest-server 12.11.1 on.
+
+### Fixed
+
+- **The JWT of an answer that replaced the session is stored by the client too.** nest-server
+  12.11.0 binds every JWT to its session. Where the body carries a token (`cookies: false`, or
+  `exposeTokenInBody`), it answers `two-factor/verify-totp`, `verify-backup-code` and
+  `change-password` with the JWT of the session that is valid afterwards, and from 12.11.1 on also
+  `two-factor/disable` and `two-factor/enable`. Turning 2FA on or off and changing the password with
+  `revokeOtherSessions` replace the session, so the JWT stored before is refused from then on.
+  `useLtAuthClient().twoFactor.verifyTotp()`, `verifyBackupCode()`, `enable()`, `disable()` and
+  `changePassword()` now store a JWT the answer carries in `lt-jwt-token`; the auth mode stays as it
+  is. `useLtAuth().twoFactor.verify*` already took it without a `/iam/token` request. A token that is
+  not a JWT is removed from the answer and never stored; for `changePassword()` with
+  `revokeOtherSessions` that is new, its answer used to hand the session token to the caller.
+- **`setUser(user)` without a mode no longer leaves JWT mode.** Updating the signed-in user (same
+  `id`), as `setUser({ ...user.value, twoFactorEnabled: true })` after turning 2FA on does, keeps the
+  current auth mode. Before, every call without a mode switched to cookie mode, and the JWT the client
+  had just stored was no longer sent. Any other user still starts on the cookie session.
+
+### Documentation
+
+- `signIn.social` with `idToken`: nest-server 12.11.0 refuses it with `ID_TOKEN_NOT_SUPPORTED` unless
+  the provider sets `disableIdTokenSignIn: false`. The redirect shape is unchanged.
+- `GET /iam/features` reports `emailAndPassword` (nest-server 12.11.0); `false` means no sign-in with
+  email and password, a missing field means on.
+- The documentation site under `docs/` (new in this release) carries the same changes.
+
+### Changed
+
+- Development dependencies: @nuxt/ui 4.13.1 (the unit-test stub now provides `useAppConfig()`),
+  oxlint 1.95.0, oxfmt 0.80.0, the brace-expansion security override raised to 5.1.0, and a lockfile
+  refresh within the existing ranges. The built output is unchanged by them. Still tested against
+  better-auth 1.7.19; the runtime dependency and peer ranges are unchanged.
+
 ## [4.0.4] - 2026-11-23
 
 Nothing to do when you update. An API that hands out no JWT (nest-server with `betterAuth.jwt: false`)

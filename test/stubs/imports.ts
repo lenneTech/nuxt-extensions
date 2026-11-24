@@ -190,4 +190,12 @@ export function useNuxtApp(): Record<string, unknown> {
   return nuxtAppStub;
 }
 
+/**
+ * Minimal `useAppConfig` stub with the part of Nuxt UI's app config its runtime reads.
+ * `useToast()` (Nuxt UI >= 4.13.0) calls it and takes `ui.icons.loading` for promise toasts.
+ */
+export function useAppConfig(): { ui: { icons: Record<string, string> } } {
+  return { ui: { icons: { loading: 'i-lucide-loader-circle' } } };
+}
+
 export { computed, getCurrentScope, onScopeDispose, reactive, readonly, ref, shallowReadonly, shallowRef, unref, watch };
