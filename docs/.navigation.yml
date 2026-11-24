@@ -1,0 +1,4 @@
+# Section of this repository on docs.lennetech.app
+title: nuxt-extensions
+icon: i-lucide-layers
+description: Nuxt 4 module with Better-Auth integration, uploads, AI composables, offline sync and transitions for lenne.tech apps.
