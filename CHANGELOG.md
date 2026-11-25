@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 the scheme in the README section "Versioning": MAJOR is the Nuxt major, MINOR is a change you have
 to act on when you update, PATCH is a fix or addition you can take as it is.
 
+## [4.0.7] - 2026-11-25
+
+Nothing to do when you update. A visitor whose session ended is taken to the login page again by
+the next request that answers 401.
+
+### Fixed
+
+- **After `validateSession()` signed out a user the API had no session for, the next 401 leads to
+  the login page again.** Since 4.0.6 `validateSession()` clears a cached user once `get-session`
+  confirmed the session is gone. The visitor could still be on a protected page then, and the 401
+  interceptor ignores a 401 without a signed-in user: the page stayed, shown as signed out, with
+  every request failing until the visitor navigated. Up to 4.0.5 the first 401 there confirmed the
+  dead session and redirected to the login page with `?redirect=`; it does so again. The
+  interceptor still ignores a 401 when nobody was signed in on this page load.
+
 ## [4.0.6] - 2026-11-25
 
 Nothing to do when you update. After a page load, JWT mode sends the stored JWT from the first

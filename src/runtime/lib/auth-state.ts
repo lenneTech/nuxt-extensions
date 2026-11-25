@@ -924,6 +924,25 @@ const ltCookieAuthFetchState: LtAuthFetchState = {
 };
 
 /**
+ * Whether `validateSession()` signed the cached user out on this page load because get-session
+ * confirmed there was no session (client only, since 4.0.7). The visitor may still be on a protected
+ * page then; the 401 interceptor reads this so the next 401 still leads to the login page, as it did
+ * for the cached user up to 4.0.5. `setUser()` and `clearUser()` reset it. Internal: not exported
+ * from `/lib`.
+ */
+let ltSignedOutAtValidation = false;
+
+/** @internal See {@link ltSignedOutAtValidation}. */
+export function setLtSignedOutAtValidation(value: boolean): void {
+  ltSignedOutAtValidation = value;
+}
+
+/** @internal See {@link ltSignedOutAtValidation}. */
+export function isLtSignedOutAtValidation(): boolean {
+  return ltSignedOutAtValidation;
+}
+
+/**
  * In-flight JWT fetch after a 401 (client only), shared by every authenticated fetch, so a burst of
  * parallel 401s costs one `/token` request: the switch from cookie to JWT and the renewal of an
  * expired JWT alike. Resolves to the token itself, which each caller then stores where it keeps its

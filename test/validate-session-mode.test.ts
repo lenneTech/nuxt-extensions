@@ -19,6 +19,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { isLtSignedOutAtValidation, setLtSignedOutAtValidation } from '../src/runtime/lib/auth-state';
 import { clearAllCookies } from './stubs/cookies';
 import { resetStubReactiveStores, resetStubRuntimeConfig, setStubRuntimeConfig, useCookie } from './stubs/imports';
 
@@ -53,6 +54,7 @@ beforeEach(() => {
   resetStubRuntimeConfig();
   resetStubReactiveStores();
   clearAllCookies();
+  setLtSignedOutAtValidation(false);
   setStubRuntimeConfig({ public: { apiUrl: 'https://api.example.com', ltExtensions: { auth: { basePath: '/iam' } } } });
   session = { data: { user: USER }, isPending: false };
   probeAnswer = { body: null, status: 200 };
@@ -247,5 +249,56 @@ describe('useLtAuth().validateSession() — Better Auth has no session any more'
 
     expect(lt.user.value?.id).toBe('user-1');
     expect(probeRequests()).toHaveLength(0);
+  });
+});
+
+/**
+ * The sign-out on the page load must not cost the redirect to the login page (since 4.0.7).
+ *
+ * Up to 4.0.5 the cached user stayed, and the first protected request that answered 401 made the
+ * interceptor confirm the dead session and send the browser to the login page. In 4.0.6 the user
+ * is already gone when that 401 arrives, and the interceptor ignores a 401 without a signed-in
+ * user: the visitor stayed on the protected page, shown as signed out, with every request failing
+ * (found by ng-base's review of the same change in 22.1.4). `validateSession()` therefore notes
+ * the sign-out, and the interceptor treats the next 401 as it did for the cached user.
+ */
+describe('useLtAuth().validateSession() — the next 401 still leads to the login page', () => {
+  const answeredNoSession = () => {
+    session = { data: null, error: null, isPending: false };
+  };
+
+  it('notes the sign-out when get-session confirmed that no session exists', async () => {
+    const lt = await auth();
+    lt.setUser(USER, 'cookie');
+    answeredNoSession();
+
+    expect(await lt.validateSession()).toBe(false);
+
+    expect(isLtSignedOutAtValidation()).toBe(true);
+  });
+
+  it('notes nothing when the probe gives no verdict and the user stays', async () => {
+    const lt = await auth();
+    lt.setUser(USER, 'cookie');
+    answeredNoSession();
+    probeAnswer = { body: null, status: 503 };
+
+    expect(await lt.validateSession()).toBe(true);
+
+    expect(isLtSignedOutAtValidation()).toBe(false);
+  });
+
+  it('forgets the note on the next sign-in and on an explicit sign-out', async () => {
+    const lt = await auth();
+    lt.setUser(USER, 'cookie');
+    answeredNoSession();
+    await lt.validateSession();
+
+    lt.setUser(USER, 'cookie');
+    expect(isLtSignedOutAtValidation()).toBe(false);
+
+    setLtSignedOutAtValidation(true);
+    lt.clearUser();
+    expect(isLtSignedOutAtValidation()).toBe(false);
   });
 });

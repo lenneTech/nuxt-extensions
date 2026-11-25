@@ -325,6 +325,12 @@ unchanged. That token is the session token, the value the API keeps in the httpO
   interceptor never fired either). **Never drop the confirming probe**: Better Auth's session atom
   can hold a stale empty answer after a sign-in that does not refetch it, and a page load must not
   undo a sign-in. `clearUser()`, not `signOut()`: an expired session deletes no offline-sync data.
+  **The sign-out keeps the redirect** (since 4.0.7): it sets `setLtSignedOutAtValidation(true)`
+  (`lib/auth-state.ts`, internal), and the interceptor handles a 401 without a signed-in user when
+  that note is set, so the next 401 confirms the dead session and goes to the login page as it did
+  for the cached user. In 4.0.6 the guard `if (!isAuthenticated) return` swallowed it, and the
+  visitor stayed on the protected page, shown as signed out, with every request failing (ng-base
+  found the same gap in 22.1.4). `setUser()` and `clearUser()` reset the note.
 - **`useLtAuthClient().twoFactor.verify*` / `enable` / `disable`, `changePassword` and
   `signIn.social` strip a non-JWT `token` from the answer**, and `authenticateWithPasskey()`
   returns no `session`. Keep all of them: application code that never receives the session token

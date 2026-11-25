@@ -12,6 +12,8 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { setLtSignedOutAtValidation } from '../src/runtime/lib/auth-state';
+
 // Controllable stand-in for useLtAuth(). `isJwtMode` / `switchToJwtMode` are
 // read by the probe: a live COOKIE session while the failing request carried a
 // BEARER means the bearer is stale, so the probe mints a fresh one.
@@ -72,6 +74,7 @@ beforeEach(() => {
   authStub.switchToJwtMode.mockClear();
   authStub.isAuthenticated.value = true;
   authStub.isJwtMode.value = false;
+  setLtSignedOutAtValidation(false);
   window.location.href = 'https://app.example.com/app/board';
 });
 
@@ -135,6 +138,24 @@ describe('auth interceptor — 401 handling probes the session before logging ou
 
     expect(authStub.fetchWithAuth).not.toHaveBeenCalled();
     expect(authStub.clearUser).not.toHaveBeenCalled();
+  });
+
+  // Since 4.0.6 `validateSession()` signs a cached user out on the page load once get-session
+  // confirmed there is no session. The visitor is then still on the protected page, and the 401 of
+  // its next request is the only thing that can take them to the login page, as it did up to 4.0.5
+  // for the cached user. Without the note the guard above swallowed that 401 (ng-base found the
+  // same gap in 22.1.4).
+  it('redirects to login on the next 401 after validateSession() signed the cached user out', async () => {
+    const handleUnauthorized = await setupInterceptor();
+    authStub.isAuthenticated.value = false;
+    setLtSignedOutAtValidation(true);
+    probeResolvesWith(null);
+
+    await handleUnauthorized('https://api.example.com/measures');
+
+    expect(authStub.fetchWithAuth).toHaveBeenCalledWith('https://api.example.com/iam/get-session', { method: 'GET' });
+    expect(authStub.clearUser).toHaveBeenCalledTimes(1);
+    expect(window.location.href).toBe('https://app.example.com/auth/login?redirect=%2Fapp%2Fboard');
   });
 });
 

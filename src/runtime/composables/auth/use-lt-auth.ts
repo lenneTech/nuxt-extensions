@@ -25,6 +25,7 @@ import {
   noteLtJwtServedByPayload,
   requestLtJwt,
   resolveLtAuthState,
+  setLtSignedOutAtValidation,
   toLtStoredAuthState,
   warnLtAdminPluginUnserved,
 } from '../../lib/auth-state';
@@ -265,6 +266,8 @@ export function useLtAuth(): UseLtAuthReturn {
 
     // Manual browser cookie write for immediate same-tick consistency (client only).
     if (import.meta.client) {
+      // A sign-out noted by validateSession() is over once a user is set (see setLtSignedOutAtValidation).
+      setLtSignedOutAtValidation(false);
       const maxAge = 60 * 60 * 24 * 7; // 7 days
       const secure = globalThis.location?.protocol === 'https:' ? '; secure' : '';
       const encoded = encodeURIComponent(JSON.stringify(newState));
@@ -302,6 +305,8 @@ export function useLtAuth(): UseLtAuthReturn {
     if (import.meta.client) {
       authState.value = { user: null, authMode: 'cookie' as const };
       jwtToken.value = null;
+      // An explicit sign-out (or the interceptor's own) is not the page-load sign-out of validateSession().
+      setLtSignedOutAtValidation(false);
 
       // Hard-delete the cookies in the browser (no payload, max-age=0).
       // Centralised in `clearLtAuthCookies` so the helper-based call sites
@@ -561,6 +566,10 @@ export function useLtAuth(): UseLtAuthReturn {
         const answeredWithoutSession = !session.value.isPending && !session.value.error;
         if (answeredWithoutSession && !(isJwtMode.value && jwtToken.value) && (await probeSession()) === false) {
           clearUser();
+          // The visitor may still be on a protected page. Up to 4.0.5 the first 401 there took them
+          // to the login page, but the interceptor ignores a 401 without a signed-in user: the note
+          // lets it treat the next 401 as before (since 4.0.7; ng-base 22.1.4 does the same).
+          setLtSignedOutAtValidation(true);
           return false;
         }
         // Pre-fetch JWT for fallback

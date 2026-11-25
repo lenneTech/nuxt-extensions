@@ -564,6 +564,9 @@ or `exposeTokenInBody`): the JWT of the session that is valid after the answer.
   answered 401. JWT mode with a stored JWT keeps the user, and so does an answer that is not a
   verdict (a timeout, a network error, a 5xx). Unsent offline-sync changes stay, as after any
   expired session.
+  The visitor can still be on a protected page then: the next request that answers 401 takes them
+  to the login page, as it did for the cached user (since 4.0.7; in 4.0.6 that 401 was ignored,
+  because nobody was signed in any more).
 - **`useLtAuthClient().twoFactor.verifyTotp()`, `verifyBackupCode()`, `enable()`, `disable()`
   and `changePassword()` return no session token.** A JWT in the answer stays, and the client
   stores it in `lt-jwt-token` (since 4.0.5); the auth mode is left as it is. From nest-server

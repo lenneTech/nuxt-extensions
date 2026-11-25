@@ -21,7 +21,7 @@ import type { NuxtApp, ObjectPlugin, Plugin } from '#app';
 import { defineNuxtPlugin } from '#imports';
 
 import { useLtAuth } from '../composables/auth/use-lt-auth';
-import { getLtApiBase } from '../lib/auth-state';
+import { getLtApiBase, isLtSignedOutAtValidation } from '../lib/auth-state';
 
 // Wrapped like every other plugin of this module: a bare function default export
 // makes Nuxt warn at build time (NUXT_B2007) in every consuming app.
@@ -226,8 +226,14 @@ export default defineNuxtPlugin((nuxtApp: NuxtApp): void => {
     // land before the auth plugin has restored the user from the cookie. That
     // 401 is a no-op here — and must stay one, so the requests right behind it
     // are still evaluated once the user IS hydrated.
+    //
+    // The one user who is gone but still counts: the one validateSession() signed
+    // out on this page load after get-session confirmed the session had ended
+    // (since 4.0.6). The visitor may still be on a protected page, and up to 4.0.5
+    // this 401 took the cached user to the login page. Without it the page stays,
+    // shown as signed out, with every request failing (since 4.0.7).
     const { clearUser, isAuthenticated } = getAuth();
-    if (!isAuthenticated.value) {
+    if (!isAuthenticated.value && !isLtSignedOutAtValidation()) {
       return;
     }
 
