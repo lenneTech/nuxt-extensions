@@ -425,17 +425,62 @@ export function useLtAuth(): UseLtAuthReturn {
   }
 
   /**
+   * Whether the API still has a session, asked directly (`GET <basePath>/get-session`), with the
+   * rules of the 401 interceptor's probe: 401/403 or an empty 200 → `false`, a session → `true`,
+   * anything else (5xx, 429, network) → `null`, which never signs anybody out.
+   *
+   * Bounded by `VALIDATE_SESSION_TIMEOUT_MS` like the session wait: no answer in time is `null`
+   * too, and the request is aborted. Without the limit a request that never settles would hold
+   * every caller that awaits `validateSession()`, where 4.0.5 returned at once.
+   */
+  async function probeSession(): Promise<boolean | null> {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<null>((resolve) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        resolve(null);
+      }, VALIDATE_SESSION_TIMEOUT_MS);
+    });
+    const verdict = (async (): Promise<boolean | null> => {
+      try {
+        const response = await fetchWithAuth(`${getLtApiBase()}/get-session`, { method: 'GET', signal: controller.signal });
+        if (response.status === 401 || response.status === 403) {
+          return false;
+        }
+        if (!response.ok) {
+          return null;
+        }
+        const data = (await response.json().catch(() => null)) as { session?: unknown; user?: unknown } | null;
+        return Boolean(data && (data.user || data.session));
+      } catch {
+        return null;
+      }
+    })();
+    try {
+      return await Promise.race([verdict, timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
    * Validate session with backend (called on app init).
    *
    * If get-session returns a user, it is merged onto the cached user (see
-   * `mergeSessionUser`) so authorization keys are re-derived from the session. If
-   * get-session returns NO user but a cached `lt-auth-state` user exists (e.g. just
-   * after a 2FA step the session endpoint hasn't caught up on), this deliberately
-   * trusts the client-side cache and returns `true` WITHOUT re-validating
-   * authorization — that branch never runs `mergeSessionUser`, so `AUTHZ_KEYS`
-   * cannot fail-close it. Intentional and self-healing (the next authenticated
-   * request 401s a dead session), but it is exactly why `isAdmin` must remain a UI
-   * gate: authorization is the backend's job, not this cache's.
+   * `mergeSessionUser`) so authorization keys are re-derived from the session, and
+   * the signed-in user keeps JWT mode while a JWT is stored (since 4.0.6).
+   *
+   * If get-session returns NO user but a cached `lt-auth-state` user exists, the
+   * cache is trusted only where the answer is no verdict on the session: JWT mode
+   * with a stored JWT (the cookie session may be absent), a timeout, or an error.
+   * Otherwise `probeSession()` asks get-session directly (the session atom can hold
+   * a stale empty answer, e.g. after a sign-in that did not refetch it); when it
+   * confirms there is no session, the user is cleared and the result is `false`
+   * (since 4.0.6; before, the cached user was always trusted here). Where the cache
+   * is trusted, that branch never runs `mergeSessionUser`, so `AUTHZ_KEYS` cannot
+   * fail-close it, which is exactly why `isAdmin` must remain a UI gate:
+   * authorization is the backend's job, not this cache's.
    *
    * During SSR this does NOT contact the backend and answers from the request's
    * `lt-auth-state` cookie alone. Better Auth's session atom never fetches when
@@ -490,16 +535,34 @@ export function useLtAuth(): UseLtAuthReturn {
       // If session has user data, update our state. Merge onto the cached user
       // so a re-validation never drops nest-server-only fields (see mergeSessionUser).
       if (session.value.data?.user) {
-        setUser(mergeSessionUser(session.value.data.user as LtUser), 'cookie');
-        // Pre-fetch JWT for fallback
+        const sessionUser = mergeSessionUser(session.value.data.user as LtUser);
+        // The answer proves the session, not the transport: the signed-in user keeps JWT mode
+        // while a JWT is stored (as ng-base does). Up to 4.0.5 this set 'cookie' and fetched a new
+        // JWT, and until `/iam/token` answered, every request after a page load went out without
+        // the stored JWT. Another user, or JWT mode without a JWT, starts on the cookie session.
+        const keepsJwt = isJwtMode.value && !!jwtToken.value && user.value?.id === sessionUser.id;
+        setUser(sessionUser, keepsJwt ? 'jwt' : 'cookie');
+        // Fetch the JWT in cookie mode, and renew it in JWT mode, where the stored one goes out
+        // until the new one arrives. The renewal must stay: with `cookies: false` there is no
+        // session cookie, `/iam/token` can only be paid for by a JWT cookie that is still valid,
+        // and nothing else renews it before it expires (ng-base renews before sending).
         switchToJwtMode().catch(() => {});
         return true;
       }
 
-      // Session not found from Better Auth API
-      // Trust the stored auth-state if user exists (e.g., after 2FA verification)
-      // The auth-state cookie is set by our application after successful login/2FA
+      // No session from Better Auth, but the auth state still holds a user.
       if (resolvedAuthState.value?.user) {
+        // Get-session ANSWERED without a session (not pending, no error), and only a cookie session
+        // could carry this user: the session expired or was deleted on the server. Up to 4.0.5 the
+        // cached user was trusted here, so the page showed the user as signed in while every
+        // protected request failed, until one of them answered 401. The session atom can be stale
+        // (a sign-in that does not refetch it), so a direct get-session has to confirm it before
+        // anybody is signed out. JWT mode with a stored JWT does not depend on the cookie session.
+        const answeredWithoutSession = !session.value.isPending && !session.value.error;
+        if (answeredWithoutSession && !(isJwtMode.value && jwtToken.value) && (await probeSession()) === false) {
+          clearUser();
+          return false;
+        }
         // Pre-fetch JWT for fallback
         switchToJwtMode().catch(() => {});
         return true;

@@ -303,6 +303,28 @@ unchanged. That token is the session token, the value the API keeps in the httpO
   `'cookie'` that left JWT mode, and the JWT the client had just stored was no longer sent: the
   app then depended on a session cookie, which JWT mode exists not to rely on. Never let another
   user keep JWT mode: the stored JWT is the previous user's.
+- **`validateSession()` keeps the mode for the signed-in user while a JWT is stored** (since
+  4.0.6; ng-base does the same since 22.0.0). Up to 4.0.5 it set `'cookie'` and fetched a new JWT,
+  so after every page load in JWT mode requests went out without the bearer until `/iam/token`
+  answered; the starter's E2E measured `two-factor/disable` without an `Authorization` header.
+  With `cookies: false` those requests, and the cookie-only `/iam/token` itself, then worked only
+  because nest-server reads the JWT cookie when no bearer comes, and before 12.11.2 it ignored
+  `COOKIE_PREFIX` there. Another user, or JWT mode without a stored JWT, starts on `'cookie'`.
+  **The `/iam/token` request on every page load stays, in JWT mode too.** With `cookies: false`
+  nest-server sets no session cookie, so `/iam/token` can only be paid for by a JWT cookie that is
+  still valid, and an expired JWT cannot be renewed at all; ng-base renews before sending
+  (`currentJwt()`), this module has nothing like it. Asking `/iam/token` only in cookie mode was
+  tried during 4.0.6 and ended every such sign-in with its first JWT, however often the page was
+  loaded. `test/validate-session-mode.test.ts` holds this.
+- **`validateSession()` signs out a cached user the API has no session for** (since 4.0.6): a
+  `get-session` that ANSWERED without a session (not pending, no `error`), outside JWT mode with a
+  stored JWT, and confirmed by a direct `get-session` (`probeSession()`, the 401 interceptor's
+  rules: 401/403 or an empty 200 is dead, 5xx/429/network decides nothing) → `clearUser()`,
+  `false`. Up to 4.0.5 the cached user was trusted there: a project's API session had expired, the
+  page greeted the user by name, and every protected call failed (its API answered 403, so the
+  interceptor never fired either). **Never drop the confirming probe**: Better Auth's session atom
+  can hold a stale empty answer after a sign-in that does not refetch it, and a page load must not
+  undo a sign-in. `clearUser()`, not `signOut()`: an expired session deletes no offline-sync data.
 - **`useLtAuthClient().twoFactor.verify*` / `enable` / `disable`, `changePassword` and
   `signIn.social` strip a non-JWT `token` from the answer**, and `authenticateWithPasskey()`
   returns no `session`. Keep all of them: application code that never receives the session token

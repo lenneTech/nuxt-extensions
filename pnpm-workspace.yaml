@@ -126,6 +126,9 @@ overrides:
   # newest 2.x) — no new brace-expansion advisory. Still latent: minimatch 11.0.9 requests `^5.0.12`, outside
   # the key, and fresh resolves with and without the block both pick one 5.1.0; no 2.x copy. A 5.0.13 target
   # would have split a parent requesting into the window from that free copy.
+  # Verified 2026-11-25 (nuxt 4.6.4 -> 4.7.0, pnpm 11.29.0): unchanged — no new brace-expansion advisory, 2.1.8 /
+  # 5.1.0 still the newest in their majors; fresh resolves with and without the block both pick one 5.1.0, no 2.x
+  # copy. Still latent.
   'brace-expansion@>=2.0.0 <2.1.7': '2.1.8'
   'brace-expansion@>=5.0.0 <5.0.12': '5.1.0'
   # `minimatch@>=5.0.0 <10.2.6` -> 10.2.6 was removed on 2026-10-24. It existed because only
@@ -202,6 +205,13 @@ overrides:
   # the tree, requests `^14.0.6`; archiver-utils is not in the tree). `readdir-glob>minimatch` still
   # LOAD-BEARING: archiver 8.0.0 (latest) still requests readdir-glob `^3.0.0` (minimatch `^10.2.2`); a fresh
   # resolve without the block brings back minimatch 10.2.6, and `pnpm audit` reports GHSA-g3hv-75wg-m249.
+  #
+  # Verified 2026-11-25 (nuxt 4.6.4 -> 4.7.0: nitropack 2.13.6 -> 2.14.0, still archiver 8.0.0 > readdir-glob
+  # 3.0.0; pnpm 11.29.0): no new glob or minimatch advisory, 14.0.6 and 11.0.9 still the newest in their majors.
+  # `@vercel/nft>glob` and `archiver-utils>glob` still LATENT (@vercel/nft 1.11.12, `^14.0.6`; archiver-utils not
+  # in the tree). `readdir-glob>minimatch` still LOAD-BEARING: a fresh resolve without the block brings back
+  # minimatch 10.2.6, and `pnpm audit` reports GHSA-g3hv-75wg-m249 (moderate, via nuxt > @nuxt/nitro-server >
+  # nitropack > archiver > readdir-glob).
   '@vercel/nft>glob@<14.0.2': '14.0.6'
   'archiver-utils>glob@<14.0.2': '14.0.6'
   'readdir-glob>minimatch@<11.0.1': '11.0.9'
@@ -221,6 +231,8 @@ overrides:
   # Verified 2026-11-23: unchanged — no new tar advisory, 7.5.23 still the newest 7.x; fresh resolves
   # with and without the block identical, still latent.
   # Verified 2026-11-24: unchanged — the same findings, still latent.
+  # Verified 2026-11-25 (nuxt 4.7.0, pnpm 11.29.0): unchanged — no new tar advisory, 7.5.23 still the newest 7.x;
+  # fresh resolves with and without the block identical, still latent.
   'tar@<7.5.21': '7.5.23'
   # shell-quote — two advisories in one line, both via nuxt > @nuxt/devtools > launch-editor
   # (requests ^1.8.4, which intersects the key, so the target is a PIN, not a floor):
@@ -256,6 +268,12 @@ overrides:
   # Verified 2026-11-23: unchanged — the same findings (no new advisory, 1.12.0 newest, launch-editor
   # 2.14.2 latest with `^1.10.0`, fresh resolves with and without the block identical), still latent.
   # Verified 2026-11-24: unchanged — the same findings, still latent.
+  # 2026-11-25 (nuxt 4.6.4 -> 4.7.0): shell-quote LEFT this tree. Nuxt 4.7.0 no longer installs @nuxt/devtools
+  # (only @nuxt/devtools-onboard), and @nuxt/devtools 3.4.4 > launch-editor 2.14.2 was shell-quote's only path;
+  # fresh resolves with and without the block carry no shell-quote, launch-editor or @nuxt/devtools. The entry is
+  # INERT. No new shell-quote advisory, 1.12.0 still the newest 1.x. Kept as a latent guard for a project that
+  # adds @nuxt/devtools to its devDependencies (launch-editor 2.14.2, still latest, requests `^1.10.0`, inside the
+  # key) — maintenance raises overrides, never deletes them; dropping it is a decision of its own.
   'shell-quote@<1.11.0': '1.12.0'
   # svgo — the removeScripts plugin left executable content intact: some scripts
   # (GHSA-2p49-hgcm-8545, patched 4.0.2), links smuggled through namespace and control-character
@@ -275,6 +293,8 @@ overrides:
   # Verified 2026-11-23: unchanged — no new advisory, 4.1.0 still the newest 4.x, mkdist 2.4.1 still the
   # newest; still latent.
   # Verified 2026-11-24: unchanged — the same findings, still latent.
+  # Verified 2026-11-25 (nuxt 4.7.0): unchanged — no new svgo advisory, 4.1.0 still the newest 4.x, mkdist 2.4.1
+  # still the newest; still latent.
   'svgo@>=4.0.0 <4.1.0': '4.1.0'
   # postcss — arbitrary .map file disclosure through an attacker-controlled sourceMappingURL:
   # GHSA-6g55-p6wh-862q (HIGH, patched 8.5.12), GHSA-r28c-9q8g-f849 (HIGH, path traversal in
@@ -329,6 +349,8 @@ overrides:
   # Verified 2026-11-23: unchanged — no new postcss advisory, 8.5.33 still the newest 8.x; fresh resolves
   # with and without the block both yield one 8.5.33 copy (no downgrade lock).
   # Verified 2026-11-24: unchanged — the same findings (one 8.5.33 copy with and without the block).
+  # Verified 2026-11-25 (nuxt 4.7.0): unchanged — no new postcss advisory, 8.5.33 still the newest 8.x; fresh
+  # resolves with and without the block both yield one 8.5.33 copy (no downgrade lock).
   'postcss@<8.5.23': '8.5.33'
   # nanoid 3.x — GHSA-2v37-7h3g-55p8 (HIGH, custom generators loop indefinitely when size is 0,
   # patched 3.3.18), GHSA-28wg-ghj8-5hjv (HIGH, non-secure generators loop with a negative size,
@@ -359,6 +381,7 @@ overrides:
   # requests ^3.3.20; still latent.
   # Verified 2026-11-23: unchanged — the same findings, still latent.
   # Verified 2026-11-24: unchanged — the same findings, still latent.
+  # Verified 2026-11-25 (nuxt 4.7.0): unchanged — no new nanoid advisory, 3.3.20 still the newest 3.x; still latent.
   'nanoid@<3.3.18': '3.3.20'
   # esbuild — the dev server accepts requests from any origin on Windows, letting a malicious
   # page read arbitrary files through it (GHSA-g7r4-m6w7-qqqr, patched >=0.28.1). Entered this
@@ -410,6 +433,8 @@ overrides:
   # Verified 2026-11-24 (@nuxt/ui 4.13.0 -> 4.13.1, still @nuxt/fonts `^1.2.0`): still INERT — fontless 1.3.4
   # has no esbuild dependency, fresh resolves with and without the block carry the same esbuild set
   # (0.25.12, 0.28.2), `pnpm audit` clean. 0.28.2 still the newest 0.28.x.
+  # Verified 2026-11-25 (nuxt 4.7.0, @nuxt/ui 4.13.1): still INERT — the same esbuild set (0.25.12, 0.28.2) with
+  # and without the block, no new esbuild advisory, 0.28.2 still the newest 0.28.x.
   'fontless>esbuild': '0.28.2'
   # @tiptap/core — mergeAttributes() promotes an own `__proto__` key into inherited,
   # executable DOM attributes (GHSA-cp6q-959q-f8rh, MODERATE, patched >=3.30.4), and a
@@ -491,6 +516,9 @@ overrides:
   # Verified 2026-11-24 (@nuxt/ui 4.13.1, `^3.33.0`): unchanged — no new @tiptap/core or @tiptap/pm
   # advisory, 3.35.0 still npm `latest` for both; fresh resolves with and without the block both put the
   # whole family on one 3.35.0 copy.
+  # Verified 2026-11-25 (nuxt 4.7.0, @nuxt/ui 4.13.1): unchanged — no new @tiptap/core or @tiptap/pm advisory,
+  # 3.35.0 still the newest 3.x for both; fresh resolves with and without the block both put the whole family on
+  # one 3.35.0 copy.
   '@tiptap/core@<3.30.5': '3.35.0'
   '@tiptap/pm@<3.30.5': '3.35.0'
   # `simple-git@<4.0.1` -> 4.0.2 (two critical, two high advisories in the 3.x line) was removed on
@@ -518,6 +546,8 @@ overrides:
   # vite-plugin-vue-tracer request `^1.0.1` / `^1.2.1`, inside it, so a fresh resolve with the old target
   # carried 1.2.2 next to 1.2.4. The new target and a resolve WITHOUT the block both yield one 1.2.4 copy.
   # Verified 2026-11-24: unchanged — no new source-map-js advisory, 1.2.4 still the newest 1.x; fresh
+  # resolves with and without the block both yield one 1.2.4 copy.
+  # Verified 2026-11-25 (nuxt 4.7.0): unchanged — no new source-map-js advisory, 1.2.4 still the newest 1.x; fresh
   # resolves with and without the block both yield one 1.2.4 copy.
   'source-map-js@>=1.0.0 <1.2.2': '1.2.4'
 
@@ -570,4 +600,7 @@ peerDependencyRules:
     #
     # Verified 2026-11-24: unchanged — 0.3.5 still the newest 0.3.x and the version fresh resolves pick,
     # mkdist 2.4.1 still the newest and still `^0.1.1`.
+    #
+    # Verified 2026-11-25 (nuxt 4.7.0): unchanged — 0.3.5 still the newest 0.3.x and the version the fresh resolve
+    # picks, mkdist 2.4.1 still the newest and still `^0.1.1`.
     'mkdist>vue-sfc-transformer': '0.3.5'

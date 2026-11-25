@@ -377,6 +377,20 @@ export interface UseLtAuthReturn {
     email: <T extends { email: string; name: string; password: string }>(params: NoStrayCredential<T, 'password'>, options?: unknown) => Promise<unknown>;
   };
   switchToJwtMode: () => Promise<boolean>;
+  /**
+   * Re-validates the session (app start, hard reload) through `get-session` and merges the
+   * session user onto the cached one. `true` while signed in.
+   *
+   * The signed-in user keeps JWT mode while a JWT is stored, and the stored JWT is sent while a
+   * new one is fetched in the background (since 4.0.6; before, every page load switched to cookie
+   * mode until the new JWT came). Another user, or JWT mode without a stored JWT, starts on the
+   * cookie session.
+   *
+   * When the API has no session for the cached user any more (confirmed by a direct
+   * `get-session`), the user is cleared and the result is `false` (since 4.0.6; before, the cached
+   * user counted as signed in). JWT mode with a stored JWT, a timeout and a failed request keep
+   * the user.
+   */
   validateSession: () => Promise<boolean>;
 
   // Better Auth client passthrough

@@ -124,7 +124,7 @@ describe('validateSession() in the browser (control)', () => {
     expect(requests.some((url) => url.endsWith('/get-session'))).toBe(true);
   });
 
-  it('falls back to the resolved cookie view when the session returns no user', async () => {
+  it('reads the user from the resolved cookie view when the session returns no user, and signs out once get-session confirms it', async () => {
     stubBrowser(AUTH_STATE_COOKIE);
     stubFetch(() => json(null));
     const auth = await loadAuth();
@@ -132,7 +132,11 @@ describe('validateSession() in the browser (control)', () => {
     // cookies still carry one.
     useCookie('lt-auth-state').value = { user: null };
 
-    await expect(race(auth.validateSession(), 2000)).resolves.toBe(true);
+    // Since 4.0.6 an empty session in cookie mode signs out (test/validate-session-mode.test.ts);
+    // the second get-session is the confirming probe, sent only because the cookie view still
+    // carried the user.
+    await expect(race(auth.validateSession(), 2000)).resolves.toBe(false);
+    expect(requests.filter((url) => url.endsWith('/get-session'))).toHaveLength(2);
   });
 
   it('stops waiting after the timeout and falls back to the cached user', async () => {

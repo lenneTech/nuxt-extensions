@@ -360,12 +360,15 @@ describe('validateSession() pending + empty-session branches', () => {
     expect(user.email).toBe('new@example.com');
   });
 
-  it('returns true from the cached auth-state when the session carries no user', async () => {
+  it('returns true from the cached auth-state when the session carries no user and the probe gives no verdict', async () => {
     const { useLtAuth } = await import('../src/runtime/composables/auth/use-lt-auth');
     const auth = useLtAuth();
 
     auth.setUser({ id: 'u1', email: 'a@example.com', name: 'A' });
     mockSession = { data: null, isPending: false };
+    // The confirming get-session (since 4.0.6) answers a failed request here, which is no verdict
+    // on the session. A confirmed empty session signs out: test/validate-session-mode.test.ts.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ json: async () => ({}), ok: false, status: 503 }));
 
     const ok = await auth.validateSession();
     expect(ok).toBe(true);

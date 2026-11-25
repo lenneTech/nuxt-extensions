@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 the scheme in the README section "Versioning": MAJOR is the Nuxt major, MINOR is a change you have
 to act on when you update, PATCH is a fix or addition you can take as it is.
 
+## [4.0.6] - 2026-11-25
+
+Nothing to do when you update. After a page load, JWT mode sends the stored JWT from the first
+request on, and a user whose API session is gone is signed out instead of shown as signed in.
+
+### Fixed
+
+- **`validateSession()` keeps JWT mode.** On every app start and hard reload it set the
+  signed-in user to cookie mode and fetched a new JWT from `/iam/token`; until that answered,
+  requests went out without the stored JWT. With nest-server `cookies: false` they then depended
+  on the API reading the JWT cookie, which with `COOKIE_PREFIX` works only from nest-server
+  12.11.2 on. The signed-in user now keeps JWT mode while a JWT is stored, as in ng-base; the
+  stored JWT goes out while the new one is fetched in the background, so a page load still
+  extends a sign-in with `cookies: false`. Another user, or JWT mode without a stored JWT, still
+  starts on the cookie session.
+- **`validateSession()` signs out a user the API has no session for.** When `get-session` answered
+  without a session while `lt-auth-state` still held a user, the cached user counted as signed in:
+  the page showed the user's name while every protected request failed, until one of them
+  answered 401. It now calls `clearUser()` and returns `false`, after a direct `get-session`
+  confirmed that the session is gone (within 10 seconds, like the session request). JWT mode with
+  a stored JWT, a timeout and a failed request keep the user, and unsent offline-sync changes
+  stay, as after any expired session.
+
+### Changed
+
+- Development dependencies: nuxt and @nuxt/schema 4.7.0 (@nuxt/kit resolves 4.7.0 within
+  `^4.0.0`), pnpm 11.29.0, and a lockfile refresh within the existing ranges. The runtime dependency
+  and peer ranges are unchanged; still tested against better-auth 1.7.19.
+
 ## [4.0.5] - 2026-11-24
 
 Nothing to do when you update. Against nest-server 12.11.0 in JWT mode, turning 2FA on and changing
