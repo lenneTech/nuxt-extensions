@@ -1,4 +1,10 @@
 {
   "$comment": "Versions this repository may be ahead of nuxt-base-template on, each until the nuxt-base-starter release that brings the template along. Entry: \"<package>\": { \"to\": \"<this repository's version>\", \"templateFollowsIn\": \"<starter version>\", \"reason\": \"...\" }. Read by scripts/check-template-pins.mjs; an entry whose release came without the version, or that is no longer needed, fails check. See CLAUDE.md.",
-  "pending": {}
+  "pending": {
+    "@types/node": {
+      "to": "26.6.9",
+      "templateFollowsIn": "4.0.8",
+      "reason": "nuxt-extensions 4.0.8 maintenance raises @types/node 26.6.6 -> 26.6.9; the starter 4.0.8 raises the template"
+    }
+  }
 }

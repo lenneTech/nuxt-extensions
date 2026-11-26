@@ -49,12 +49,11 @@ function sanitizeCookiePrefix(raw: unknown): string {
  *     `lt-auth-state` (a "ghost" user from the other project).
  *   - otherwise `''` → the default `lt-auth-state` / `lt-jwt-token`.
  *
- * `storagePrefix` deliberately does NOT influence the cookie name. It is a
- * localStorage-namespacing convention; coupling it to cookies would silently
- * rename auth cookies on a mere upgrade (logging every user out, bouncing valid
- * sessions in custom middleware that reads `lt-auth-state` directly) and force
- * frontend/backend to be deployed in lockstep. Cookie naming is therefore
- * controlled ONLY by this explicit, opt-in knob → fully backward compatible.
+ * The cookie name follows this setting only, never a value set for another
+ * purpose (such as a project slug). Deriving it from one would rename the auth
+ * cookies of every project that sets that value on a mere upgrade: every user is
+ * signed out, custom middleware that reads `lt-auth-state` directly bounces valid
+ * sessions, and frontend and backend have to be deployed in lockstep.
  *
  * IMPORTANT: when you set `cookiePrefix`, mirror it on the backend
  * (`COOKIE_PREFIX` env — see nest-server `resolveBetterAuthCookiePrefix`) so

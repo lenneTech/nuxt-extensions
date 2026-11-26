@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 the scheme in the README section "Versioning": MAJOR is the Nuxt major, MINOR is a change you have
 to act on when you update, PATCH is a fix or addition you can take as it is.
 
+## [4.0.8] - 2026-11-26
+
+Nothing to do when you update. A maintenance release.
+
+### Changed
+
+- **The documentation of `resolveLtCookiePrefix()` no longer names `storagePrefix`.** No such
+  option exists: nuxt-base-starter stopped reading it in 2025 and removed
+  `NUXT_PUBLIC_STORAGE_PREFIX` from its `.env.example` in 4.0.7. The rule it explained stays: the
+  auth cookie names follow `cookiePrefix` (`NUXT_PUBLIC_COOKIE_PREFIX`) only, never a value set for
+  another purpose.
+- Development dependencies: @types/node 26.6.9 and a lockfile refresh within the existing ranges.
+  The runtime dependency and peer ranges are unchanged; still tested against better-auth 1.7.19.
+
 ## [4.0.7] - 2026-11-25
 
 Nothing to do when you update. A visitor whose session ended is taken to the login page again by

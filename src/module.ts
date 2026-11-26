@@ -13,7 +13,7 @@ import type { LtExtensionsModuleOptions } from './runtime/types';
 
 // Module meta
 export const name = '@lenne.tech/nuxt-extensions';
-export const version = '4.0.7';
+export const version = '4.0.8';
 export const configKey = 'ltExtensions';
 
 // Default cookie names — re-exported from auth-state so consumers can read
@@ -178,9 +178,8 @@ export default defineNuxtModule<LtExtensionsModuleOptions>({
     // This is the dedicated, OPT-IN override for the auth cookie namespace (see
     // resolveLtCookiePrefix), letting a project run fully autonomously on a
     // shared host. Empty default keeps the legacy `lt-auth-state` /
-    // `lt-jwt-token` names (fully backward compatible — `storagePrefix` does NOT
-    // affect cookie names). MUST mirror the backend `COOKIE_PREFIX` env so both
-    // sides agree.
+    // `lt-jwt-token` names, so a project that sets nothing keeps its cookies.
+    // MUST mirror the backend `COOKIE_PREFIX` env so both sides agree.
     if (!(rc.public as any).cookiePrefix) {
       (rc.public as any).cookiePrefix = '';
     }
